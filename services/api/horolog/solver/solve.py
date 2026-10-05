@@ -15,6 +15,7 @@ stay-put stability, deadlines, time-of-day, fragmentation, per-day caps — and
 from __future__ import annotations
 
 import time
+from datetime import datetime
 
 from horolog.domain.events import BusyInterval
 from horolog.domain.intent import Intent
@@ -28,6 +29,8 @@ def solve(
     busy: list[BusyInterval],
     horizon_slots: int,
     previous: Plan | None = None,
+    origin_weekday: int = 0,
+    origin_at: datetime | None = None,
 ) -> Plan:
     """Place every intent's demand around `busy`, staying close to `previous`.
 
@@ -38,7 +41,12 @@ def solve(
         raise ValueError(f"horizon_slots must be positive, got {horizon_slots}")
 
     started = time.perf_counter()
-    requirements = expand_all(intents, horizon_slots)
+    requirements = expand_all(
+        intents,
+        horizon_slots,
+        origin_weekday,
+        origin_at=origin_at,
+    )
     prior = previous.by_key() if previous else {}
     placement = construct(requirements, merge_busy(busy), previous=prior)
 

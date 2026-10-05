@@ -20,6 +20,8 @@ export interface Block {
   start: string;
   end: string;
   moved_from: string | null;
+  completed?: boolean;
+  recurring?: boolean;
 }
 
 export interface Unmet {
@@ -64,6 +66,7 @@ export interface Intent {
   max_chunk_minutes: number;
   max_per_day?: number | null;
   daily_windows?: DailyWindow[];
+  allowed_weekdays?: number[];
   earliest_slot?: number | null;
   due_slot?: number | null;
   preferred_start_min?: number | null;
@@ -102,6 +105,7 @@ export function intentToEditPayload(intent: Intent, origin: string): Record<stri
     min_chunk_minutes: intent.min_chunk_minutes,
     max_chunk_minutes: intent.max_chunk_minutes,
     max_per_day: intent.max_per_day ?? undefined,
+    allowed_weekdays: intent.allowed_weekdays ?? [],
     window_start_min: window?.start_min,
     window_end_min: window?.end_min,
     due: intent.due_slot != null ? slotToISO(intent.due_slot, origin) : undefined,
@@ -140,6 +144,16 @@ export const api = {
   complete: (id: string) => request<Intent>(`/api/intents/${id}/complete`, { method: "POST" }),
   uncomplete: (id: string) =>
     request<Intent>(`/api/intents/${id}/complete`, { method: "DELETE" }),
+  completeBlock: (id: string, start: string, end: string) =>
+    request<Intent>(`/api/intents/${id}/complete-block`, {
+      method: "POST",
+      body: JSON.stringify({ start, end }),
+    }),
+  uncompleteBlock: (id: string, start: string, end: string) =>
+    request<Intent>(`/api/intents/${id}/complete-block`, {
+      method: "DELETE",
+      body: JSON.stringify({ start, end }),
+    }),
   capture: (text: string, provider?: string, model?: string, apiKey?: string) =>
     request<{ intent: Intent }>("/api/capture", {
       method: "POST",
@@ -331,8 +345,8 @@ export const PRIORITY_NAME: Record<Priority, string> = {
 /** Accent tint per priority - one hue, four weights. Shared by every view so
  *  the same block reads the same way on the grid, in the inbox, and in a chart. */
 export const PRIORITY_TINT: Record<Priority, string> = {
-  1: "color-mix(in srgb, var(--color-accent) 100%, transparent)",
-  2: "color-mix(in srgb, var(--color-accent) 62%, transparent)",
-  3: "color-mix(in srgb, var(--color-accent) 38%, transparent)",
-  4: "color-mix(in srgb, var(--color-accent) 20%, transparent)",
+  1: "#dc2626", // Critical - red
+  2: "#f59e0b", // High - amber
+  3: "#2563eb", // Normal - blue
+  4: "#16a34a", // Low - green
 };

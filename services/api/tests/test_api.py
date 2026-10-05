@@ -8,6 +8,7 @@ import typing
 from collections.abc import AsyncGenerator, AsyncIterator
 from datetime import datetime, timedelta
 from typing import cast
+from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
@@ -20,7 +21,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from horolog.api import app, origin
+from horolog.api import IntentIn, app, origin
 from horolog.db import BusyRow, init_db, session
 
 
@@ -357,9 +358,9 @@ async def test_completing_a_task_frees_its_capacity_on_the_next_solve(
     assert done.json()["completed_at"] is not None
 
     plan = (await client.get("/api/plan")).json()
-    assert not any(b["intent_id"] == created["id"] for b in plan["blocks"]), (
-        "a completed task must not keep occupying a slot"
-    )
+    finished = [b for b in plan["blocks"] if b["intent_id"] == created["id"]]
+    assert finished, "the finished task should remain visible in the rendered calendar"
+    assert all(b["completed"] is True for b in finished)
 
     intents = (await client.get("/api/intents")).json()
     mine = next(i for i in intents if i["id"] == created["id"])
@@ -538,3 +539,71 @@ async def test_editing_an_intent_rejects_the_same_invalid_shapes_as_creating_one
         },
     )
     assert response.status_code == 422
+
+
+def test_preferred_start_before_workday_expands_default_window() -> None:
+    base = datetime(2026, 10, 5, 0, 0, tzinfo=ZoneInfo("Europe/Warsaw"))
+    wire = IntentIn(
+        title="Early gym",
+        minutes_per_period=90,
+        min_chunk_minutes=90,
+        max_chunk_minutes=90,
+        preferred_start_min=6 * 60,
+    )
+
+    intent = wire.to_domain("early-gym", base)
+
+    assert intent.preferred_start_min == 6 * 60
+    assert intent.daily_windows[0].start_min == 6 * 60
+    assert intent.daily_windows[0].end_min == 17 * 60
+
+
+@pytest.mark.asyncio
+async def test_completing_and_uncompleting_one_habit_occurrence(
+    client: AsyncClient,
+) -> None:
+    created = (
+        await client.post(
+            "/api/intents",
+            json={
+                "title": "Recurring gym",
+                "kind": "habit",
+                "minutes_per_period": 180,
+                "period_days": 7,
+                "min_chunk_minutes": 60,
+                "max_chunk_minutes": 60,
+                "max_per_day": 1,
+                "window_start_min": 360,
+                "window_end_min": 540,
+            },
+        )
+    ).json()
+
+    plan = (await client.get("/api/plan")).json()
+    blocks = [b for b in plan["blocks"] if b["intent_id"] == created["id"]]
+    assert blocks
+
+    occurrence = blocks[0]
+    body = {
+        "start": occurrence["start"],
+        "end": occurrence["end"],
+    }
+
+    done = await client.post(
+        f"/api/intents/{created['id']}/complete-block",
+        json=body,
+    )
+    assert done.status_code == 200
+    assert len(done.json()["completed_blocks"]) == 1
+
+    intents = (await client.get("/api/intents")).json()
+    mine = next(i for i in intents if i["id"] == created["id"])
+    assert len(mine["completed_blocks"]) == 1
+
+    undone = await client.request(
+        "DELETE",
+        f"/api/intents/{created['id']}/complete-block",
+        json=body,
+    )
+    assert undone.status_code == 200
+    assert undone.json()["completed_blocks"] == []

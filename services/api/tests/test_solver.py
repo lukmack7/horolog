@@ -356,3 +356,111 @@ def test_a_busy_week_does_not_cascade() -> None:
         f"{moved} blocks moved but only {displaced} were displaced — "
         "the re-solve is cascading across untouched work"
     )
+
+
+def test_weekday_constraints_only_allow_selected_days() -> None:
+    """A recurring intent constrained to Mon/Wed/Fri must use only those weekdays."""
+    gym = Intent(
+        id="gym-weekdays",
+        kind=IntentKind.HABIT,
+        title="gym",
+        minutes_per_period=180,
+        period_days=7,
+        min_chunk_minutes=60,
+        max_chunk_minutes=60,
+        max_per_day=1,
+        daily_windows=workday(),
+        allowed_weekdays=[0, 2, 4],
+    )
+
+    plan = solve([gym], [], WEEK, origin_weekday=0)  # Monday
+
+    assert not plan.unmet
+    assert len(plan.blocks) == 3
+    days = {block.start_slot // SLOTS_PER_DAY for block in plan.blocks}
+    assert days == {0, 2, 4}
+
+
+def test_completed_habit_block_reduces_demand_for_its_period() -> None:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from horolog.domain.intent import CompletedBlock
+
+    zone = ZoneInfo("Europe/Warsaw")
+    origin_at = datetime(2026, 10, 5, 0, 0, tzinfo=zone)  # Monday
+
+    gym = Intent(
+        id="gym-completed",
+        kind=IntentKind.HABIT,
+        title="Gym",
+        priority=Priority.P3,
+        minutes_per_period=270,
+        period_days=7,
+        min_chunk_minutes=90,
+        max_chunk_minutes=90,
+        max_per_day=1,
+        daily_windows=[DailyWindow(start_min=6 * 60, end_min=9 * 60)],
+        allowed_weekdays=[0, 2, 4],
+        completed_blocks=[
+            CompletedBlock(
+                start=datetime(2026, 10, 5, 6, 0, tzinfo=zone),
+                end=datetime(2026, 10, 5, 7, 30, tzinfo=zone),
+                completed_at=datetime(2026, 10, 5, 7, 31, tzinfo=zone),
+            )
+        ],
+    )
+
+    plan = solve(
+        [gym],
+        [],
+        WEEK,
+        origin_weekday=0,
+        origin_at=origin_at,
+    )
+
+    assert sum(block.slots for block in plan.blocks) == minutes_to_slots(180)
+    assert not plan.unmet
+
+
+def test_completed_habit_day_is_not_scheduled_again() -> None:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from horolog.domain.intent import CompletedBlock
+
+    zone = ZoneInfo("Europe/Warsaw")
+    origin_at = datetime(2026, 10, 5, 0, 0, tzinfo=zone)  # Monday
+
+    gym = Intent(
+        id="gym-no-repeat",
+        kind=IntentKind.HABIT,
+        title="Gym",
+        priority=Priority.P3,
+        minutes_per_period=270,
+        period_days=7,
+        min_chunk_minutes=90,
+        max_chunk_minutes=90,
+        max_per_day=1,
+        daily_windows=[DailyWindow(start_min=6 * 60, end_min=9 * 60)],
+        allowed_weekdays=[0, 2, 4],
+        completed_blocks=[
+            CompletedBlock(
+                start=datetime(2026, 10, 5, 6, 0, tzinfo=zone),
+                end=datetime(2026, 10, 5, 7, 30, tzinfo=zone),
+                completed_at=datetime(2026, 10, 5, 7, 31, tzinfo=zone),
+            )
+        ],
+    )
+
+    plan = solve(
+        [gym],
+        [],
+        WEEK,
+        origin_weekday=0,
+        origin_at=origin_at,
+    )
+
+    scheduled_days = {block.start_slot // SLOTS_PER_DAY for block in plan.blocks}
+
+    assert scheduled_days == {2, 4}

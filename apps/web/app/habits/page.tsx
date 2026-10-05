@@ -16,7 +16,7 @@ import {
   type Plan,
   type Priority,
 } from "@/app/lib/api";
-import { Plus, Trash2, RotateCcw, AlertTriangle, Sparkles, Clock, Zap } from "lucide-react";
+import { Plus, Trash2, Pencil, X, RotateCcw, AlertTriangle, Sparkles, Clock, Zap } from "lucide-react";
 
 /** Focus needs a >=90m minimum sitting (see docs/ARCHITECTURE.md's model
  *  table: `kind=focus, weekly, >=90m chunks`), enforced with a floor rather
@@ -28,6 +28,16 @@ const PRESETS = [
   { title: "Deep work", kind: "focus", times: 5, weeklyHours: 10, minutes: 120, from: 540, to: 720, priority: 2 },
   { title: "Lunch", kind: "habit", times: 5, weeklyHours: 5, minutes: 45, from: 720, to: 840, priority: 3 },
   { title: "Inbox & admin", kind: "habit", times: 5, weeklyHours: 5, minutes: 30, from: 960, to: 1080, priority: 4 },
+] as const;
+
+const WEEKDAYS = [
+  { label: "Mon", value: 0 },
+  { label: "Tue", value: 1 },
+  { label: "Wed", value: 2 },
+  { label: "Thu", value: 3 },
+  { label: "Fri", value: 4 },
+  { label: "Sat", value: 5 },
+  { label: "Sun", value: 6 },
 ] as const;
 
 function clock(minutes: number): string {
@@ -59,6 +69,8 @@ export default function Habits() {
   const [to, setTo] = useState(960);
   const [priority, setPriority] = useState<Priority>(4);
   const [energy, setEnergy] = useState<EnergyLevel | "">("");
+  const [selectedDays, setSelectedDays] = useState<number[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -83,26 +95,78 @@ export default function Habits() {
   const chunkMinutes = kind === "focus" ? Math.max(minutes, FOCUS_MIN_CHUNK) : minutes;
   const windowTooSmall = to - from < chunkMinutes;
 
+  function resetForm() {
+    setEditingId(null);
+    setTitle("");
+    setKind("habit");
+    setTimes(3);
+    setWeeklyHours(5);
+    setMinutes(60);
+    setFrom(600);
+    setTo(960);
+    setPriority(4);
+    setEnergy("");
+    setSelectedDays([]);
+  }
+
+  function editHabit(habit: Intent) {
+    const window = habit.daily_windows?.[0];
+
+    setEditingId(habit.id);
+    setTitle(habit.title);
+    setKind(habit.kind);
+    setMinutes(habit.min_chunk_minutes);
+    setPriority(habit.priority);
+    setEnergy(habit.energy ?? "");
+    setSelectedDays(habit.allowed_weekdays ?? []);
+    setFrom(window?.start_min ?? 600);
+    setTo(window?.end_min ?? 960);
+
+    if (habit.kind === "focus") {
+      setWeeklyHours(Math.max(1, Math.round(habit.minutes_per_period / 60)));
+    } else {
+      setTimes(
+        Math.max(
+          1,
+          Math.round(habit.minutes_per_period / habit.min_chunk_minutes),
+        ),
+      );
+    }
+
+    requestAnimationFrame(() => {
+      document.getElementById("habit-title")?.focus();
+    });
+  }
+
   async function save(event: React.FormEvent) {
     event.preventDefault();
     if (!title.trim() || windowTooSmall || saving) return;
     setSaving(true);
     setError(null);
+
+    const payload = {
+      title: title.trim(),
+      kind,
+      priority,
+      energy: energy || undefined,
+      minutes_per_period: kind === "focus" ? weeklyHours * 60 : times * minutes,
+      period_days: 7,
+      min_chunk_minutes: chunkMinutes,
+      max_chunk_minutes: chunkMinutes,
+      max_per_day: kind === "focus" ? undefined : 1,
+      allowed_weekdays: selectedDays,
+      window_start_min: from,
+      window_end_min: to,
+    };
+
     try {
-      await createIntent({
-        title: title.trim(),
-        kind,
-        priority,
-        energy: energy || undefined,
-        minutes_per_period: kind === "focus" ? weeklyHours * 60 : times * minutes,
-        period_days: 7,
-        min_chunk_minutes: chunkMinutes,
-        max_chunk_minutes: chunkMinutes,
-        max_per_day: kind === "focus" ? undefined : 1,
-        window_start_min: from,
-        window_end_min: to,
-      });
-      setTitle("");
+      if (editingId) {
+        await api.update(editingId, payload);
+      } else {
+        await createIntent(payload);
+      }
+
+      resetForm();
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not save that routine.");
@@ -190,6 +254,53 @@ export default function Habits() {
             </div>
           </div>
 
+          <div className="border-b border-black/[0.06] px-6 py-4">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-[12px] font-semibold text-fg-muted">
+                Days <span className="font-normal text-fg-subtle">· optional fixed days</span>
+              </span>
+              {selectedDays.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedDays([])}
+                  className="text-[11px] font-medium text-fg-subtle hover:text-fg"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {WEEKDAYS.map((day) => {
+                const selected = selectedDays.includes(day.value);
+                return (
+                  <button
+                    key={day.value}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => {
+                      const next = selected
+                        ? selectedDays.filter((value) => value !== day.value)
+                        : [...selectedDays, day.value].sort((a, b) => a - b);
+
+                      setSelectedDays(next);
+                      if (next.length > 0 && kind === "habit") {
+                        setTimes(next.length);
+                      }
+                    }}
+                    className={`min-w-11 rounded-lg border px-3 py-2 text-[12px] font-semibold transition-all ${
+                      selected
+                        ? "border-accent bg-accent text-on-accent shadow-sm"
+                        : "border-black/[0.08] bg-bg text-fg-muted hover:border-accent hover:text-accent"
+                    }`}
+                  >
+                    {day.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="grid gap-5 px-6 py-5 sm:grid-cols-2 lg:grid-cols-4">
             {kind === "focus" ? (
               <Field label="Hours per week" hint="weekly target">
@@ -268,14 +379,34 @@ export default function Habits() {
                 </button>
               ))}
             </div>
-            <button
-              type="submit"
-              disabled={!title.trim() || windowTooSmall || saving}
-              className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-accent px-5 text-[13.5px] font-semibold text-on-accent shadow-sm transition-all duration-150 hover:bg-accent-hover hover:shadow-md disabled:opacity-40"
-            >
-              <Plus size={16} />
-              {saving ? "Scheduling..." : "Add Routine"}
-            </button>
+            <div className="flex items-center gap-2">
+              {editingId && (
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  disabled={saving}
+                  className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-black/[0.08] bg-surface px-4 text-[13px] font-semibold text-fg-muted transition-all hover:bg-bg hover:text-fg disabled:opacity-40"
+                >
+                  <X size={15} />
+                  Cancel
+                </button>
+              )}
+
+              <button
+                type="submit"
+                disabled={!title.trim() || windowTooSmall || saving}
+                className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-accent px-5 text-[13.5px] font-semibold text-on-accent shadow-sm transition-all duration-150 hover:bg-accent-hover hover:shadow-md disabled:opacity-40"
+              >
+                {editingId ? <Pencil size={15} /> : <Plus size={16} />}
+                {saving
+                  ? editingId
+                    ? "Saving..."
+                    : "Scheduling..."
+                  : editingId
+                    ? "Save Changes"
+                    : "Add Routine"}
+              </button>
+            </div>
           </div>
 
           {windowTooSmall && (
@@ -321,6 +452,14 @@ export default function Habits() {
               const cadence = fixed
                 ? `${Math.round(habit.minutes_per_period / habit.min_chunk_minutes)}× weekly · ${formatDuration(habit.min_chunk_minutes)} each`
                 : `${formatDuration(habit.minutes_per_period)} weekly · ${formatDuration(habit.min_chunk_minutes)}–${formatDuration(habit.max_chunk_minutes)} blocks`;
+
+              const weekdayLabel =
+                habit.allowed_weekdays && habit.allowed_weekdays.length > 0
+                  ? habit.allowed_weekdays
+                      .map((value) => WEEKDAYS.find((day) => day.value === value)?.label)
+                      .filter(Boolean)
+                      .join(" · ")
+                  : null;
               return (
                 <li
                   key={habit.id}
@@ -340,17 +479,30 @@ export default function Habits() {
                       {cadence} · <span className="text-accent font-semibold">{blocks.length} placed</span>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      await api.remove(habit.id);
-                      await load();
-                    }}
-                    aria-label={`Remove ${habit.title}`}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-fg-subtle opacity-0 transition-all duration-150 hover:bg-red-50 hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
-                  >
-                    <Trash2 size={15} />
-                  </button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => editHabit(habit)}
+                      aria-label={`Edit ${habit.title}`}
+                      title="Edit routine"
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-fg-subtle opacity-0 transition-all duration-150 hover:bg-secondary hover:text-accent focus-visible:opacity-100 group-hover:opacity-100"
+                    >
+                      <Pencil size={15} />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await api.remove(habit.id);
+                        if (editingId === habit.id) resetForm();
+                        await load();
+                      }}
+                      aria-label={`Remove ${habit.title}`}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-fg-subtle opacity-0 transition-all duration-150 hover:bg-red-50 hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
                 </li>
               );
             })}

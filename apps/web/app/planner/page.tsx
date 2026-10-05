@@ -4,7 +4,17 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Glyph, KIND_LABEL } from "@/app/components/Glyph";
 import { PRIORITY_LABEL, RULE } from "@/app/components/Grid";
 import { Shell } from "@/app/components/Shell";
-import { api, formatDuration, minutesBetween, type Plan, type Block, type Busy } from "@/app/lib/api";
+import {
+  api,
+  createIntent,
+  formatDuration,
+  minutesBetween,
+  type Plan,
+  type Block,
+  type Busy,
+  type IntentKind,
+  type Priority,
+} from "@/app/lib/api";
 import { EventManager, type Event } from "@/components/ui/event-manager";
 import Link from "next/link";
 import {
@@ -36,10 +46,10 @@ const PRIORITY_COLOR: Record<number, string> = {
  *  own and need to read as visually distinct rather than a fifth "normal"
  *  block. */
 const COLORS = [
-  { name: "Critical", value: "p1", bg: "bg-stone-800", text: "text-stone-800" },
-  { name: "High", value: "p2", bg: "bg-stone-600", text: "text-stone-700" },
-  { name: "Normal", value: "p3", bg: "bg-stone-400", text: "text-stone-600" },
-  { name: "Low", value: "p4", bg: "bg-stone-300", text: "text-stone-500" },
+  { name: "Critical", value: "p1", bg: "bg-red-600", text: "text-red-700" },
+  { name: "High", value: "p2", bg: "bg-amber-500", text: "text-amber-700" },
+  { name: "Normal", value: "p3", bg: "bg-blue-600", text: "text-blue-700" },
+  { name: "Low", value: "p4", bg: "bg-green-600", text: "text-green-700" },
   { name: "External", value: "slate", bg: "bg-slate-400", text: "text-slate-700" },
 ];
 
@@ -65,6 +75,7 @@ function blocksToEvents(blocks: Block[]): Event[] {
       // be part of the key too, or React sees duplicate ids and month view
       // (which lists several events per day cell) renders it visibly.
       id: `${block.intent_id}-${block.occurrence}-${block.chunk}`,
+      intentId: block.intent_id,
       title: block.title,
       description: `${KIND_LABEL[block.kind]} · Chunk ${block.chunk} · ${formatDuration(minutesBetween(block.start, block.end))}`,
       startTime: new Date(block.start),
@@ -73,6 +84,8 @@ function blocksToEvents(blocks: Block[]): Event[] {
       category: kindToCategory(block.kind),
       priority: block.priority,
       kind: block.kind,
+      completed: block.completed ?? false,
+      recurring: block.recurring ?? false,
       tags,
     };
   });
@@ -132,11 +145,87 @@ export default function Planner() {
         const durationMinutes = Math.round(
           (event.endTime.getTime() - event.startTime.getTime()) / 60000,
         );
-        const text = `${event.title} for ${durationMinutes} minutes`;
-        await api.capture(text);
+
+        if (durationMinutes <= 0) {
+          throw new Error("End time must be later than start time.");
+        }
+
+        const category = event.category?.toLowerCase();
+        const kind: IntentKind =
+          category === "habit" ||
+          category === "focus" ||
+          category === "buffer" ||
+          category === "meeting"
+            ? category
+            : "task";
+
+        const priorityByColor: Record<string, Priority> = {
+          p1: 1,
+          p2: 2,
+          p3: 3,
+          p4: 4,
+        };
+        const priority = priorityByColor[event.color ?? ""] ?? 3;
+
+        const startMin =
+          event.startTime.getHours() * 60 + event.startTime.getMinutes();
+        const endMin =
+          event.endTime.getHours() * 60 + event.endTime.getMinutes();
+
+        await createIntent({
+          title: event.title,
+          kind,
+          priority,
+          minutes_per_period: durationMinutes,
+          period_days: null,
+          min_chunk_minutes: durationMinutes,
+          max_chunk_minutes: durationMinutes,
+          max_per_day: 1,
+          window_start_min: startMin,
+          window_end_min: endMin,
+          earliest: event.startTime.toISOString(),
+          due: event.endTime.toISOString(),
+          preferred_start_min: startMin,
+        });
+
         await load();
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : "Failed to create event.");
+      }
+    },
+    [load],
+  );
+
+  const handleEventComplete = useCallback(
+    async (event: Event) => {
+      if (!event.intentId) return;
+
+      try {
+        if (event.recurring) {
+          if (event.completed) {
+            await api.uncompleteBlock(
+              event.intentId,
+              event.startTime.toISOString(),
+              event.endTime.toISOString(),
+            );
+          } else {
+            await api.completeBlock(
+              event.intentId,
+              event.startTime.toISOString(),
+              event.endTime.toISOString(),
+            );
+          }
+        } else if (event.kind === "task") {
+          if (event.completed) {
+            await api.uncomplete(event.intentId);
+          } else {
+            await api.complete(event.intentId);
+          }
+        }
+
+        await load();
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "Could not update completion.");
       }
     },
     [load],
@@ -244,6 +333,7 @@ export default function Planner() {
               events={calendarEvents}
               onEventCreate={handleEventCreate}
               onEventDelete={handleEventDelete}
+              onEventComplete={handleEventComplete}
               categories={["Task", "Habit", "Focus", "Buffer", "Meeting", "External"]}
               availableTags={["Critical", "High", "Normal", "Low", "Moved", "Locked", "High Energy", "Medium Energy", "Low Energy"]}
               colors={COLORS}

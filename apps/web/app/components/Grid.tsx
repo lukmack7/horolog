@@ -19,10 +19,10 @@ const RULE = PRIORITY_TINT;
  *  same four-step curve as `PRIORITY_TINT`/`RULE`, just far more
  *  translucent so the title text stays readable over it. */
 const FILL: Record<Priority, string> = {
-  1: "color-mix(in srgb, var(--color-accent) 12%, transparent)",
-  2: "color-mix(in srgb, var(--color-accent) 8%, transparent)",
-  3: "color-mix(in srgb, var(--color-accent) 5%, transparent)",
-  4: "color-mix(in srgb, var(--color-accent) 3%, transparent)",
+  1: "color-mix(in srgb, #dc2626 12%, transparent)",
+  2: "color-mix(in srgb, #f59e0b 12%, transparent)",
+  3: "color-mix(in srgb, #2563eb 10%, transparent)",
+  4: "color-mix(in srgb, #16a34a 9%, transparent)",
 };
 
 const PRIORITY_LABEL = PRIORITY_NAME;

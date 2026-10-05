@@ -32,6 +32,7 @@ import type { IntentKind, Priority } from "@/app/lib/api"
 
 export interface Event {
   id: string
+  intentId?: string
   title: string
   description?: string
   startTime: Date
@@ -47,6 +48,8 @@ export interface Event {
    *  see `busyToEvents` in `app/planner/page.tsx`. */
   priority?: Priority
   kind?: IntentKind
+  completed?: boolean
+  recurring?: boolean
 }
 
 export interface EventManagerProps {
@@ -54,6 +57,7 @@ export interface EventManagerProps {
   onEventCreate?: (event: Omit<Event, "id">) => void
   onEventUpdate?: (id: string, event: Partial<Event>) => void
   onEventDelete?: (id: string) => void
+  onEventComplete?: (event: Event) => void | Promise<void>
   categories?: string[]
   colors?: { name: string; value: string; bg: string; text: string }[]
   defaultView?: "month" | "week" | "day" | "list"
@@ -75,6 +79,7 @@ export function EventManager({
   onEventCreate,
   onEventUpdate,
   onEventDelete,
+  onEventComplete,
   categories = ["Meeting", "Task", "Reminder", "Personal"],
   colors = defaultColors,
   defaultView = "month",
@@ -910,11 +915,33 @@ export function EventManager({
           </div>
 
           <DialogFooter>
+            {!isCreating &&
+              selectedEvent &&
+              (selectedEvent.kind === "task" || selectedEvent.kind === "habit") &&
+              onEventComplete && (
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    await onEventComplete(selectedEvent)
+                    setIsDialogOpen(false)
+                    setSelectedEvent(null)
+                  }}
+                  className={
+                    selectedEvent.completed
+                      ? "border-black/[0.10]"
+                      : "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+                  }
+                >
+                  {selectedEvent.completed ? "↶ Undo completion" : "✓ Mark complete"}
+                </Button>
+              )}
+
             {!isCreating && (
               <Button variant="destructive" onClick={() => selectedEvent && handleDeleteEvent(selectedEvent.id)}>
                 Delete
               </Button>
             )}
+
             <Button
               variant="outline"
               onClick={() => {
@@ -1018,17 +1045,28 @@ function EventCard({
             textClass,
             "animate-in fade-in slide-in-from-top-1",
             isHovered && "scale-105 shadow-lg z-10",
+            event.completed && "opacity-70",
           )}
         >
+          {event.completed && (
+            <span className="shrink-0 font-bold" aria-label="Completed">✓</span>
+          )}
           {kindGlyph(10)}
-          <span className="truncate">{event.title}</span>
+          <span className={cn("truncate", event.completed && "line-through opacity-60")}>
+            {event.title}
+          </span>
         </div>
         {isHovered && (
           <div className="absolute left-0 top-full z-50 mt-1 w-64 animate-in fade-in slide-in-from-top-2 duration-200">
             <Card className="border-2 p-3 shadow-xl bg-white text-fg">
               <div className="space-y-2">
                 <div className="flex items-start justify-between gap-2">
-                  <h4 className="font-semibold text-sm leading-tight text-fg">{event.title}</h4>
+                  <h4 className={cn(
+                    "font-semibold text-sm leading-tight text-fg",
+                    event.completed && "line-through opacity-60",
+                  )}>
+                    {event.completed ? "✓ " : ""}{event.title}
+                  </h4>
                   {dot("h-3 w-3")}
                 </div>
                 {event.description && <p className="text-xs text-muted-foreground line-clamp-2">{event.description}</p>}
@@ -1075,9 +1113,14 @@ function EventCard({
           textClass,
           "animate-in fade-in slide-in-from-left-2",
           isHovered && "scale-[1.03] shadow-2xl ring-2 ring-black/10",
+          event.completed && "opacity-70",
         )}
       >
-        <div className="flex items-center gap-1.5 font-semibold">
+        <div className={cn(
+          "flex items-center gap-1.5 font-semibold",
+          event.completed && "line-through opacity-60",
+        )}>
+          {event.completed && <span className="font-bold">✓</span>}
           {kindGlyph(14)}
           {event.title}
         </div>
@@ -1126,17 +1169,28 @@ function EventCard({
           textClass,
           "animate-in fade-in slide-in-from-left-1",
           isHovered && "scale-105 shadow-lg z-10",
+          event.completed && "opacity-70",
         )}
       >
+        {event.completed && (
+          <span className="shrink-0 font-bold" aria-label="Completed">✓</span>
+        )}
         {kindGlyph(12)}
-        <div className="truncate">{event.title}</div>
+        <div className={cn("truncate", event.completed && "line-through opacity-60")}>
+          {event.title}
+        </div>
       </div>
       {isHovered && (
         <div className="absolute left-0 top-full z-50 mt-1 w-72 animate-in fade-in slide-in-from-top-2 duration-200">
           <Card className="border-2 p-4 shadow-xl bg-white text-fg animate-in fade-in duration-100">
             <div className="space-y-3">
               <div className="flex items-start justify-between gap-2">
-                <h4 className="font-semibold leading-tight text-fg">{event.title}</h4>
+                <h4 className={cn(
+                  "font-semibold leading-tight text-fg",
+                  event.completed && "line-through opacity-60",
+                )}>
+                  {event.completed ? "✓ " : ""}{event.title}
+                </h4>
                 {dot("h-4 w-4")}
               </div>
               {event.description && <p className="text-sm text-muted-foreground">{event.description}</p>}
@@ -1190,7 +1244,8 @@ function MonthView({
   const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
   const lastDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
   const startDate = new Date(firstDayOfMonth)
-  startDate.setDate(startDate.getDate() - startDate.getDay())
+  const mondayOffset = (startDate.getDay() + 6) % 7
+  startDate.setDate(startDate.getDate() - mondayOffset)
 
   const days = []
   const currentDay = new Date(startDate)
@@ -1214,7 +1269,7 @@ function MonthView({
   return (
     <Card className="overflow-hidden bg-white">
       <div className="grid grid-cols-7 border-b">
-        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
           <div key={day} className="border-r p-2 text-center text-xs font-medium last:border-r-0 sm:text-sm">
             <span className="hidden sm:inline">{day}</span>
             <span className="sm:hidden">{day.charAt(0)}</span>
@@ -1289,7 +1344,8 @@ function WeekView({
   getColorClasses: (color: string) => { bg: string; text: string }
 }) {
   const startOfWeek = new Date(currentDate)
-  startOfWeek.setDate(currentDate.getDate() - currentDate.getDay())
+  const mondayOffset = (currentDate.getDay() + 6) % 7
+  startOfWeek.setDate(currentDate.getDate() - mondayOffset)
 
   const weekDays = Array.from({ length: 7 }, (_, i) => {
     const day = new Date(startOfWeek)

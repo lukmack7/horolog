@@ -64,6 +64,24 @@ class DailyWindow(BaseModel):
         return self
 
 
+class CompletedBlock(BaseModel):
+    """One concrete scheduled block that the user marked as completed.
+
+    Stored as absolute datetimes rather than solver occurrence numbers or
+    relative slots, because the scheduling horizon origin moves every day.
+    """
+
+    start: datetime
+    end: datetime
+    completed_at: datetime
+
+    @model_validator(mode="after")
+    def _ordered(self) -> CompletedBlock:
+        if self.end <= self.start:
+            raise ValueError("completed block end must be after start")
+        return self
+
+
 class Intent(BaseModel):
     """A demand for time that the solver must satisfy."""
 
@@ -85,6 +103,10 @@ class Intent(BaseModel):
 
     # Where in the day it may land. Empty = anywhere.
     daily_windows: list[DailyWindow] = Field(default_factory=list)
+
+    # Which ISO weekdays it may land on: Monday=0 ... Sunday=6.
+    # Empty = any day, preserving the existing scheduling behaviour.
+    allowed_weekdays: list[int] = Field(default_factory=list)
 
     # Absolute bounds, as slots from the horizon origin.
     earliest_slot: int | None = None
@@ -111,6 +133,13 @@ class Intent(BaseModel):
     "no fixed time" meeting, so `zoom_join_url` stays correct regardless of
     which slot the solver places it in, or how a later re-solve moves it —
     nothing here has to stay in sync with the placement engine."""
+
+    completed_blocks: list[CompletedBlock] = Field(default_factory=list)
+    """Concrete scheduled occurrences already completed by the user.
+
+    Stored as absolute datetimes so completion remains stable when the
+    scheduling horizon origin advances.
+    """
 
     completed_at: datetime | None = None
     """Set once, never cleared automatically. `solver/expand.py` skips a
@@ -144,6 +173,10 @@ class Intent(BaseModel):
             and self.due_slot <= self.earliest_slot
         ):
             raise ValueError(f"due_slot {self.due_slot} must exceed earliest_slot")
+        if any(day < 0 or day > 6 for day in self.allowed_weekdays):
+            raise ValueError("allowed_weekdays values must be between 0 (Monday) and 6 (Sunday)")
+        if len(set(self.allowed_weekdays)) != len(self.allowed_weekdays):
+            raise ValueError("allowed_weekdays must not contain duplicates")
         for window in self.daily_windows:
             span = window.end_min - window.start_min
             if span < self.min_chunk_minutes:

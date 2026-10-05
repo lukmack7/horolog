@@ -7,6 +7,8 @@ what keeps `model.py` a pure interval-scheduling problem.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 from pydantic import BaseModel, Field
 
 from horolog.domain.intent import EnergyLevel, Intent, IntentKind, Priority
@@ -74,7 +76,7 @@ class Requirement(BaseModel):
         return sum(w.span for w in self.windows)
 
 
-def _windows_for(intent: Intent, lo: int, hi: int) -> list[AllowedWindow]:
+def _windows_for(intent: Intent, lo: int, hi: int, origin_weekday: int = 0) -> list[AllowedWindow]:
     """Absolute windows for [lo, hi), one per (day x daily_window), clipped."""
     if hi <= lo:
         return []
@@ -87,6 +89,9 @@ def _windows_for(intent: Intent, lo: int, hi: int) -> list[AllowedWindow]:
         else [(0, SLOTS_PER_DAY)]
     )
     for day in range(first_day, last_day + 1):
+        weekday = (origin_weekday + day) % 7
+        if intent.allowed_weekdays and weekday not in intent.allowed_weekdays:
+            continue
         base = day_start(day)
         for start_off, end_off in spans:
             w_lo, w_hi = max(base + start_off, lo), min(base + end_off, hi)
@@ -97,7 +102,12 @@ def _windows_for(intent: Intent, lo: int, hi: int) -> list[AllowedWindow]:
     return windows
 
 
-def expand(intent: Intent, horizon_slots: int) -> list[Requirement]:
+def expand(
+    intent: Intent,
+    horizon_slots: int,
+    origin_weekday: int = 0,
+    origin_at: datetime | None = None,
+) -> list[Requirement]:
     """Expand one intent into its per-period requirements over the horizon."""
     lo = max(0, intent.earliest_slot or 0)
     # Deliberately NOT clipped to due_slot. Clipping would make late placement
@@ -116,16 +126,48 @@ def expand(intent: Intent, horizon_slots: int) -> list[Requirement]:
 
     def build(occurrence: int, p_lo: int, p_hi: int) -> Requirement | None:
         reach = min(p_hi, p_lo + SCHEDULING_RANGE_DAYS * SLOTS_PER_DAY)
-        windows = _windows_for(intent, p_lo, reach)
+        windows = _windows_for(intent, p_lo, reach, origin_weekday)
         if not windows:
             return None
+
+        completed_slots = 0
+        completed_per_day: dict[int, int] = {}
+
+        if origin_at is not None and intent.completed_blocks:
+            period_start = origin_at + timedelta(minutes=p_lo * SLOT_MINUTES)
+            period_end = origin_at + timedelta(minutes=p_hi * SLOT_MINUTES)
+
+            for block in intent.completed_blocks:
+                overlap_start = max(block.start, period_start)
+                overlap_end = min(block.end, period_end)
+                if overlap_end <= overlap_start:
+                    continue
+
+                completed_slots += int(
+                    (overlap_end - overlap_start).total_seconds() // (SLOT_MINUTES * 60)
+                )
+
+                local_start = overlap_start.astimezone(origin_at.tzinfo)
+                day_index = (local_start.date() - origin_at.date()).days
+                completed_per_day[day_index] = completed_per_day.get(day_index, 0) + 1
+
+        if intent.max_per_day is not None and completed_per_day:
+            full_days = {
+                day for day, count in completed_per_day.items() if count >= intent.max_per_day
+            }
+            windows = [window for window in windows if window.day not in full_days]
+
+        required_slots = max(0, intent.required_slots - completed_slots)
+        if required_slots == 0:
+            return None
+
         return Requirement(
             intent_id=intent.id,
             kind=intent.kind,
             occurrence=occurrence,
             priority=intent.priority,
             energy=intent.energy,
-            required_slots=intent.required_slots,
+            required_slots=required_slots,
             min_chunk=intent.min_chunk_slots,
             max_chunk=intent.max_chunk_slots,
             max_per_day=intent.max_per_day,
@@ -153,7 +195,12 @@ def expand(intent: Intent, horizon_slots: int) -> list[Requirement]:
     return out
 
 
-def expand_all(intents: list[Intent], horizon_slots: int) -> list[Requirement]:
+def expand_all(
+    intents: list[Intent],
+    horizon_slots: int,
+    origin_weekday: int = 0,
+    origin_at: datetime | None = None,
+) -> list[Requirement]:
     # A completed intent demands nothing further — skipped here, the one
     # choke point every intent's demand already passes through, rather than
     # in each of the (several) callers that build a requirement list.
@@ -161,5 +208,10 @@ def expand_all(intents: list[Intent], horizon_slots: int) -> list[Requirement]:
         r
         for intent in intents
         if intent.completed_at is None
-        for r in expand(intent, horizon_slots)
+        for r in expand(
+            intent,
+            horizon_slots,
+            origin_weekday,
+            origin_at=origin_at,
+        )
     ]

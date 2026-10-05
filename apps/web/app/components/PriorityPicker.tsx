@@ -21,9 +21,19 @@ export function PriorityPicker({
           type="button"
           onClick={() => onChange(p)}
           aria-pressed={value === p}
-          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-semibold transition-all duration-150 ${
-            value === p ? "bg-surface shadow-sm border border-black/[0.08]" : "text-fg-muted hover:bg-surface/60"
+          className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12px] font-semibold transition-all duration-150 ${
+            value === p
+              ? "shadow-sm text-fg"
+              : "border-transparent text-fg-muted hover:bg-surface/60"
           }`}
+          style={
+            value === p
+              ? {
+                  backgroundColor: `color-mix(in srgb, ${PRIORITY_TINT[p]} 10%, transparent)`,
+                  borderColor: `color-mix(in srgb, ${PRIORITY_TINT[p]} 35%, transparent)`,
+                }
+              : undefined
+          }
         >
           <span className="h-3 w-1 rounded-full" style={{ background: PRIORITY_TINT[p] }} aria-hidden />
           {PRIORITY_NAME[p]}

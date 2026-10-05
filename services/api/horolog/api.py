@@ -42,7 +42,14 @@ from horolog.db import (
     session,
 )
 from horolog.domain.events import BusyInterval
-from horolog.domain.intent import DailyWindow, EnergyLevel, Intent, IntentKind, Priority
+from horolog.domain.intent import (
+    CompletedBlock,
+    DailyWindow,
+    EnergyLevel,
+    Intent,
+    IntentKind,
+    Priority,
+)
 from horolog.domain.plan import Plan
 from horolog.domain.time import (
     SLOT_MINUTES,
@@ -156,6 +163,7 @@ class IntentIn(BaseModel):
     min_chunk_minutes: int = Field(default=30, gt=0)
     max_chunk_minutes: int = Field(default=120, gt=0)
     max_per_day: int | None = Field(default=None, gt=0)
+    allowed_weekdays: list[int] = Field(default_factory=list)
     window_start_min: int | None = None
     window_end_min: int | None = None
     due: LocalDateTime | None = None
@@ -175,6 +183,21 @@ class IntentIn(BaseModel):
             self.window_start_min if self.window_start_min is not None else cfg.workday_start_min
         )
         end = self.window_end_min if self.window_end_min is not None else cfg.workday_end_min
+
+        # A specific preferred start outside the normal workday must still be
+        # schedulable. Keep it soft: widen the default window rather than
+        # turning the requested clock time into a fixed appointment.
+        if (
+            self.window_start_min is None
+            and self.window_end_min is None
+            and self.preferred_start_min is not None
+        ):
+            start = min(start, self.preferred_start_min)
+            end = max(
+                end,
+                min(24 * 60, self.preferred_start_min + self.min_chunk_minutes),
+            )
+
         return Intent(
             id=ident,
             kind=self.kind,
@@ -187,6 +210,7 @@ class IntentIn(BaseModel):
             max_chunk_minutes=self.max_chunk_minutes,
             max_per_day=self.max_per_day,
             daily_windows=[DailyWindow(start_min=start, end_min=end)],
+            allowed_weekdays=self.allowed_weekdays,
             earliest_slot=to_slot(self.earliest, base) if self.earliest else None,
             due_slot=to_slot(self.due, base) if self.due else None,
             preferred_start_min=self.preferred_start_min,
@@ -204,6 +228,11 @@ class AttendeeBusy(BaseModel):
     start: LocalDateTime
     end: LocalDateTime
     attendee: str = ""
+
+
+class CompletedBlockIn(BaseModel):
+    start: LocalDateTime
+    end: LocalDateTime
 
 
 class BusyIn(BaseModel):
@@ -224,6 +253,8 @@ class BlockOut(BaseModel):
     start: datetime
     end: datetime
     moved_from: datetime | None = None
+    completed: bool = False
+    recurring: bool = False
 
 
 class UnmetOut(BaseModel):
@@ -426,6 +457,70 @@ async def delete_intent(intent_id: str, db: AsyncSession = Depends(session)) -> 
     return Response(status_code=204)
 
 
+@app.post("/api/intents/{intent_id}/complete-block")
+async def complete_intent_block(
+    intent_id: str,
+    body: CompletedBlockIn,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    """Mark one concrete occurrence of a recurring intent as completed."""
+    row = await db.get(IntentRow, intent_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"no intent {intent_id!r}")
+
+    intent = Intent.model_validate(row.payload)
+    if intent.period_days is None:
+        raise HTTPException(
+            status_code=422,
+            detail="one-shot tasks use the intent completion endpoint",
+        )
+    if body.end <= body.start:
+        raise HTTPException(status_code=422, detail="block end must be after start")
+
+    already_completed = any(
+        block.start == body.start and block.end == body.end for block in intent.completed_blocks
+    )
+    if not already_completed:
+        completed = CompletedBlock(
+            start=body.start,
+            end=body.end,
+            completed_at=datetime.now(UTC),
+        )
+        intent = intent.model_copy(
+            update={"completed_blocks": [*intent.completed_blocks, completed]}
+        )
+        row.payload = intent.model_dump(mode="json")
+        await db.commit()
+
+    await _replan(db)
+    return intent.model_dump(mode="json")
+
+
+@app.delete("/api/intents/{intent_id}/complete-block")
+async def uncomplete_intent_block(
+    intent_id: str,
+    body: CompletedBlockIn,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    """Undo completion of one concrete recurring occurrence."""
+    row = await db.get(IntentRow, intent_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"no intent {intent_id!r}")
+
+    intent = Intent.model_validate(row.payload)
+    remaining = [
+        block
+        for block in intent.completed_blocks
+        if not (block.start == body.start and block.end == body.end)
+    ]
+
+    intent = intent.model_copy(update={"completed_blocks": remaining})
+    row.payload = intent.model_dump(mode="json")
+    await db.commit()
+    await _replan(db)
+    return intent.model_dump(mode="json")
+
+
 @app.post("/api/intents/{intent_id}/complete")
 async def complete_intent(intent_id: str, db: AsyncSession = Depends(session)) -> dict[str, Any]:
     """Mark a one-shot task done.
@@ -445,7 +540,33 @@ async def complete_intent(intent_id: str, db: AsyncSession = Depends(session)) -
             detail="only a one-shot task can be marked complete — a recurring "
             "habit needs per-occurrence completion, not built yet",
         )
-    intent = intent.model_copy(update={"completed_at": datetime.now(UTC)})
+    completed_at = datetime.now(UTC)
+
+    # Preserve the task's current calendar placement before the next solve
+    # removes its demand. This lets the planner keep showing the finished
+    # task in its original slot as a completed/struck-through block.
+    previous_plan = await load_previous_plan(db)
+    base = origin()
+    archived_blocks = (
+        [
+            CompletedBlock(
+                start=from_slot(block.start_slot, base),
+                end=from_slot(block.end_slot, base),
+                completed_at=completed_at,
+            )
+            for block in previous_plan.blocks
+            if block.intent_id == intent_id
+        ]
+        if previous_plan is not None
+        else []
+    )
+
+    intent = intent.model_copy(
+        update={
+            "completed_at": completed_at,
+            "completed_blocks": archived_blocks or intent.completed_blocks,
+        }
+    )
     row.payload = intent.model_dump(mode="json")
     await db.commit()
     await _replan(db)
@@ -458,7 +579,12 @@ async def uncomplete_intent(intent_id: str, db: AsyncSession = Depends(session))
     row = await db.get(IntentRow, intent_id)
     if row is None:
         raise HTTPException(status_code=404, detail=f"no intent {intent_id!r}")
-    intent = Intent.model_validate(row.payload).model_copy(update={"completed_at": None})
+    intent = Intent.model_validate(row.payload).model_copy(
+        update={
+            "completed_at": None,
+            "completed_blocks": [],
+        }
+    )
     row.payload = intent.model_dump(mode="json")
     await db.commit()
     await _replan(db)
@@ -498,6 +624,7 @@ async def update_intent(
         update={
             "zoom_meeting_id": previous.zoom_meeting_id,
             "zoom_join_url": previous.zoom_join_url,
+            "completed_blocks": previous.completed_blocks,
             "completed_at": previous.completed_at,
         }
     )
@@ -1397,7 +1524,14 @@ async def _busy(db: AsyncSession) -> list[BusyInterval]:
 
 async def _replan(db: AsyncSession) -> Plan:
     intents = await load_intents(db)
-    plan = solve(intents, await _busy(db), horizon_slots(), previous=await load_previous_plan(db))
+    plan = solve(
+        intents,
+        await _busy(db),
+        horizon_slots(),
+        previous=await load_previous_plan(db),
+        origin_weekday=origin().weekday(),
+        origin_at=origin(),
+    )
     await save_plan(db, plan)
     bus.publish(json.dumps({"blocks": len(plan.blocks), "solve_ms": round(plan.solve_ms, 2)}))
     return plan
@@ -1408,22 +1542,49 @@ async def _render(db: AsyncSession, plan: Plan) -> PlanOut:
     titles = {i.id: i for i in await load_intents(db)}
     rows = (await db.execute(select(BusyRow))).scalars().all()
     sources = {row.id: row.source for row in rows}
-    return PlanOut(
-        blocks=[
-            BlockOut(
-                intent_id=b.intent_id,
-                title=titles[b.intent_id].title if b.intent_id in titles else b.intent_id,
-                kind=titles[b.intent_id].kind if b.intent_id in titles else IntentKind.TASK,
-                priority=b.priority,
-                energy=titles[b.intent_id].energy if b.intent_id in titles else None,
-                occurrence=b.occurrence,
-                chunk=b.chunk,
-                start=from_slot(b.start_slot, base),
-                end=from_slot(b.end_slot, base),
-                moved_from=from_slot(b.moved_from, base) if b.moved_from is not None else None,
+    rendered_blocks = [
+        BlockOut(
+            intent_id=b.intent_id,
+            title=titles[b.intent_id].title if b.intent_id in titles else b.intent_id,
+            kind=titles[b.intent_id].kind if b.intent_id in titles else IntentKind.TASK,
+            priority=b.priority,
+            energy=titles[b.intent_id].energy if b.intent_id in titles else None,
+            occurrence=b.occurrence,
+            chunk=b.chunk,
+            start=from_slot(b.start_slot, base),
+            end=from_slot(b.end_slot, base),
+            moved_from=from_slot(b.moved_from, base) if b.moved_from is not None else None,
+            completed=False,
+            recurring=(
+                titles[b.intent_id].period_days is not None if b.intent_id in titles else False
+            ),
+        )
+        for b in plan.blocks
+    ]
+
+    # Completed blocks no longer consume solver capacity, but remain visible
+    # in the calendar as historical, completed occurrences.
+    for intent in titles.values():
+        for index, completed in enumerate(intent.completed_blocks):
+            rendered_blocks.append(
+                BlockOut(
+                    intent_id=intent.id,
+                    title=intent.title,
+                    kind=intent.kind,
+                    priority=intent.priority,
+                    energy=intent.energy,
+                    occurrence=-(index + 1),
+                    chunk=0,
+                    start=completed.start,
+                    end=completed.end,
+                    moved_from=None,
+                    completed=True,
+                    recurring=intent.period_days is not None,
+                )
             )
-            for b in plan.blocks
-        ],
+
+    return PlanOut(
+        blocks=rendered_blocks,
         unmet=[
             UnmetOut(
                 intent_id=u.intent_id,
