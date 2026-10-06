@@ -49,11 +49,11 @@ const KIND_COLOR: Record<IntentKind, string> = {
 };
 
 const KIND_LABEL: Record<IntentKind, string> = {
-  task: "Task",
-  habit: "Habit",
+  task: "Zadanie",
+  habit: "Nawyk",
   focus: "Skupienie",
-  meeting: "Meeting",
-  buffer: "Buffer",
+  meeting: "Spotkanie",
+  buffer: "Przerwa / bufor",
 };
 
 const KIND_ORDER: IntentKind[] = ["task", "focus", "habit", "meeting", "buffer"];
@@ -104,8 +104,8 @@ function buildDerived(plan: Plan): Derived {
     return {
       date,
       key: localDateKey(date),
-      label: date.toLocaleDateString("en-US", { weekday: "short" }),
-      short: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      label: date.toLocaleDateString("pl-PL", { weekday: "short" }),
+      short: date.toLocaleDateString("pl-PL", { month: "short", day: "numeric" }),
     };
   });
 
@@ -117,7 +117,7 @@ function buildDerived(plan: Plan): Derived {
   let totalBlockMinutes = 0;
   let completedBlocks = 0;
 
-  for (const block of plan.bloków) {
+  for (const block of plan.blocks) {
     const minutes = Math.max(0, minutesBetween(block.start, block.end));
     totalBlockMinutes += minutes;
     kindMinutes[block.kind] += minutes;
@@ -152,12 +152,12 @@ function buildDerived(plan: Plan): Derived {
     totalVisibleMinutes: totalBlockMinutes + externalMeetingMinutes,
     highPriorityShare: totalBlockMinutes > 0 ? highPriorityMinutes / totalBlockMinutes : 0,
     completedBlocks,
-    totalBlocks: plan.bloków.length,
+    totalBlocks: plan.blocks.length,
   };
 }
 
-export default function AnalizyPage() {
-  const [data, setData] = useState<Analizy | null>(null);
+export default function AnalyticsPage() {
+  const [data, setData] = useState<Analytics | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [view, setView] = useState<AnalyticsView>("overview");
   const [error, setError] = useState<string | null>(null);
@@ -169,7 +169,7 @@ export default function AnalizyPage() {
       setPlan(nextPlan);
       setError(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not load analytics.");
+      setError(caught instanceof Error ? caught.message : "Nie udało się wczytać analiz.");
     }
   }, []);
 
@@ -186,10 +186,10 @@ export default function AnalizyPage() {
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h1 className="text-[30px] font-bold leading-tight text-fg sm:text-[28px]">
-                Productivity Analizy
+                Analizy produktywności
               </h1>
               <p className="mt-1 text-[13px] text-fg-muted sm:text-[13.5px]">
-                {data ? `Measured across your ${data.horizon_days}-day planning horizon` : "Reading the plan..."}
+                {data ? `Pomiar dla ${data.horizon_days}-dniowego horyzontu planowania` : "Wczytywanie planu..."}
               </p>
             </div>
             {plan && (
@@ -199,7 +199,7 @@ export default function AnalizyPage() {
             )}
           </div>
 
-          <AnalizyTabs view={view} onChange={setView} />
+          <AnalyticsTabs view={view} onChange={setView} />
         </header>
 
         {error && (
@@ -208,14 +208,14 @@ export default function AnalizyPage() {
           </div>
         )}
 
-        {(!data || !plan || !derived) && !error && <AnalizySkeleton />}
+        {(!data || !plan || !derived) && !error && <AnalyticsSkeleton />}
 
         {data && plan && derived && (
           <>
-            {view === "overview" && <PrzeglądView data={data} plan={plan} derived={derived} />}
-            {view === "priorities" && <PriorytetyView data={data} derived={derived} />}
+            {view === "overview" && <OverviewView data={data} plan={plan} derived={derived} />}
+            {view === "priorities" && <PrioritiesView data={data} derived={derived} />}
             {view === "map" && <WeekMapView data={data} plan={plan} derived={derived} />}
-            {view === "executive" && <PodsumowanieView data={data} derived={derived} />}
+            {view === "executive" && <ExecutiveView data={data} derived={derived} />}
           </>
         )}
       </main>
@@ -223,12 +223,12 @@ export default function AnalizyPage() {
   );
 }
 
-function AnalizyTabs({
+function AnalyticsTabs({
   view,
   onChange,
 }: {
-  view: AnalizyView;
-  onChange: (view: AnalizyView) => void;
+  view: AnalyticsView;
+  onChange: (view: AnalyticsView) => void;
 }) {
   return (
     <div className="mt-5 grid grid-cols-4 gap-1 rounded-2xl border border-black/[0.08] bg-surface p-1 shadow-sm">
@@ -248,7 +248,7 @@ function AnalizyTabs({
           >
             <Icon size={15} />
             <span className="hidden xs:inline sm:inline">{item.label}</span>
-            <span className="sm:hidden">{item.id === "priorities" ? "Priority" : item.id === "executive" ? "Exec" : item.label}</span>
+            <span className="sm:hidden">{item.id === "priorities" ? "Prioryt." : item.id === "executive" ? "Podsum." : item.label}</span>
           </button>
         );
       })}
@@ -256,12 +256,12 @@ function AnalizyTabs({
   );
 }
 
-function PrzeglądView({
+function OverviewView({
   data,
   plan,
   derived,
 }: {
-  data: Analizy;
+  data: Analytics;
   plan: Plan;
   derived: Derived;
 }) {
@@ -335,7 +335,7 @@ function PrzeglądView({
   );
 }
 
-function PriorytetyView({ data, derived }: { data: Analizy; derived: Derived }) {
+function PrioritiesView({ data, derived }: { data: Analytics; derived: Derived }) {
   const maxCell = Math.max(
     1,
     ...derived.dayPriority.flatMap((row) => PRIORITIES.map((priority) => row[priority])),
@@ -440,7 +440,7 @@ function WeekMapView({
   plan,
   derived,
 }: {
-  data: Analizy;
+  data: Analytics;
   plan: Plan;
   derived: Derived;
 }) {
@@ -452,7 +452,7 @@ function WeekMapView({
     hours.map((hour) => {
       const totals = blankKindRecord();
 
-      for (const block of plan.bloków) {
+      for (const block of plan.blocks) {
         const start = new Date(block.start);
         if (localDateKey(start) !== day.key || start.getHours() !== hour) continue;
         totals[block.kind] += minutesBetween(block.start, block.end);
@@ -574,7 +574,7 @@ function WeekMapView({
   );
 }
 
-function PodsumowanieView({ data, derived }: { data: Analizy; derived: Derived }) {
+function ExecutiveView({ data, derived }: { data: Analytics; derived: Derived }) {
   const focusShare = data.scheduled_minutes > 0 ? data.focus_minutes / data.scheduled_minutes : 0;
   const meetingShare = derived.totalVisibleMinutes > 0 ? data.meeting_minutes / derived.totalVisibleMinutes : 0;
   const completionShare = derived.totalBlocks > 0 ? derived.completedBlocks / derived.totalBlocks : 0;
@@ -934,7 +934,7 @@ function DonutSummary({
   );
 }
 
-function InsightStrip({ data, derived, plan }: { data: Analizy; derived: Derived; plan: Plan }) {
+function InsightStrip({ data, derived, plan }: { data: Analytics; derived: Derived; plan: Plan }) {
   const busiestIndex = derived.dayKind
     .map((row) => KIND_ORDER.reduce((sum, kind) => sum + row[kind], 0))
     .reduce((best, value, index, values) => (value > values[best]! ? index : best), 0);
@@ -1009,7 +1009,7 @@ function MetricColumn({
   );
 }
 
-function AnalizySkeleton() {
+function AnalyticsSkeleton() {
   return (
     <div aria-hidden className="space-y-5">
       <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
