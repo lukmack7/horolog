@@ -23,7 +23,7 @@ type Result =
 const CALENDAR_PROVIDERS: { id: Provider; label: string; icon: React.ReactNode }[] = [
   {
     id: "google",
-    label: "Kalendarz Google",
+    label: "Google Calendar",
     icon: (
       <svg viewBox="0 0 24 24" width="18" height="18" className="shrink-0">
         <path d="M21.35,11.1H12v2.7h5.38c-0.24,1.28 -0.96,2.37 -2.04,3.1v2.58h3.3c1.93,-1.78 3.04,-4.4 3.04,-7.48c0,-0.61 -0.05,-1.2 -0.15,-1.78Z" fill="#4285F4" />
@@ -53,7 +53,7 @@ const TRACKER_PROVIDERS: {
   className: string;
   /** No OAuth app exists for this provider (see integrations/<id>.py's
    *  docstring for why) — render the paste-a-credential input only, never
-   *  the OAuth "Połącz" button, which would point at a route that doesn't
+   *  the OAuth "Connect" button, which would point at a route that doesn't
    *  exist. */
   keyOnly?: boolean;
   placeholder?: string;
@@ -88,9 +88,9 @@ const TRACKER_PROVIDERS: {
   },
 ];
 
-export default function Połącz() {
+export default function Connect() {
   const [plan, setPlan] = useState<Plan | null>(null);
-  const [connected, setPołączed] = useState<Record<string, boolean>>({});
+  const [connected, setConnected] = useState<Record<string, boolean>>({});
   const [icsUrl, setIcsUrl] = useState("");
   const [dav, setDav] = useState({ url: "", username: "", password: "" });
   const [trackerKeys, setTrackerKeys] = useState<Record<string, string>>({});
@@ -112,7 +112,7 @@ export default function Połącz() {
       failure = caught instanceof Error ? caught.message : "Could not reach the scheduler.";
     }
     try {
-      setPołączed(await connections.list());
+      setConnected(await connections.list());
     } catch (caught) {
       failure ??= caught instanceof Error ? caught.message : "Could not reach the scheduler.";
     }
@@ -129,7 +129,7 @@ export default function Połącz() {
     if (status) {
       window.history.replaceState({}, document.title, window.location.pathname);
       if (status === "success" && provider) {
-        void runSynchronizuj(provider as Provider);
+        void runSync(provider as Provider);
       } else if (status === "credentials_missing" && provider) {
         setResult({
           ok: false,
@@ -142,7 +142,7 @@ export default function Połącz() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]);
 
-  async function runSynchronizuj(provider: Provider, credential?: string) {
+  async function runSync(provider: Provider, credential?: string) {
     setPending(provider);
     setResult(null);
     try {
@@ -174,13 +174,13 @@ export default function Połącz() {
       setResult({ ok: true, count, label });
       await load();
     } catch (caught) {
-      setResult({ ok: false, message: caught instanceof Error ? caught.message : "Synchronizuj failed." });
+      setResult({ ok: false, message: caught instanceof Error ? caught.message : "Sync failed." });
     } finally {
       setPending(null);
     }
   }
 
-  async function pushKalendarz(provider: "google" | "outlook") {
+  async function pushCalendar(provider: "google" | "outlook") {
     setPending(`push-${provider}`);
     setResult(null);
     try {
@@ -216,7 +216,7 @@ export default function Połącz() {
       setResult({ ok: true, count: out.events, label: "events" });
       await load();
     } catch (caught) {
-      setResult({ ok: false, message: caught instanceof Error ? caught.message : "Synchronizuj failed." });
+      setResult({ ok: false, message: caught instanceof Error ? caught.message : "Sync failed." });
     } finally {
       setPending(null);
     }
@@ -230,7 +230,7 @@ export default function Połącz() {
       setResult({ ok: true, count: out.events, label: "events" });
       await load();
     } catch (caught) {
-      setResult({ ok: false, message: caught instanceof Error ? caught.message : "Synchronizuj failed." });
+      setResult({ ok: false, message: caught instanceof Error ? caught.message : "Sync failed." });
     } finally {
       setPending(null);
     }
@@ -253,7 +253,7 @@ export default function Połącz() {
     <Shell onPlanChange={load}>
       <main className="mx-auto max-w-[800px] space-y-6 px-6 py-8">
         <header className="mb-4">
-          <h1 className="text-[28px] font-bold text-fg">Kalendarze & Synchronizuj</h1>
+          <h1 className="text-[28px] font-bold text-fg">Calendars & Sync</h1>
           <p className="mt-1 text-[13.5px] font-medium text-fg-muted">
             {mirrored} {mirrored === 1 ? "event" : "events"} mirrored across{" "}
             {Object.keys(bySource).length || 0} active sources.
@@ -284,16 +284,16 @@ export default function Połącz() {
               {result.ok
                 ? result.kind === "push"
                   ? `Pushed to the calendar: ${result.label}.`
-                  : `Synchronizujed ${result.count} ${result.label}. Your plan has been rebuilt around them.`
+                  : `Synced ${result.count} ${result.label}. Your plan has been rebuilt around them.`
                 : result.message}
             </span>
           </div>
         )}
 
-        {/* Kalendarze — OAuth, or paste an ICS/CalDAV address directly */}
+        {/* Calendars — OAuth, or paste an ICS/CalDAV address directly */}
         <section className="space-y-5 overflow-hidden rounded-card border border-black/[0.08] bg-surface p-6 shadow-sm">
           <div>
-            <h2 className="text-[15px] font-bold text-fg">Połącz a calendar</h2>
+            <h2 className="text-[15px] font-bold text-fg">Connect a calendar</h2>
             <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">
               OAuth needs your own app credentials — self-hosting means there is no shared client
               to hand out (see .env.example). The feed and server options below need none.
@@ -302,12 +302,12 @@ export default function Połącz() {
 
           <div className="flex flex-col gap-3">
             {CALENDAR_PROVIDERS.map((p) => {
-              const isPołączed = connected[p.id];
+              const isConnected = connected[p.id];
               return (
                 <div key={p.id} className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => (isPołączed ? runSynchronizuj(p.id) : (window.location.href = `/api/auth/${p.id}`))}
+                    onClick={() => (isConnected ? runSync(p.id) : (window.location.href = `/api/auth/${p.id}`))}
                     disabled={pending !== null}
                     className="flex h-11 flex-1 items-center justify-center gap-3 rounded-xl border border-black/[0.08] bg-white px-4 text-[13.5px] font-semibold text-stone-700 shadow-sm transition-all hover:bg-stone-50 disabled:opacity-50"
                   >
@@ -315,16 +315,16 @@ export default function Połącz() {
                     <span>
                       {pending === p.id
                         ? "Working…"
-                        : isPołączed
+                        : isConnected
                           ? `Re-sync ${p.label}`
-                          : `Połącz ${p.label}`}
+                          : `Connect ${p.label}`}
                     </span>
-                    {isPołączed && <CheckCircle2 size={15} className="text-emerald-600" />}
+                    {isConnected && <CheckCircle2 size={15} className="text-emerald-600" />}
                   </button>
-                  {isPołączed && (
+                  {isConnected && (
                     <button
                       type="button"
-                      onClick={() => pushKalendarz(p.id as "google" | "outlook")}
+                      onClick={() => pushCalendar(p.id as "google" | "outlook")}
                       disabled={pending !== null}
                       aria-label={`Push the plan to ${p.label}`}
                       title={`Push scheduled blocks onto a dedicated "Horolog" calendar on ${p.label} — needs HOROLOG_CALENDAR_WRITEBACK_ENABLED=true`}
@@ -337,13 +337,13 @@ export default function Połącz() {
                       )}
                     </button>
                   )}
-                  {isPołączed && (
+                  {isConnected && (
                     <button
                       type="button"
                       onClick={() => disconnect(p.id)}
                       disabled={pending !== null}
-                      aria-label={`Rozłącz ${p.label}`}
-                      title={`Rozłącz ${p.label}`}
+                      aria-label={`Disconnect ${p.label}`}
+                      title={`Disconnect ${p.label}`}
                       className="flex h-11 w-11 items-center justify-center rounded-xl border border-black/[0.08] bg-white text-fg-muted transition-colors hover:border-red-200 hover:text-danger disabled:opacity-50"
                     >
                       <Unplug size={15} />
@@ -381,7 +381,7 @@ export default function Połącz() {
                 disabled={!icsUrl.trim() || pending !== null}
                 className="inline-flex h-11 shrink-0 items-center gap-2 rounded-xl bg-accent px-5 text-[13.5px] font-semibold text-on-accent shadow-sm transition-all hover:bg-accent-hover disabled:opacity-40"
               >
-                {pending === "ics" ? "Synchronizujing…" : "Synchronizuj Feed"}
+                {pending === "ics" ? "Syncing…" : "Sync Feed"}
               </button>
             </div>
           </div>
@@ -389,7 +389,7 @@ export default function Połącz() {
           <div className="border-t border-black/[0.06] pt-5">
             <div className="mb-2 flex items-center gap-2 text-[13.5px] font-semibold text-fg">
               <Server size={15} className="text-accent" />
-              Połącz a CalDAV server
+              Connect a CalDAV server
             </div>
             <div className="grid gap-2.5 sm:grid-cols-3">
               <input
@@ -419,7 +419,7 @@ export default function Połącz() {
                 disabled={!dav.url.trim() || pending !== null}
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-accent px-5 text-[13.5px] font-semibold text-on-accent shadow-sm transition-all hover:bg-accent-hover disabled:opacity-40"
               >
-                {pending === "caldav" ? "Połączing…" : "Połącz"}
+                {pending === "caldav" ? "Connecting…" : "Connect"}
               </button>
             </div>
           </div>
@@ -428,7 +428,7 @@ export default function Połącz() {
         {/* Trackers — OAuth, or paste a personal key */}
         <section className="space-y-4 overflow-hidden rounded-card border border-black/[0.08] bg-surface p-6 shadow-sm">
           <div>
-            <h2 className="text-[15px] font-bold text-fg">Połącz a tracker</h2>
+            <h2 className="text-[15px] font-bold text-fg">Connect a tracker</h2>
             <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">
               Started issues and open tasks are scheduled as tasks, fluidly, around everything
               else. A personal API key needs no OAuth app.
@@ -436,33 +436,33 @@ export default function Połącz() {
           </div>
           <div className="space-y-3">
             {TRACKER_PROVIDERS.map((p) => {
-              const isPołączed = connected[p.id];
+              const isConnected = connected[p.id];
               return (
                 <div key={p.id} className="flex flex-wrap items-center gap-2">
                   {!p.keyOnly && (
                     <button
                       type="button"
-                      onClick={() => (isPołączed ? runSynchronizuj(p.id) : (window.location.href = `/api/auth/${p.id}`))}
+                      onClick={() => (isConnected ? runSync(p.id) : (window.location.href = `/api/auth/${p.id}`))}
                       disabled={pending !== null}
                       className={`flex h-11 items-center justify-center gap-2 rounded-xl px-4 text-[13.5px] font-semibold shadow-sm transition-all disabled:opacity-50 ${p.className}`}
                     >
                       <span>
                         {pending === p.id
                           ? "Working…"
-                          : isPołączed
+                          : isConnected
                             ? `Re-sync ${p.label}`
-                            : `Połącz ${p.label}`}
+                            : `Connect ${p.label}`}
                       </span>
-                      {isPołączed && <CheckCircle2 size={15} />}
+                      {isConnected && <CheckCircle2 size={15} />}
                     </button>
                   )}
-                  {isPołączed && (
+                  {isConnected && (
                     <button
                       type="button"
                       onClick={() => disconnect(p.id)}
                       disabled={pending !== null}
-                      aria-label={`Rozłącz ${p.label}`}
-                      title={`Rozłącz ${p.label}`}
+                      aria-label={`Disconnect ${p.label}`}
+                      title={`Disconnect ${p.label}`}
                       className="flex h-11 w-11 items-center justify-center rounded-xl border border-black/[0.08] bg-white text-fg-muted transition-colors hover:border-red-200 hover:text-danger disabled:opacity-50"
                     >
                       <Unplug size={15} />
@@ -483,11 +483,11 @@ export default function Połącz() {
                   />
                   <button
                     type="button"
-                    onClick={() => runSynchronizuj(p.id, trackerKeys[p.id])}
+                    onClick={() => runSync(p.id, trackerKeys[p.id])}
                     disabled={!trackerKeys[p.id]?.trim() || pending !== null}
                     className="inline-flex h-11 items-center gap-2 rounded-xl border border-black/[0.08] bg-white px-4 text-[13px] font-semibold text-fg shadow-sm transition-all hover:bg-sunk disabled:opacity-40"
                   >
-                    Synchronizuj
+                    Sync
                   </button>
                 </div>
               );
@@ -500,7 +500,7 @@ export default function Połącz() {
           <div>
             <h2 className="text-[15px] font-bold text-fg">Subscribe to your Horolog plan</h2>
             <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">
-              Read-only from Apple Kalendarz, Google, or Outlook — see your auto-scheduled blocks
+              Read-only from Apple Calendar, Google, or Outlook — see your auto-scheduled blocks
               alongside external events.
             </p>
           </div>
