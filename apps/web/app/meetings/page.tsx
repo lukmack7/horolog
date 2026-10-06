@@ -1,5 +1,6 @@
 "use client";
 
+import { useLanguage } from "@/app/components/LanguageProvider";
 import { useCallback, useEffect, useState } from "react";
 import { Glyph } from "@/app/components/Glyph";
 import { PriorityPicker } from "@/app/components/PriorityPicker";
@@ -28,6 +29,7 @@ const EMPTY_ROW: BusyRow = { start: "", end: "", attendee: "" };
  *  (attendee free/busy intersection, `Intent.blocked_slots`) already exists
  *  and is tested server-side but had no way to reach it from the app. */
 export default function Meetings() {
+  const { t, language } = useLanguage();
   const [intents, setIntents] = useState<Intent[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
