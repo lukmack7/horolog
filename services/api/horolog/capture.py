@@ -90,6 +90,85 @@ Infer only what the text supports. Use null rather than inventing a constraint.\
 """
 
 
+DAILY_SYSTEM = """\
+You split one Daily quick-add into explicit actionable items.
+
+The user may write one action or several actions in one sentence. Return one
+item per EXPLICIT action. Do not invent follow-up work, appointments, reminders,
+or meetings that are merely mentioned as context.
+
+Critical distinction:
+- "przeanalizować odpowiedzi od Vafo i przygotować się na spotkanie jutro z Anną z AZAN"
+  is ONE task. The meeting is context for the preparation; do NOT create a
+  second meeting.
+- "przeanalizować odpowiedzi od Vafo dziś i jutro o 10:00 spotkanie z Anną z
+  AZAN na 45 minut" is TWO explicit actions: one task and one meeting.
+- "zadzwonić do Ani i wysłać ofertę do Marka" is TWO tasks.
+- A conjunction does not always mean two items. Keep closely coupled work as
+  one task when it describes one outcome, e.g. "przeanalizować dane i
+  przygotować wnioski do prezentacji".
+
+Fields:
+- kind: "task" or "meeting".
+- day_offset: calendar days from the selected Daily date. 0 means that selected
+  day, 1 means the next day. Use another value only when the text explicitly
+  names a relative day. Context dates belonging to a referenced meeting do not
+  move a preparation task.
+- minutes: explicit duration when stated, otherwise null.
+- preferred_start_min: explicit start time as minutes from midnight, otherwise
+  null. Do not infer a clock time.
+- title: short, natural Polish action title. Preserve names and business terms.
+
+Never create an item that is only implied. Prefer one accurate item over two
+speculative ones.\
+"""
+
+
+class DailyActionDraft(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    kind: IntentKind
+    day_offset: int = 0
+    minutes: int | None = None
+    preferred_start_min: int | None = None
+
+    @model_validator(mode="after")
+    def _daily_sane(self) -> DailyActionDraft:
+        if self.kind not in (IntentKind.TASK, IntentKind.MEETING):
+            raise ValueError("Daily quick-add only supports task or meeting")
+        if self.day_offset < 0 or self.day_offset > 14:
+            raise ValueError("day_offset must be between 0 and 14")
+        if self.minutes is not None and self.minutes <= 0:
+            raise ValueError("minutes must be positive when provided")
+        if self.preferred_start_min is not None and not 0 <= self.preferred_start_min < 1440:
+            raise ValueError("preferred_start_min must satisfy 0 <= value < 1440")
+        return self
+
+
+class DailyBatchDraft(BaseModel):
+    actions: list[DailyActionDraft]
+
+    @model_validator(mode="after")
+    def _batch_sane(self) -> DailyBatchDraft:
+        if not self.actions:
+            raise ValueError("at least one explicit action is required")
+        if len(self.actions) > 8:
+            raise ValueError("Daily quick-add supports at most 8 actions at once")
+        return self
+
+
+async def capture_daily_actions(
+    text: str,
+    selected_date: str,
+    provider: Provider | None = None,
+) -> DailyBatchDraft:
+    system = (
+        DAILY_SYSTEM
+        + f"\n\nSelected Daily date: {selected_date}. "
+        + "Interpret today/this day as the selected Daily date, not the server clock."
+    )
+    return await extract(DailyBatchDraft, system, text, provider=provider)
+
+
 class IntentDraft(BaseModel):
     """What the model is allowed to say.
 
