@@ -25,7 +25,7 @@ function localDateKey(date: Date): string {
  *  what's in progress and what's next. Complements Planner (week grid) and
  *  Analytics (aggregate stats) rather than duplicating either. */
 export default function TimePage() {
-  const { t, language } = useLanguage();
+  useLanguage();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [daily, setDaily] = useState<DailyData | null>(null);
   const [error, setError] = useState<string | null>(null);
