@@ -66,12 +66,12 @@ export interface EventManagerProps {
 }
 
 const defaultColors = [
-  { name: "Niebieski", value: "blue", bg: "bg-blue-500", text: "text-blue-700" },
-  { name: "Zielony", value: "green", bg: "bg-green-500", text: "text-green-700" },
-  { name: "Fioletowy", value: "purple", bg: "bg-purple-500", text: "text-purple-700" },
-  { name: "Pomarańczowy", value: "orange", bg: "bg-orange-500", text: "text-orange-700" },
-  { name: "Różowy", value: "pink", bg: "bg-pink-500", text: "text-pink-700" },
-  { name: "Czerwony", value: "red", bg: "bg-red-500", text: "text-red-700" },
+  { name: "Blue", value: "blue", bg: "bg-blue-500", text: "text-blue-700" },
+  { name: "Green", value: "green", bg: "bg-green-500", text: "text-green-700" },
+  { name: "Purple", value: "purple", bg: "bg-purple-500", text: "text-purple-700" },
+  { name: "Orange", value: "orange", bg: "bg-orange-500", text: "text-orange-700" },
+  { name: "Pink", value: "pink", bg: "bg-pink-500", text: "text-pink-700" },
+  { name: "Red", value: "red", bg: "bg-red-500", text: "text-red-700" },
 ]
 
 export function EventManager({
@@ -80,11 +80,11 @@ export function EventManager({
   onEventUpdate,
   onEventDelete,
   onEventComplete,
-  categories = ["Spotkanie", "Zadanie", "Przypomnienie", "Osobiste"],
+  categories = ["Meeting", "Task", "Reminder", "Personal"],
   colors = defaultColors,
   defaultView = "month",
   className,
-  availableTags = ["Ważne", "Pilne", "Praca", "Osobiste", "Zespół", "Klient"],
+  availableTags = ["Important", "Urgent", "Work", "Personal", "Team", "Client"],
 }: EventManagerProps) {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [view, setView] = useState<"month" | "week" | "day" | "list">(defaultView)
@@ -93,7 +93,7 @@ export function EventManager({
   const [isCreating, setIsCreating] = useState(false)
   const draggedEventRef = useRef<Event | null>(null)
   const defaultColor = colors[0]?.value ?? "blue"
-  const defaultCategory = categories[0] ?? "Spotkanie"
+  const defaultCategory = categories[0] ?? "Meeting"
   const [newEvent, setNewEvent] = useState<Partial<Event>>({
     title: "",
     description: "",
@@ -256,7 +256,7 @@ export function EventManager({
     [view],
   )
 
-  const fallbackColor = colors[0] ?? { name: "Niebieski", value: "blue", bg: "bg-blue-500", text: "text-blue-700" }
+  const fallbackColor = colors[0] ?? { name: "Blue", value: "blue", bg: "bg-blue-500", text: "text-blue-700" }
   const getColorClasses = useCallback(
     (colorValue: string): { name: string; value: string; bg: string; text: string } => {
       const color = colors.find((c) => c.value === colorValue)
@@ -290,30 +290,30 @@ export function EventManager({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
           <h2 className="text-xl font-semibold sm:text-2xl">
             {view === "month" &&
-              currentDate.toLocaleDateString("pl-PL", {
+              currentDate.toLocaleDateString("en-US", {
                 month: "long",
                 year: "numeric",
               })}
             {view === "week" &&
-              `Tydzień od ${currentDate.toLocaleDateString("pl-PL", {
+              `Week of ${currentDate.toLocaleDateString("en-US", {
                 month: "short",
                 day: "numeric",
               })}`}
             {view === "day" &&
-              currentDate.toLocaleDateString("pl-PL", {
+              currentDate.toLocaleDateString("en-US", {
                 weekday: "long",
                 month: "long",
                 day: "numeric",
                 year: "numeric",
               })}
-            {view === "list" && "Wszystkie wydarzenia"}
+            {view === "list" && "All Events"}
           </h2>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="icon" onClick={() => navigateDate("prev")} className="h-8 w-8">
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <Button variant="outline" size="sm" onClick={() => setCurrentDate(new Date())}>
-              Dziś
+              Today
             </Button>
             <Button variant="outline" size="icon" onClick={() => navigateDate("next")} className="h-8 w-8">
               <ChevronRight className="h-4 w-4" />
@@ -327,10 +327,10 @@ export function EventManager({
               are now one tap away without an overlay. */}
           <div className="grid grid-cols-4 gap-1 rounded-xl border bg-background p-1 sm:hidden">
             {[
-              { value: "month", label: "Miesiąc", icon: Calendar },
-              { value: "week", label: "Tydzień", icon: Grid3x3 },
-              { value: "day", label: "Dzień", icon: Clock },
-              { value: "list", label: "Lista", icon: List },
+              { value: "month", label: "Month", icon: Calendar },
+              { value: "week", label: "Week", icon: Grid3x3 },
+              { value: "day", label: "Day", icon: Clock },
+              { value: "list", label: "List", icon: List },
             ].map((item) => {
               const Icon = item.icon
               const active = view === item.value
@@ -360,7 +360,7 @@ export function EventManager({
               className="h-8"
             >
               <Calendar className="h-4 w-4" />
-              <span className="ml-1">Miesiąc</span>
+              <span className="ml-1">Month</span>
             </Button>
             <Button
               variant={view === "week" ? "secondary" : "ghost"}
@@ -369,7 +369,7 @@ export function EventManager({
               className="h-8"
             >
               <Grid3x3 className="h-4 w-4" />
-              <span className="ml-1">Tydzień</span>
+              <span className="ml-1">Week</span>
             </Button>
             <Button
               variant={view === "day" ? "secondary" : "ghost"}
@@ -378,7 +378,7 @@ export function EventManager({
               className="h-8"
             >
               <Clock className="h-4 w-4" />
-              <span className="ml-1">Dzień</span>
+              <span className="ml-1">Day</span>
             </Button>
             <Button
               variant={view === "list" ? "secondary" : "ghost"}
@@ -387,7 +387,7 @@ export function EventManager({
               className="h-8"
             >
               <List className="h-4 w-4" />
-              <span className="ml-1">Lista</span>
+              <span className="ml-1">List</span>
             </Button>
           </div>
 
@@ -399,7 +399,7 @@ export function EventManager({
             className="h-10 w-full rounded-xl sm:w-auto"
           >
             <Plus className="mr-2 h-4 w-4" />
-            Nowe wydarzenie
+            New Event
           </Button>
         </div>
       </div>
@@ -408,7 +408,7 @@ export function EventManager({
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Szukaj wydarzeń..."
+            placeholder="Search events..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9"
@@ -442,7 +442,7 @@ export function EventManager({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-48 bg-white">
-                <DropdownMenuLabel>Filtruj według koloru</DropdownMenuLabel>
+                <DropdownMenuLabel>Filter by Color</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {colors.map((color) => (
                   <DropdownMenuCheckboxItem
@@ -477,7 +477,7 @@ export function EventManager({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-48 bg-white">
-                <DropdownMenuLabel>Filtruj według tagu</DropdownMenuLabel>
+                <DropdownMenuLabel>Filter by Tag</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {availableTags.map((tag) => (
                   <DropdownMenuCheckboxItem
@@ -507,7 +507,7 @@ export function EventManager({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-48 bg-white">
-                <DropdownMenuLabel>Filtruj według kategorii</DropdownMenuLabel>
+                <DropdownMenuLabel>Filter by Category</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {categories.map((category) => (
                   <DropdownMenuCheckboxItem
@@ -533,7 +533,7 @@ export function EventManager({
                 className="gap-2 whitespace-nowrap flex-shrink-0"
               >
                 <X className="h-4 w-4" />
-                Wyczyść filtry
+                Clear Filters
               </Button>
             )}
           </div>
@@ -555,7 +555,7 @@ export function EventManager({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48 bg-white">
-              <DropdownMenuLabel>Filtruj według koloru</DropdownMenuLabel>
+              <DropdownMenuLabel>Filter by Color</DropdownMenuLabel>
               <DropdownMenuSeparator />
               {colors.map((color) => (
                 <DropdownMenuCheckboxItem
@@ -590,7 +590,7 @@ export function EventManager({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48 bg-white">
-              <DropdownMenuLabel>Filtruj według tagu</DropdownMenuLabel>
+              <DropdownMenuLabel>Filter by Tag</DropdownMenuLabel>
               <DropdownMenuSeparator />
               {availableTags.map((tag) => (
                 <DropdownMenuCheckboxItem
@@ -620,7 +620,7 @@ export function EventManager({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48 bg-white">
-              <DropdownMenuLabel>Filtruj według kategorii</DropdownMenuLabel>
+              <DropdownMenuLabel>Filter by Category</DropdownMenuLabel>
               <DropdownMenuSeparator />
               {categories.map((category) => (
                 <DropdownMenuCheckboxItem
@@ -649,7 +649,7 @@ export function EventManager({
 
       {hasActiveFilters && (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm text-muted-foreground">Aktywne filtry:</span>
+          <span className="text-sm text-muted-foreground">Active filters:</span>
           {selectedColors.map((colorValue) => {
             const color = getColorClasses(colorValue)
             return (
@@ -658,7 +658,7 @@ export function EventManager({
                 {color.name}
                 <button
                   onClick={() => setSelectedColors((prev) => prev.filter((c) => c !== colorValue))}
-                  aria-label={`Usuń ${color.name} filtr`}
+                  aria-label={`Remove ${color.name} filter`}
                   className="ml-1 hover:text-foreground"
                 >
                   <X className="h-3 w-3" />
@@ -671,7 +671,7 @@ export function EventManager({
               {tag}
               <button
                 onClick={() => setSelectedTags((prev) => prev.filter((t) => t !== tag))}
-                aria-label={`Usuń ${tag} filtr`}
+                aria-label={`Remove ${tag} filter`}
                 className="ml-1 hover:text-foreground"
               >
                 <X className="h-3 w-3" />
@@ -683,7 +683,7 @@ export function EventManager({
               {category}
               <button
                 onClick={() => setSelectedCategories((prev) => prev.filter((c) => c !== category))}
-                aria-label={`Usuń ${category} filtr`}
+                aria-label={`Remove ${category} filter`}
                 className="ml-1 hover:text-foreground"
               >
                 <X className="h-3 w-3" />
@@ -693,7 +693,7 @@ export function EventManager({
         </div>
       )}
 
-      {/* Calendar Views - Pass filteredEvents instead of wydarzeń */}
+      {/* Calendar Views - Pass filteredEvents instead of events */}
       {view === "month" && (
         <MonthView
           currentDate={currentDate}
@@ -754,15 +754,15 @@ export function EventManager({
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto bg-white">
           <DialogHeader>
-            <DialogTitle>{isCreating ? "Nowe wydarzenie" : "Szczegóły wydarzenia"}</DialogTitle>
+            <DialogTitle>{isCreating ? "Create Event" : "Event Details"}</DialogTitle>
             <DialogDescription>
-              {isCreating ? "Dodaj nowe wydarzenie do kalendarza" : "Wyświetl i edytuj szczegóły wydarzenia"}
+              {isCreating ? "Add a new event to your calendar" : "View and edit event details"}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="title">Tytuł</Label>
+              <Label htmlFor="title">Title</Label>
               <Input
                 id="title"
                 value={isCreating ? newEvent.title : selectedEvent?.title || ""}
@@ -776,7 +776,7 @@ export function EventManager({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="description">Opis</Label>
+              <Label htmlFor="description">Description</Label>
               <Textarea
                 id="description"
                 value={isCreating ? newEvent.description : selectedEvent?.description || ""}
@@ -795,7 +795,7 @@ export function EventManager({
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="startTime">Początek</Label>
+                <Label htmlFor="startTime">Start Time</Label>
                 <Input
                   id="startTime"
                   type="datetime-local"
@@ -825,7 +825,7 @@ export function EventManager({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="endTime">Koniec</Label>
+                <Label htmlFor="endTime">End Time</Label>
                 <Input
                   id="endTime"
                   type="datetime-local"
@@ -855,7 +855,7 @@ export function EventManager({
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="category">Kategoria</Label>
+                <Label htmlFor="category">Category</Label>
                 <Select
                   value={isCreating ? newEvent.category : selectedEvent?.category}
                   onValueChange={(value) =>
@@ -878,7 +878,7 @@ export function EventManager({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="color">Kolor</Label>
+                <Label htmlFor="color">Color</Label>
                 <Select
                   value={isCreating ? newEvent.color : selectedEvent?.color}
                   onValueChange={(value) =>
@@ -905,7 +905,7 @@ export function EventManager({
             </div>
 
             <div className="space-y-2">
-              <Label>Tagi</Label>
+              <Label>Tags</Label>
               <div className="flex flex-wrap gap-2">
                 {availableTags.map((tag) => {
                   const isSelected = isCreating ? newEvent.tags?.includes(tag) : selectedEvent?.tags?.includes(tag)
@@ -1006,7 +1006,7 @@ function EventCard({
   const textClass = priority ? "text-fg" : "text-white"
 
   const formatTime = (date: Date) => {
-    return date.toLocaleTimeString("pl-PL", {
+    return date.toLocaleTimeString("en-US", {
       hour: "2-digit",
       minute: "2-digit",
     })
@@ -1246,7 +1246,7 @@ function EventCard({
 // Month View Component
 function MonthView({
   currentDate,
-  wydarzeń,
+  events,
   onEventClick,
   onDragStart,
   onDragEnd,
@@ -1315,7 +1315,7 @@ function MonthView({
             {days.map((day, index) => {
               const dayEvents = getEventsForDay(day)
               const isCurrentMonth = day.getMonth() === currentDate.getMonth()
-              const isDziś = day.toDateString() === new Date().toDateString()
+              const isToday = day.toDateString() === new Date().toDateString()
               const isSelected = day.toDateString() === selectedDay.toDateString()
 
               return (
@@ -1332,8 +1332,8 @@ function MonthView({
                   <span
                     className={cn(
                       "mx-auto flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-medium",
-                      isDziś && "bg-primary font-semibold text-primary-foreground",
-                      isSelected && !isDziś && "ring-1 ring-border",
+                      isToday && "bg-primary font-semibold text-primary-foreground",
+                      isSelected && !isToday && "ring-1 ring-border",
                     )}
                   >
                     {day.getDate()}
@@ -1367,7 +1367,7 @@ function MonthView({
                 Selected day
               </p>
               <h3 className="text-sm font-semibold text-foreground">
-                {selectedDay.toLocaleDateString("pl-PL", {
+                {selectedDay.toLocaleDateString("en-US", {
                   weekday: "long",
                   month: "short",
                   day: "numeric",
@@ -1375,7 +1375,7 @@ function MonthView({
               </h3>
             </div>
             <span className="rounded-full bg-secondary px-2 py-1 text-[10px] font-semibold text-muted-foreground">
-              {selectedEvents.length} {selectedEvents.length === 1 ? "event" : "wydarzeń"}
+              {selectedEvents.length} {selectedEvents.length === 1 ? "event" : "events"}
             </span>
           </div>
 
@@ -1395,7 +1395,7 @@ function MonthView({
             </div>
           ) : (
             <div className="rounded-lg bg-muted/30 px-3 py-6 text-center text-xs text-muted-foreground">
-              Brak zaplanowanych wydarzeń na ten dzień.
+              Nothing scheduled for this day.
             </div>
           )}
         </div>
@@ -1414,7 +1414,7 @@ function MonthView({
           {days.map((day, index) => {
             const dayEvents = getEventsForDay(day)
             const isCurrentMonth = day.getMonth() === currentDate.getMonth()
-            const isDziś = day.toDateString() === new Date().toDateString()
+            const isToday = day.toDateString() === new Date().toDateString()
 
             return (
               <div
@@ -1436,7 +1436,7 @@ function MonthView({
                 <div
                   className={cn(
                     "mb-1 flex h-6 w-6 items-center justify-center rounded-full text-sm",
-                    isDziś && "bg-primary font-semibold text-primary-foreground",
+                    isToday && "bg-primary font-semibold text-primary-foreground",
                   )}
                 >
                   {day.getDate()}
@@ -1469,7 +1469,7 @@ function MonthView({
 // Week View Component
 function WeekView({
   currentDate,
-  wydarzeń,
+  events,
   onEventClick,
   onDragStart,
   onDragEnd,
@@ -1497,7 +1497,7 @@ function WeekView({
   const hours = Array.from({ length: 24 }, (_, i) => i)
 
   const getEventsForDay = (date: Date) =>
-    wydarzeń
+    events
       .filter((event) => {
         const eventDate = new Date(event.startTime)
         return (
@@ -1528,7 +1528,7 @@ function WeekView({
       <div className="space-y-3 sm:hidden">
         {weekDays.map((day) => {
           const dayEvents = getEventsForDay(day)
-          const isDziś = day.toDateString() === new Date().toDateString()
+          const isToday = day.toDateString() === new Date().toDateString()
           return (
             <section key={day.toISOString()} className="rounded-xl border bg-white p-3">
               <div className="mb-2 flex items-center justify-between">
@@ -1536,22 +1536,22 @@ function WeekView({
                   <span
                     className={cn(
                       "flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold",
-                      isDziś ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground",
+                      isToday ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground",
                     )}
                   >
                     {day.getDate()}
                   </span>
                   <div>
                     <h3 className="text-sm font-semibold">
-                      {day.toLocaleDateString("pl-PL", { weekday: "long" })}
+                      {day.toLocaleDateString("en-US", { weekday: "long" })}
                     </h3>
                     <p className="text-[10px] text-muted-foreground">
-                      {day.toLocaleDateString("pl-PL", { month: "short", day: "numeric" })}
+                      {day.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                     </p>
                   </div>
                 </div>
                 <span className="text-[10px] font-medium text-muted-foreground">
-                  {dayEvents.length || "No"} {dayEvents.length === 1 ? "event" : "wydarzeń"}
+                  {dayEvents.length || "No"} {dayEvents.length === 1 ? "event" : "events"}
                 </span>
               </div>
               {dayEvents.length > 0 ? (
@@ -1586,9 +1586,9 @@ function WeekView({
               key={day.toISOString()}
               className="border-r p-2 text-center text-sm font-medium last:border-r-0"
             >
-              <div>{day.toLocaleDateString("pl-PL", { weekday: "short" })}</div>
+              <div>{day.toLocaleDateString("en-US", { weekday: "short" })}</div>
               <div className="text-xs text-muted-foreground">
-                {day.toLocaleDateString("pl-PL", { month: "short", day: "numeric" })}
+                {day.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
               </div>
             </div>
           ))}
@@ -1645,7 +1645,7 @@ function WeekView({
 // Day View Component
 function DayView({
   currentDate,
-  wydarzeń,
+  events,
   onEventClick,
   onDragStart,
   onDragEnd,
@@ -1725,7 +1725,7 @@ function DayView({
 
 // List View Component
 function ListView({
-  wydarzeń,
+  events,
   onEventClick,
   getColorClasses,
 }: {
@@ -1733,11 +1733,11 @@ function ListView({
   onEventClick: (event: Event) => void
   getColorClasses: (color: string) => { bg: string; text: string }
 }) {
-  const sortedEvents = [...wydarzeń].sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
+  const sortedEvents = [...events].sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
 
   const groupedEvents = sortedEvents.reduce(
     (acc, event) => {
-      const dateKey = event.startTime.toLocaleDateString("pl-PL", {
+      const dateKey = event.startTime.toLocaleDateString("en-US", {
         weekday: "long",
         year: "numeric",
         month: "long",
@@ -1801,12 +1801,12 @@ function ListView({
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground sm:gap-4 sm:text-xs">
                           <div className="flex items-center gap-1">
                             <Clock className="h-3 w-3" />
-                            {event.startTime.toLocaleTimeString("pl-PL", {
+                            {event.startTime.toLocaleTimeString("en-US", {
                               hour: "2-digit",
                               minute: "2-digit",
                             })}{" "}
                             -{" "}
-                            {event.endTime.toLocaleTimeString("pl-PL", {
+                            {event.endTime.toLocaleTimeString("en-US", {
                               hour: "2-digit",
                               minute: "2-digit",
                             })}
@@ -1830,7 +1830,7 @@ function ListView({
           </div>
         ))}
         {sortedEvents.length === 0 && (
-          <div className="py-12 text-center text-sm text-muted-foreground sm:text-base">Brak wydarzeń found</div>
+          <div className="py-12 text-center text-sm text-muted-foreground sm:text-base">No events found</div>
         )}
       </div>
     </Card>
