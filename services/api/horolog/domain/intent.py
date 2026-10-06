@@ -110,6 +110,11 @@ class Intent(BaseModel):
 
     # Absolute bounds, as slots from the horizon origin.
     earliest_slot: int | None = None
+    latest_slot: int | None = None
+    """Hard upper bound for placement. Unlike due_slot, work may never be
+    placed at or beyond this slot. Used for a meeting constrained to one
+    selected calendar day/window."""
+
     due_slot: int | None = None
 
     preferred_start_min: int | None = Field(default=None, ge=0, le=24 * 60)
@@ -167,6 +172,14 @@ class Intent(BaseModel):
             value: int = getattr(self, field)
             if value % SLOT_MINUTES:
                 raise ValueError(f"{field}={value} must be a multiple of {SLOT_MINUTES} minutes")
+        if (
+            self.earliest_slot is not None
+            and self.latest_slot is not None
+            and self.latest_slot <= self.earliest_slot
+        ):
+            raise ValueError(
+                f"latest_slot {self.latest_slot} must exceed earliest_slot {self.earliest_slot}"
+            )
         if (
             self.earliest_slot is not None
             and self.due_slot is not None
