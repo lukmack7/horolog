@@ -158,7 +158,7 @@ function buildDerived(plan: Plan): Derived {
 }
 
 export default function AnalyticsPage() {
-  const { t, language } = useLanguage();
+  useLanguage();
   const [data, setData] = useState<Analytics | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [view, setView] = useState<AnalyticsView>("overview");
