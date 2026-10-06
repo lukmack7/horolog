@@ -5,7 +5,7 @@ import { Shell } from "@/app/components/Shell";
 import { api, calendarPush, connections, sync, type Plan, type Provider } from "@/app/lib/api";
 import {
   AlertCircle,
-  Calendar,
+  Kalendarz,
   Check,
   CheckCircle2,
   Copy,
@@ -23,7 +23,7 @@ type Result =
 const CALENDAR_PROVIDERS: { id: Provider; label: string; icon: React.ReactNode }[] = [
   {
     id: "google",
-    label: "Google Calendar",
+    label: "Google Kalendarz",
     icon: (
       <svg viewBox="0 0 24 24" width="18" height="18" className="shrink-0">
         <path d="M21.35,11.1H12v2.7h5.38c-0.24,1.28 -0.96,2.37 -2.04,3.1v2.58h3.3c1.93,-1.78 3.04,-4.4 3.04,-7.48c0,-0.61 -0.05,-1.2 -0.15,-1.78Z" fill="#4285F4" />
@@ -53,7 +53,7 @@ const TRACKER_PROVIDERS: {
   className: string;
   /** No OAuth app exists for this provider (see integrations/<id>.py's
    *  docstring for why) — render the paste-a-credential input only, never
-   *  the OAuth "Connect" button, which would point at a route that doesn't
+   *  the OAuth "Połącz" button, which would point at a route that doesn't
    *  exist. */
   keyOnly?: boolean;
   placeholder?: string;
@@ -88,9 +88,9 @@ const TRACKER_PROVIDERS: {
   },
 ];
 
-export default function Connect() {
+export default function Połącz() {
   const [plan, setPlan] = useState<Plan | null>(null);
-  const [connected, setConnected] = useState<Record<string, boolean>>({});
+  const [connected, setPołączed] = useState<Record<string, boolean>>({});
   const [icsUrl, setIcsUrl] = useState("");
   const [dav, setDav] = useState({ url: "", username: "", password: "" });
   const [trackerKeys, setTrackerKeys] = useState<Record<string, string>>({});
@@ -112,7 +112,7 @@ export default function Connect() {
       failure = caught instanceof Error ? caught.message : "Could not reach the scheduler.";
     }
     try {
-      setConnected(await connections.list());
+      setPołączed(await connections.list());
     } catch (caught) {
       failure ??= caught instanceof Error ? caught.message : "Could not reach the scheduler.";
     }
@@ -129,7 +129,7 @@ export default function Connect() {
     if (status) {
       window.history.replaceState({}, document.title, window.location.pathname);
       if (status === "success" && provider) {
-        void runSync(provider as Provider);
+        void runSynchronizuj(provider as Provider);
       } else if (status === "credentials_missing" && provider) {
         setResult({
           ok: false,
@@ -142,7 +142,7 @@ export default function Connect() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]);
 
-  async function runSync(provider: Provider, credential?: string) {
+  async function runSynchronizuj(provider: Provider, credential?: string) {
     setPending(provider);
     setResult(null);
     try {
@@ -174,13 +174,13 @@ export default function Connect() {
       setResult({ ok: true, count, label });
       await load();
     } catch (caught) {
-      setResult({ ok: false, message: caught instanceof Error ? caught.message : "Sync failed." });
+      setResult({ ok: false, message: caught instanceof Error ? caught.message : "Synchronizuj failed." });
     } finally {
       setPending(null);
     }
   }
 
-  async function pushCalendar(provider: "google" | "outlook") {
+  async function pushKalendarz(provider: "google" | "outlook") {
     setPending(`push-${provider}`);
     setResult(null);
     try {
@@ -216,7 +216,7 @@ export default function Connect() {
       setResult({ ok: true, count: out.events, label: "events" });
       await load();
     } catch (caught) {
-      setResult({ ok: false, message: caught instanceof Error ? caught.message : "Sync failed." });
+      setResult({ ok: false, message: caught instanceof Error ? caught.message : "Synchronizuj failed." });
     } finally {
       setPending(null);
     }
@@ -230,7 +230,7 @@ export default function Connect() {
       setResult({ ok: true, count: out.events, label: "events" });
       await load();
     } catch (caught) {
-      setResult({ ok: false, message: caught instanceof Error ? caught.message : "Sync failed." });
+      setResult({ ok: false, message: caught instanceof Error ? caught.message : "Synchronizuj failed." });
     } finally {
       setPending(null);
     }
@@ -253,7 +253,7 @@ export default function Connect() {
     <Shell onPlanChange={load}>
       <main className="mx-auto max-w-[800px] space-y-6 px-6 py-8">
         <header className="mb-4">
-          <h1 className="text-[28px] font-bold text-fg">Calendars & Sync</h1>
+          <h1 className="text-[28px] font-bold text-fg">Kalendarze & Synchronizuj</h1>
           <p className="mt-1 text-[13.5px] font-medium text-fg-muted">
             {mirrored} {mirrored === 1 ? "event" : "events"} mirrored across{" "}
             {Object.keys(bySource).length || 0} active sources.
@@ -284,16 +284,16 @@ export default function Connect() {
               {result.ok
                 ? result.kind === "push"
                   ? `Pushed to the calendar: ${result.label}.`
-                  : `Synced ${result.count} ${result.label}. Your plan has been rebuilt around them.`
+                  : `Synchronizujed ${result.count} ${result.label}. Your plan has been rebuilt around them.`
                 : result.message}
             </span>
           </div>
         )}
 
-        {/* Calendars — OAuth, or paste an ICS/CalDAV address directly */}
+        {/* Kalendarze — OAuth, or paste an ICS/CalDAV address directly */}
         <section className="space-y-5 overflow-hidden rounded-card border border-black/[0.08] bg-surface p-6 shadow-sm">
           <div>
-            <h2 className="text-[15px] font-bold text-fg">Connect a calendar</h2>
+            <h2 className="text-[15px] font-bold text-fg">Połącz a calendar</h2>
             <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">
               OAuth needs your own app credentials — self-hosting means there is no shared client
               to hand out (see .env.example). The feed and server options below need none.
@@ -302,12 +302,12 @@ export default function Connect() {
 
           <div className="flex flex-col gap-3">
             {CALENDAR_PROVIDERS.map((p) => {
-              const isConnected = connected[p.id];
+              const isPołączed = connected[p.id];
               return (
                 <div key={p.id} className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => (isConnected ? runSync(p.id) : (window.location.href = `/api/auth/${p.id}`))}
+                    onClick={() => (isPołączed ? runSynchronizuj(p.id) : (window.location.href = `/api/auth/${p.id}`))}
                     disabled={pending !== null}
                     className="flex h-11 flex-1 items-center justify-center gap-3 rounded-xl border border-black/[0.08] bg-white px-4 text-[13.5px] font-semibold text-stone-700 shadow-sm transition-all hover:bg-stone-50 disabled:opacity-50"
                   >
@@ -315,16 +315,16 @@ export default function Connect() {
                     <span>
                       {pending === p.id
                         ? "Working…"
-                        : isConnected
+                        : isPołączed
                           ? `Re-sync ${p.label}`
-                          : `Connect ${p.label}`}
+                          : `Połącz ${p.label}`}
                     </span>
-                    {isConnected && <CheckCircle2 size={15} className="text-emerald-600" />}
+                    {isPołączed && <CheckCircle2 size={15} className="text-emerald-600" />}
                   </button>
-                  {isConnected && (
+                  {isPołączed && (
                     <button
                       type="button"
-                      onClick={() => pushCalendar(p.id as "google" | "outlook")}
+                      onClick={() => pushKalendarz(p.id as "google" | "outlook")}
                       disabled={pending !== null}
                       aria-label={`Push the plan to ${p.label}`}
                       title={`Push scheduled blocks onto a dedicated "Horolog" calendar on ${p.label} — needs HOROLOG_CALENDAR_WRITEBACK_ENABLED=true`}
@@ -337,13 +337,13 @@ export default function Connect() {
                       )}
                     </button>
                   )}
-                  {isConnected && (
+                  {isPołączed && (
                     <button
                       type="button"
                       onClick={() => disconnect(p.id)}
                       disabled={pending !== null}
-                      aria-label={`Disconnect ${p.label}`}
-                      title={`Disconnect ${p.label}`}
+                      aria-label={`Rozłącz ${p.label}`}
+                      title={`Rozłącz ${p.label}`}
                       className="flex h-11 w-11 items-center justify-center rounded-xl border border-black/[0.08] bg-white text-fg-muted transition-colors hover:border-red-200 hover:text-danger disabled:opacity-50"
                     >
                       <Unplug size={15} />
@@ -365,7 +365,7 @@ export default function Connect() {
 
           <div className="border-t border-black/[0.06] pt-5">
             <div className="mb-2 flex items-center gap-2 text-[13.5px] font-semibold text-fg">
-              <Calendar size={15} className="text-accent" />
+              <Kalendarz size={15} className="text-accent" />
               Subscribe to a published iCal (.ics) feed
             </div>
             <div className="flex flex-wrap gap-2.5">
@@ -381,7 +381,7 @@ export default function Connect() {
                 disabled={!icsUrl.trim() || pending !== null}
                 className="inline-flex h-11 shrink-0 items-center gap-2 rounded-xl bg-accent px-5 text-[13.5px] font-semibold text-on-accent shadow-sm transition-all hover:bg-accent-hover disabled:opacity-40"
               >
-                {pending === "ics" ? "Syncing…" : "Sync Feed"}
+                {pending === "ics" ? "Synchronizujing…" : "Synchronizuj Feed"}
               </button>
             </div>
           </div>
@@ -389,7 +389,7 @@ export default function Connect() {
           <div className="border-t border-black/[0.06] pt-5">
             <div className="mb-2 flex items-center gap-2 text-[13.5px] font-semibold text-fg">
               <Server size={15} className="text-accent" />
-              Connect a CalDAV server
+              Połącz a CalDAV server
             </div>
             <div className="grid gap-2.5 sm:grid-cols-3">
               <input
@@ -419,7 +419,7 @@ export default function Connect() {
                 disabled={!dav.url.trim() || pending !== null}
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-accent px-5 text-[13.5px] font-semibold text-on-accent shadow-sm transition-all hover:bg-accent-hover disabled:opacity-40"
               >
-                {pending === "caldav" ? "Connecting…" : "Connect"}
+                {pending === "caldav" ? "Połączing…" : "Połącz"}
               </button>
             </div>
           </div>
@@ -428,7 +428,7 @@ export default function Connect() {
         {/* Trackers — OAuth, or paste a personal key */}
         <section className="space-y-4 overflow-hidden rounded-card border border-black/[0.08] bg-surface p-6 shadow-sm">
           <div>
-            <h2 className="text-[15px] font-bold text-fg">Connect a tracker</h2>
+            <h2 className="text-[15px] font-bold text-fg">Połącz a tracker</h2>
             <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">
               Started issues and open tasks are scheduled as tasks, fluidly, around everything
               else. A personal API key needs no OAuth app.
@@ -436,33 +436,33 @@ export default function Connect() {
           </div>
           <div className="space-y-3">
             {TRACKER_PROVIDERS.map((p) => {
-              const isConnected = connected[p.id];
+              const isPołączed = connected[p.id];
               return (
                 <div key={p.id} className="flex flex-wrap items-center gap-2">
                   {!p.keyOnly && (
                     <button
                       type="button"
-                      onClick={() => (isConnected ? runSync(p.id) : (window.location.href = `/api/auth/${p.id}`))}
+                      onClick={() => (isPołączed ? runSynchronizuj(p.id) : (window.location.href = `/api/auth/${p.id}`))}
                       disabled={pending !== null}
                       className={`flex h-11 items-center justify-center gap-2 rounded-xl px-4 text-[13.5px] font-semibold shadow-sm transition-all disabled:opacity-50 ${p.className}`}
                     >
                       <span>
                         {pending === p.id
                           ? "Working…"
-                          : isConnected
+                          : isPołączed
                             ? `Re-sync ${p.label}`
-                            : `Connect ${p.label}`}
+                            : `Połącz ${p.label}`}
                       </span>
-                      {isConnected && <CheckCircle2 size={15} />}
+                      {isPołączed && <CheckCircle2 size={15} />}
                     </button>
                   )}
-                  {isConnected && (
+                  {isPołączed && (
                     <button
                       type="button"
                       onClick={() => disconnect(p.id)}
                       disabled={pending !== null}
-                      aria-label={`Disconnect ${p.label}`}
-                      title={`Disconnect ${p.label}`}
+                      aria-label={`Rozłącz ${p.label}`}
+                      title={`Rozłącz ${p.label}`}
                       className="flex h-11 w-11 items-center justify-center rounded-xl border border-black/[0.08] bg-white text-fg-muted transition-colors hover:border-red-200 hover:text-danger disabled:opacity-50"
                     >
                       <Unplug size={15} />
@@ -483,11 +483,11 @@ export default function Connect() {
                   />
                   <button
                     type="button"
-                    onClick={() => runSync(p.id, trackerKeys[p.id])}
+                    onClick={() => runSynchronizuj(p.id, trackerKeys[p.id])}
                     disabled={!trackerKeys[p.id]?.trim() || pending !== null}
                     className="inline-flex h-11 items-center gap-2 rounded-xl border border-black/[0.08] bg-white px-4 text-[13px] font-semibold text-fg shadow-sm transition-all hover:bg-sunk disabled:opacity-40"
                   >
-                    Sync
+                    Synchronizuj
                   </button>
                 </div>
               );
@@ -500,7 +500,7 @@ export default function Connect() {
           <div>
             <h2 className="text-[15px] font-bold text-fg">Subscribe to your Horolog plan</h2>
             <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">
-              Read-only from Apple Calendar, Google, or Outlook — see your auto-scheduled blocks
+              Read-only from Apple Kalendarz, Google, or Outlook — see your auto-scheduled blocks
               alongside external events.
             </p>
           </div>
