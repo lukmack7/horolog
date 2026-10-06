@@ -41,7 +41,7 @@ export default function TimePage() {
       setDaily(nextDaily);
       setError(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not load the schedule.");
+      setError(caught instanceof Error ? caught.message : "Nie udało się wczytać planu.");
     }
   }, []);
 
@@ -78,7 +78,7 @@ export default function TimePage() {
       <main className="mx-auto max-w-[1440px] overflow-x-hidden px-4 py-5 sm:px-6 sm:py-8">
         <header className="mb-7 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-[28px] font-bold text-fg">Time</h1>
+            <h1 className="text-[28px] font-bold text-fg">Dzień</h1>
             <p className="mt-1 text-[13.5px] text-fg-muted">
               {now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}
             </p>
@@ -103,10 +103,10 @@ export default function TimePage() {
                     <Sunrise size={18} />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-amber-700">Start here</div>
+                    <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-amber-700">Zacznij od</div>
                     <div className="mt-1 text-[14px] font-semibold leading-relaxed text-fg">{daily.plan.first_step}</div>
                     <Link href="/daily" className="mt-2 inline-flex text-[10.5px] font-semibold text-amber-800 hover:underline">
-                      Otwórz Daily →
+                      Otwórz Dziennik →
                     </Link>
                   </div>
                 </div>
@@ -131,15 +131,15 @@ export default function TimePage() {
 
         <div className="mb-7 grid gap-4 sm:grid-cols-2">
           <StatusCard
-            label="Right now"
+            label="Teraz"
             block={current}
-            empty="Nothing scheduled — this time is open."
+            empty="Brak zaplanowanych bloków — ten czas jest wolny."
             loading={!plan}
           />
           <StatusCard
-            label="Up next"
+            label="Następnie"
             block={next}
-            empty="Nothing else scheduled for today."
+            empty="Na dziś nie ma już nic zaplanowanego."
             untilNow={now}
             loading={!plan}
           />
@@ -199,7 +199,7 @@ function StatusCard({
               {untilNow && (
                 <>
                   <span>·</span>
-                  <span>in {formatDuration(minutesBetween(untilNow.toISOString(), block.start))}</span>
+                  <span>za {formatDuration(minutesBetween(untilNow.toISOString(), block.start))}</span>
                 </>
               )}
             </div>
