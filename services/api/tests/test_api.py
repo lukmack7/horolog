@@ -855,3 +855,28 @@ async def test_dragging_daily_item_changes_quadrant_and_task_priority(
     intents = (await client.get("/api/intents")).json()
     linked = next(intent for intent in intents if intent["id"] == created["intent_id"])
     assert linked["priority"] == 1
+
+
+
+@pytest.mark.asyncio
+async def test_hard_latest_bound_keeps_meeting_on_selected_day(client: AsyncClient) -> None:
+    base = origin()
+    target = base + timedelta(days=2)
+    response = await client.post(
+        "/api/intents",
+        json={
+            "title": "Future meeting",
+            "kind": "meeting",
+            "priority": 2,
+            "minutes_per_period": 60,
+            "min_chunk_minutes": 60,
+            "max_chunk_minutes": 60,
+            "earliest": target.isoformat(),
+            "latest": (target + timedelta(days=1)).isoformat(),
+        },
+    )
+    assert response.status_code == 201
+
+    plan = (await client.get("/api/plan")).json()
+    block = next(b for b in plan["blocks"] if b["title"] == "Future meeting")
+    assert datetime.fromisoformat(block["start"]).date() == target.date()
