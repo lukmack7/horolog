@@ -1,5 +1,6 @@
 "use client";
 
+import { useLanguage } from "@/app/components/LanguageProvider";
 import { useCallback, useEffect, useState } from "react";
 import { Shell } from "@/app/components/Shell";
 import { api, calendarPush, connections, sync, type Plan, type Provider } from "@/app/lib/api";
@@ -89,6 +90,7 @@ const TRACKER_PROVIDERS: {
 ];
 
 export default function Connect() {
+  const { t, language } = useLanguage();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [connected, setConnected] = useState<Record<string, boolean>>({});
   const [icsUrl, setIcsUrl] = useState("");
