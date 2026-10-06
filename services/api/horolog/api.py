@@ -22,7 +22,7 @@ from urllib.parse import urlencode
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import AfterValidator, BaseModel, Field, model_validator
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -425,6 +425,32 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Turn opaque FastAPI 500s into traceable incidents.
+
+    The full traceback stays in container logs; the browser only gets a short
+    correlation id so runtime errors can be matched without exposing internals.
+    """
+    error_id = uuid.uuid4().hex[:8]
+    logger.exception(
+        "Unhandled API error [%s] %s %s",
+        error_id,
+        request.method,
+        request.url.path,
+        exc_info=exc,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": (
+                f"Wewnętrzny błąd Horologa (ID: {error_id}). "
+                "Szczegóły zapisano w logach API."
+            )
+        },
+    )
 
 
 @app.get("/api/health")
