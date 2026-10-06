@@ -18,6 +18,7 @@ import {
   Hexagon,
   MoreHorizontal,
   X,
+  ChevronRight,
 } from "lucide-react";
 import { CommandBar } from "@/app/components/CommandBar";
 
@@ -166,45 +167,53 @@ export function Shell({
 
       {/* Mobile-only capture button. Keep it above the bottom navigation and
           away from the device safe area. */}
-      <button
-        type="button"
-        onClick={() => setCommandOpen(true)}
-        aria-label="Add time"
-        className="fixed bottom-20 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-accent text-on-accent shadow-pop transition-transform active:scale-95 lg:hidden"
-      >
-        <Sparkles size={20} />
-      </button>
+      {!mobileMoreOpen && (
+        <button
+          type="button"
+          onClick={() => setCommandOpen(true)}
+          aria-label="Add time"
+          className="fixed bottom-20 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-accent text-on-accent shadow-pop transition-transform active:scale-95 lg:hidden"
+        >
+          <Sparkles size={20} />
+        </button>
+      )}
 
-      {/* Mobile secondary navigation. Seven equal-width items made every label
-          too small, so the four daily destinations stay visible and the less
-          frequent screens live behind More. */}
+      {/* Mobile secondary navigation as a proper bottom sheet. */}
       {mobileMoreOpen && (
         <>
           <button
             type="button"
             aria-label="Close more navigation"
             onClick={() => setMobileMoreOpen(false)}
-            className="fixed inset-0 z-30 bg-black/10 lg:hidden"
+            className="fixed inset-0 z-30 bg-black/25 backdrop-blur-[1px] lg:hidden"
           />
           <div
-            className="fixed left-3 right-3 z-40 rounded-2xl border border-border bg-background p-2 shadow-pop lg:hidden"
-            style={{ bottom: "calc(4.5rem + env(safe-area-inset-bottom))" }}
+            className="fixed inset-x-0 z-40 rounded-t-3xl border-t border-border bg-background px-4 pb-4 pt-2 shadow-2xl lg:hidden"
+            style={{ bottom: "calc(4rem + env(safe-area-inset-bottom))" }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="More navigation"
           >
-            <div className="mb-1 flex items-center justify-between px-2 py-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                More
-              </span>
+            <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-border" />
+            <div className="mb-2 flex items-center justify-between px-1">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  More
+                </p>
+                <p className="text-sm font-semibold text-foreground">Other Horolog sections</p>
+              </div>
               <button
                 type="button"
                 onClick={() => setMobileMoreOpen(false)}
                 aria-label="Close"
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary text-muted-foreground transition-colors hover:text-foreground"
               >
-                <X size={16} />
+                <X size={17} />
               </button>
             </div>
-            <div className="grid grid-cols-3 gap-1">
-              {NAV.slice(4).map((item) => {
+
+            <nav className="overflow-hidden rounded-2xl border border-border bg-background">
+              {NAV.slice(4).map((item, index) => {
                 const active = pathname === item.href;
                 const Icon = item.icon;
                 return (
@@ -212,18 +221,25 @@ export function Shell({
                     key={item.href}
                     href={item.href}
                     onClick={() => setMobileMoreOpen(false)}
-                    className={`flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl px-2 text-center ${
+                    className={`flex min-h-14 items-center gap-3 px-4 transition-colors ${
+                      index > 0 ? "border-t border-border" : ""
+                    } ${
                       active
                         ? "bg-secondary font-semibold text-foreground"
-                        : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+                        : "text-foreground hover:bg-secondary/60"
                     }`}
                   >
-                    <Icon size={19} />
-                    <span className="text-[10.5px] leading-tight">{item.label}</span>
+                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+                      active ? "bg-background" : "bg-secondary"
+                    }`}>
+                      <Icon size={18} />
+                    </span>
+                    <span className="min-w-0 flex-1 text-[13px] font-medium">{item.label}</span>
+                    <ChevronRight size={16} className="shrink-0 text-muted-foreground" />
                   </Link>
                 );
               })}
-            </div>
+            </nav>
           </div>
         </>
       )}
