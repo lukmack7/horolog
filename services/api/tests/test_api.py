@@ -742,9 +742,9 @@ async def test_stale_daily_item_can_be_acknowledged_or_deferred(
             f"/api/daily/{old}/items",
             json={
                 "title": "Persistent task",
-                "quadrant": 2,
+                "quadrant": 3,
                 "minutes": 30,
-                "schedule_enabled": True,
+                "schedule_enabled": False,
             },
         )
     ).json()
