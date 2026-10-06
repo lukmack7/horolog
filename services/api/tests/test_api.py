@@ -22,7 +22,7 @@ from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from horolog.api import IntentIn, app, origin
-from horolog.db import BusyRow, init_db, session
+from horolog.db import BusyRow, DailyPlanItemRow, DailyPlanRow, DailyReviewRow, init_db, session
 
 
 @pytest_asyncio.fixture
@@ -45,6 +45,9 @@ async def client() -> AsyncIterator[AsyncClient]:
         gen = cast("AsyncGenerator[AsyncSession, None]", session())
         db = await anext(gen)
         await db.execute(delete(BusyRow))
+        await db.execute(delete(DailyPlanItemRow))
+        await db.execute(delete(DailyPlanRow))
+        await db.execute(delete(DailyReviewRow))
         await db.commit()
         await gen.aclose()
         yield http
@@ -607,3 +610,85 @@ async def test_completing_and_uncompleting_one_habit_occurrence(
     )
     assert undone.status_code == 200
     assert undone.json()["completed_blocks"] == []
+
+
+
+# --------------------------------------------------------------- Daily planning
+
+
+@pytest.mark.asyncio
+async def test_daily_item_rolls_forward_without_duplication(client: AsyncClient) -> None:
+    base = origin().date()
+    day1 = base.isoformat()
+    day2 = (base + timedelta(days=1)).isoformat()
+
+    created = await client.post(
+        f"/api/daily/{day1}/items",
+        json={
+            "title": "Finish the important thing",
+            "quadrant": 1,
+            "minutes": 45,
+            "priority": 1,
+            "schedule_enabled": True,
+        },
+    )
+    assert created.status_code == 201
+    item = created.json()
+    assert item["intent_id"]
+
+    tomorrow = await client.get(f"/api/daily/{day2}")
+    assert tomorrow.status_code == 200
+    carried = [row for row in tomorrow.json()["items"] if row["id"] == item["id"]]
+    assert len(carried) == 1
+    assert carried[0]["carried"] is True
+    assert carried[0]["carry_days"] == 1
+
+    intents = (await client.get("/api/intents")).json()
+    assert sum(1 for intent in intents if intent["id"] == item["intent_id"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_daily_completion_completes_linked_task(client: AsyncClient) -> None:
+    day = origin().date().isoformat()
+    created = (
+        await client.post(
+            f"/api/daily/{day}/items",
+            json={
+                "title": "Close the loop",
+                "quadrant": 2,
+                "minutes": 30,
+                "priority": 2,
+                "schedule_enabled": True,
+            },
+        )
+    ).json()
+
+    response = await client.post(f"/api/daily/items/{created['id']}/complete")
+    assert response.status_code == 200
+
+    intents = (await client.get("/api/intents")).json()
+    intent = next(row for row in intents if row["id"] == created["intent_id"])
+    assert intent["completed_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_daily_review_seeds_tomorrows_first_step(client: AsyncClient) -> None:
+    day = origin().date()
+    today = day.isoformat()
+    tomorrow = (day + timedelta(days=1)).isoformat()
+
+    saved = await client.put(
+        f"/api/daily/{today}/review",
+        json={
+            "did_well": "",
+            "grateful_for": "",
+            "would_change": "",
+            "learned": "",
+            "improve_tomorrow": "Do the hard thing before email",
+            "first_step_morning": "Open the mapping file",
+        },
+    )
+    assert saved.status_code == 200
+
+    next_day = (await client.get(f"/api/daily/{tomorrow}")).json()
+    assert next_day["plan"]["first_step"] == "Open the mapping file"
