@@ -758,7 +758,13 @@ function MeetingSuggestionCard({
       setError("Ustaw godzinę spotkania.");
       return;
     }
-    const [hours, mins] = time.split(":").map(Number);
+    const [hoursText, minsText] = time.split(":");
+    if (!hoursText || !minsText) {
+      setError("Nieprawidłowa godzina.");
+      return;
+    }
+    const hours = Number(hoursText);
+    const mins = Number(minsText);
     if (!Number.isFinite(hours) || !Number.isFinite(mins)) {
       setError("Nieprawidłowa godzina.");
       return;
