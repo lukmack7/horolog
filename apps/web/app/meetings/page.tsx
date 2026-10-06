@@ -36,6 +36,12 @@ export default function Meetings() {
   const [title, setTitle] = useState("");
   const [minutes, setMinutes] = useState(30);
   const [priority, setPriority] = useState<Priority>(2);
+  const [meetingDate, setMeetingDate] = useState(() => {
+    const next = new Date();
+    next.setDate(next.getDate() + 1);
+    return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
+  });
+  const [preferredTime, setPreferredTime] = useState("");
   const [rows, setRows] = useState<BusyRow[]>([{ ...EMPTY_ROW }]);
 
   const load = useCallback(async () => {
@@ -69,6 +75,14 @@ export default function Meetings() {
           ...(r.attendee.trim() ? { attendee: r.attendee.trim() } : {}),
         }));
 
+      const dayStart = new Date(`${meetingDate}T00:00:00`);
+      const nextDay = new Date(dayStart);
+      nextDay.setDate(nextDay.getDate() + 1);
+
+      const preferred_start_min = preferredTime
+        ? Number(preferredTime.slice(0, 2)) * 60 + Number(preferredTime.slice(3, 5))
+        : undefined;
+
       await createIntent({
         title: title.trim(),
         kind: "meeting",
@@ -76,9 +90,13 @@ export default function Meetings() {
         minutes_per_period: minutes,
         min_chunk_minutes: minutes,
         max_chunk_minutes: minutes,
+        earliest: dayStart.toISOString(),
+        latest: nextDay.toISOString(),
+        preferred_start_min,
         attendee_busy,
       });
       setTitle("");
+      setPreferredTime("");
       setRows([{ ...EMPTY_ROW }]);
       await load();
     } catch (caught) {
@@ -112,8 +130,8 @@ export default function Meetings() {
           onSubmit={save}
           className="mb-9 overflow-hidden rounded-card border border-black/[0.08] bg-surface shadow-sm transition-shadow hover:shadow-md"
         >
-          <div className="grid gap-5 border-b border-black/[0.06] px-6 py-4.5 sm:grid-cols-3">
-            <label className="block sm:col-span-2">
+          <div className="grid gap-5 border-b border-black/[0.06] px-6 py-4.5 sm:grid-cols-2 lg:grid-cols-4">
+            <label className="block sm:col-span-2 lg:col-span-2">
               <span className="mb-1.5 block text-[12px] font-semibold tracking-wider uppercase text-fg-muted">
                 Meeting Title
               </span>
@@ -139,6 +157,29 @@ export default function Meetings() {
                   </option>
                 ))}
               </select>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-[12px] font-semibold tracking-wider uppercase text-fg-muted">
+                Meeting date
+              </span>
+              <input
+                type="date"
+                value={meetingDate}
+                onChange={(e) => setMeetingDate(e.target.value)}
+                className="tabular h-11 w-full rounded-xl border border-black/[0.08] bg-bg px-3.5 text-[14px] font-semibold outline-none focus:border-accent"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-[12px] font-semibold tracking-wider uppercase text-fg-muted">
+                Preferred time
+              </span>
+              <input
+                type="time"
+                step={900}
+                value={preferredTime}
+                onChange={(e) => setPreferredTime(e.target.value)}
+                className="tabular h-11 w-full rounded-xl border border-black/[0.08] bg-bg px-3.5 text-[14px] font-semibold outline-none focus:border-accent"
+              />
             </label>
           </div>
 
