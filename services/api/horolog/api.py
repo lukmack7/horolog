@@ -33,6 +33,7 @@ from horolog.analytics import Analytics, analyse
 from horolog.capture import capture, to_payload
 from horolog.db import (
     BusyRow,
+    DailyItemDecisionRow,
     DailyPlanItemRow,
     DailyPlanRow,
     DailyReviewRow,
@@ -259,6 +260,14 @@ class DailyItemIn(BaseModel):
     intent_id: str | None = None
 
 
+class DailyDeferIn(BaseModel):
+    until: str = Field(min_length=10, max_length=10)
+
+
+class DailyDecisionIn(BaseModel):
+    date: str = Field(min_length=10, max_length=10)
+
+
 class DailyReviewIn(BaseModel):
     did_well: str = Field(default="", max_length=4000)
     grateful_for: str = Field(default="", max_length=4000)
@@ -383,7 +392,12 @@ def _daily_date(value: str) -> datetime:
     return parsed.replace(tzinfo=settings().zone)
 
 
-def _daily_item_dict(row: DailyPlanItemRow, requested_date: str, intent_payload: dict[str, Any] | None) -> dict[str, Any]:
+def _daily_item_dict(
+    row: DailyPlanItemRow,
+    requested_date: str,
+    intent_payload: dict[str, Any] | None,
+    decision: DailyItemDecisionRow | None = None,
+) -> dict[str, Any]:
     completed_at = row.completed_at
     if completed_at is None and intent_payload and intent_payload.get("completed_at"):
         completed_at = datetime.fromisoformat(intent_payload["completed_at"])
@@ -402,6 +416,14 @@ def _daily_item_dict(row: DailyPlanItemRow, requested_date: str, intent_payload:
         "carry_days": max(
             0,
             (_daily_date(requested_date).date() - _daily_date(row.plan_date).date()).days,
+        ),
+        "defer_until": decision.defer_until if decision else None,
+        "needs_decision": (
+            completed_at is None
+            and row.cancelled_at is None
+            and row.plan_date < requested_date
+            and (_daily_date(requested_date).date() - _daily_date(row.plan_date).date()).days >= 2
+            and (decision is None or decision.acknowledged_date != requested_date)
         ),
     }
 
@@ -448,6 +470,160 @@ async def _roll_daily_intent(
     intent_row.payload = moved.model_dump(mode="json")
 
 
+@app.get("/api/daily-history")
+async def daily_history(db: AsyncSession = Depends(session)) -> list[dict[str, Any]]:
+    plans = (await db.execute(select(DailyPlanRow))).scalars().all()
+    reviews = (await db.execute(select(DailyReviewRow))).scalars().all()
+    items = (await db.execute(select(DailyPlanItemRow))).scalars().all()
+
+    plan_map = {row.date: row for row in plans}
+    review_map = {row.date: row for row in reviews}
+    dates = sorted(set(plan_map) | set(review_map) | {row.plan_date for row in items}, reverse=True)
+
+    result: list[dict[str, Any]] = []
+    for date in dates[:90]:
+        review = review_map.get(date)
+        created = [row for row in items if row.plan_date == date and row.cancelled_at is None]
+        completed = [
+            row for row in created
+            if row.completed_at is not None
+        ]
+        review_values = (
+            [
+                review.did_well,
+                review.grateful_for,
+                review.would_change,
+                review.learned,
+                review.improve_tomorrow,
+                review.first_step_morning,
+            ]
+            if review
+            else []
+        )
+        plan = plan_map.get(date)
+        result.append(
+            {
+                "date": date,
+                "win_condition": plan.win_condition if plan else "",
+                "first_step": plan.first_step if plan else "",
+                "items": len(created),
+                "completed_items": len(completed),
+                "review_answers": sum(1 for value in review_values if value.strip()),
+                "has_review": bool(review and any(value.strip() for value in review_values)),
+            }
+        )
+    return result
+
+
+@app.get("/api/daily-weekly/{date}")
+async def daily_weekly(date: str, db: AsyncSession = Depends(session)) -> dict[str, Any]:
+    selected = _daily_date(date).date()
+    monday = selected - timedelta(days=selected.weekday())
+    sunday = monday + timedelta(days=6)
+    start = monday.isoformat()
+    end = sunday.isoformat()
+
+    plans = (
+        await db.execute(
+            select(DailyPlanRow).where(DailyPlanRow.date >= start, DailyPlanRow.date <= end)
+        )
+    ).scalars().all()
+    reviews = (
+        await db.execute(
+            select(DailyReviewRow).where(DailyReviewRow.date >= start, DailyReviewRow.date <= end)
+        )
+    ).scalars().all()
+    items = (
+        await db.execute(
+            select(DailyPlanItemRow).where(
+                DailyPlanItemRow.plan_date >= start,
+                DailyPlanItemRow.plan_date <= end,
+                DailyPlanItemRow.cancelled_at.is_(None),
+            )
+        )
+    ).scalars().all()
+
+    completed = [
+        row for row in items
+        if row.completed_at is not None
+        and monday <= row.completed_at.astimezone(settings().zone).date() <= sunday
+    ]
+    carried = [
+        row for row in items
+        if row.completed_at is None
+        and (origin().date() - _daily_date(row.plan_date).date()).days >= 1
+    ]
+
+    reflection_highlights: list[dict[str, str]] = []
+    for review in sorted(reviews, key=lambda row: row.date, reverse=True):
+        if review.learned.strip():
+            reflection_highlights.append(
+                {"date": review.date, "kind": "learned", "text": review.learned.strip()}
+            )
+        if review.improve_tomorrow.strip():
+            reflection_highlights.append(
+                {
+                    "date": review.date,
+                    "kind": "improve",
+                    "text": review.improve_tomorrow.strip(),
+                }
+            )
+
+    days: list[dict[str, Any]] = []
+    review_map = {row.date: row for row in reviews}
+    plan_map = {row.date: row for row in plans}
+    for offset in range(7):
+        day = monday + timedelta(days=offset)
+        key = day.isoformat()
+        review = review_map.get(key)
+        review_count = (
+            sum(
+                1
+                for value in [
+                    review.did_well,
+                    review.grateful_for,
+                    review.would_change,
+                    review.learned,
+                    review.improve_tomorrow,
+                    review.first_step_morning,
+                ]
+                if value.strip()
+            )
+            if review
+            else 0
+        )
+        days.append(
+            {
+                "date": key,
+                "planned": key in plan_map,
+                "review_answers": review_count,
+                "items": sum(1 for row in items if row.plan_date == key),
+                "completed_items": sum(
+                    1
+                    for row in items
+                    if row.plan_date == key and row.completed_at is not None
+                ),
+            }
+        )
+
+    return {
+        "start": start,
+        "end": end,
+        "planned_days": len(plans),
+        "reviewed_days": sum(1 for day in days if day["review_answers"] > 0),
+        "items_created": len(items),
+        "items_completed": len(completed),
+        "carry_over": len(carried),
+        "stale_items": sum(
+            1
+            for row in carried
+            if (origin().date() - _daily_date(row.plan_date).date()).days >= 2
+        ),
+        "days": days,
+        "reflection_highlights": reflection_highlights[:8],
+    }
+
+
 @app.get("/api/daily/{date}")
 async def get_daily(date: str, db: AsyncSession = Depends(session)) -> dict[str, Any]:
     requested = _daily_date(date)
@@ -463,6 +639,26 @@ async def get_daily(date: str, db: AsyncSession = Depends(session)) -> dict[str,
             )
         )
     ).scalars().all()
+    item_ids = [row.id for row in rows]
+    decisions = (
+        (
+            await db.execute(
+                select(DailyItemDecisionRow).where(DailyItemDecisionRow.item_id.in_(item_ids))
+            )
+        ).scalars().all()
+        if item_ids
+        else []
+    )
+    decision_map = {row.item_id: row for row in decisions}
+    rows = [
+        row
+        for row in rows
+        if not (
+            (decision := decision_map.get(row.id))
+            and decision.defer_until
+            and decision.defer_until > date
+        )
+    ]
 
     # Rollover happens only when opening today (or tomorrow while planning it).
     # Historical browsing is read-only and can never move current tasks.
@@ -485,7 +681,12 @@ async def get_daily(date: str, db: AsyncSession = Depends(session)) -> dict[str,
         intent_map = {row.id: row.payload for row in intent_rows}
 
     items = [
-        _daily_item_dict(row, date, intent_map.get(row.intent_id or ""))
+        _daily_item_dict(
+            row,
+            date,
+            intent_map.get(row.intent_id or ""),
+            decision_map.get(row.id),
+        )
         for row in rows
         if row.completed_at is None or row.plan_date == date
     ]
@@ -561,6 +762,7 @@ async def create_daily_item(date: str, body: DailyItemIn, db: AsyncSession = Dep
     day = _daily_date(date)
     item_id = uuid.uuid4().hex[:16]
     intent_id = body.intent_id
+    matrix_priority = Priority(body.quadrant)
 
     if intent_id is not None:
         if await db.get(IntentRow, intent_id) is None:
@@ -570,7 +772,7 @@ async def create_daily_item(date: str, body: DailyItemIn, db: AsyncSession = Dep
         wire = IntentIn(
             title=body.title,
             kind=IntentKind.TASK,
-            priority=body.priority,
+            priority=matrix_priority,
             minutes_per_period=body.minutes,
             min_chunk_minutes=min(30, body.minutes),
             max_chunk_minutes=body.minutes,
@@ -587,7 +789,7 @@ async def create_daily_item(date: str, body: DailyItemIn, db: AsyncSession = Dep
         title=body.title,
         quadrant=body.quadrant,
         minutes=body.minutes,
-        priority=int(body.priority),
+        priority=int(matrix_priority),
         intent_id=intent_id,
         schedule_enabled=body.schedule_enabled,
     )
@@ -629,6 +831,52 @@ async def cancel_daily_item(item_id: str, db: AsyncSession = Depends(session)) -
             await db.commit()
             await _replan(db)
     return _daily_item_dict(row, row.plan_date, None)
+
+
+@app.post("/api/daily/items/{item_id}/keep")
+async def keep_daily_item(
+    item_id: str,
+    body: DailyDecisionIn,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    _daily_date(body.date)
+    item = await db.get(DailyPlanItemRow, item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="daily item not found")
+    decision = await db.get(DailyItemDecisionRow, item_id)
+    if decision is None:
+        decision = DailyItemDecisionRow(item_id=item_id)
+        db.add(decision)
+    decision.acknowledged_date = body.date
+    decision.defer_until = None
+    decision.updated_at = datetime.now(UTC)
+    await db.commit()
+    return {"item_id": item_id, "date": body.date, "status": "kept"}
+
+
+@app.post("/api/daily/items/{item_id}/defer")
+async def defer_daily_item(
+    item_id: str,
+    body: DailyDeferIn,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    target = _daily_date(body.until)
+    item = await db.get(DailyPlanItemRow, item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="daily item not found")
+    if target.date() <= origin().date():
+        raise HTTPException(status_code=422, detail="defer date must be in the future")
+    decision = await db.get(DailyItemDecisionRow, item_id)
+    if decision is None:
+        decision = DailyItemDecisionRow(item_id=item_id)
+        db.add(decision)
+    decision.defer_until = body.until
+    decision.acknowledged_date = None
+    decision.updated_at = datetime.now(UTC)
+    await _roll_daily_intent(item, body.until, db)
+    await db.commit()
+    await _replan(db)
+    return {"item_id": item_id, "until": body.until, "status": "deferred"}
 
 
 @app.put("/api/daily/{date}/review")
