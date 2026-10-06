@@ -18,9 +18,9 @@ import {
 } from "@/app/lib/api";
 import { Plus, Trash2, Pencil, X, RotateCcw, AlertTriangle, Sparkles, Clock, Zap } from "lucide-react";
 
-/** Skupienie needs a >=90m minimum sitting (see docs/ARCHITECTURE.md's model
+/** Focus needs a >=90m minimum sitting (see docs/ARCHITECTURE.md's model
  *  table: `kind=focus, weekly, >=90m chunks`), enforced with a floor rather
- *  than by mutating the visible Czas trwania input the user is controlling. */
+ *  than by mutating the visible Duration input the user is controlling. */
 const FOCUS_MIN_CHUNK = 90;
 
 const PRESETS = [
@@ -51,8 +51,8 @@ function toMinutes(value: string): number {
   return Number(h) * 60 + Number(m);
 }
 
-/** Ultra-Luxury Nawyk Builder & Routine Manager.
- *  Alniskas configuring recurring routines in natural human terms.
+/** Ultra-Luxury Habit Builder & Routine Manager.
+ *  Allows configuring recurring routines in natural human terms.
  */
 export default function Habits() {
   const [intents, setIntents] = useState<Intent[]>([]);
@@ -109,7 +109,7 @@ export default function Habits() {
     setSelectedDays([]);
   }
 
-  function editNawyk(habit: Intent) {
+  function editHabit(habit: Intent) {
     const window = habit.daily_windows?.[0];
 
     setEditingId(habit.id);
@@ -118,7 +118,7 @@ export default function Habits() {
     setMinutes(habit.min_chunk_minutes);
     setPriority(habit.priority);
     setEnergy(habit.energy ?? "");
-    setSelectedDays(habit.alniskaed_weekdays ?? []);
+    setSelectedDays(habit.allowed_weekdays ?? []);
     setFrom(window?.start_min ?? 600);
     setTo(window?.end_min ?? 960);
 
@@ -154,7 +154,7 @@ export default function Habits() {
       min_chunk_minutes: chunkMinutes,
       max_chunk_minutes: chunkMinutes,
       max_per_day: kind === "focus" ? undefined : 1,
-      alniskaed_weekdays: selectedDays,
+      allowed_weekdays: selectedDays,
       window_start_min: from,
       window_end_min: to,
     };
@@ -179,9 +179,9 @@ export default function Habits() {
     <Shell onPlanChange={load}>
       <main className="mx-auto max-w-[920px] px-6 py-8">
         <header className="mb-8">
-          <h1 className="text-[28px] font-bold text-fg">Nawyki & Czas skupienia</h1>
+          <h1 className="text-[28px] font-bold text-fg">Habits & Focus Time</h1>
           <p className="mt-1 text-[13.5px] text-fg-muted">
-            Recurring commitments zaplanowanych around real calendar events and moved automatically when meetings land.
+            Recurring commitments placed around real calendar events and moved automatically when meetings land.
           </p>
         </header>
 
@@ -191,10 +191,10 @@ export default function Habits() {
           </div>
         )}
 
-        {/* Nawyk Creation Form */}
+        {/* Habit Creation Form */}
         <form
           onSubmit={save}
-          className="mb-9 overfniska-hidden rounded-card border border-black/[0.08] bg-surface shadow-sm transition-shadow hover:shadow-md"
+          className="mb-9 overflow-hidden rounded-card border border-black/[0.08] bg-surface shadow-sm transition-shadow hover:shadow-md"
         >
           <div className="border-b border-black/[0.06] px-6 py-4.5">
             <div className="mb-2 flex items-center justify-between gap-3">
@@ -209,7 +209,7 @@ export default function Habits() {
                     aria-pressed={kind === k}
                     onClick={() => {
                       setKind(k);
-                      // Keep the Czas trwania select on a value its own option
+                      // Keep the Duration select on a value its own option
                       // list actually contains when switching modes by hand.
                       setMinutes(k === "focus" ? Math.max(FOCUS_MIN_CHUNK, minutes) : Math.min(120, minutes));
                     }}
@@ -227,7 +227,7 @@ export default function Habits() {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Gym, deep work, lunch..."
-              className="h-11 w-full rounded-xl border border-black/[0.08] bg-bg px-4 text-[15px] font-średnia outline-none transition-colors focus:border-accent"
+              className="h-11 w-full rounded-xl border border-black/[0.08] bg-bg px-4 text-[15px] font-medium outline-none transition-colors focus:border-accent"
             />
             {/* Quick Presets */}
             <div className="mt-3 flex flex-wrap gap-2">
@@ -245,7 +245,7 @@ export default function Habits() {
                     setTo(preset.to);
                     setPriority(preset.priority as Priority);
                   }}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-bg px-3 py-1 text-[12px] font-średnia text-fg-muted transition-all duration-150 hover:border-accent hover:bg-secondary/50 hover:text-accent"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-bg px-3 py-1 text-[12px] font-medium text-fg-muted transition-all duration-150 hover:border-accent hover:bg-secondary/50 hover:text-accent"
                 >
                   <Sparkles size={12} className="text-accent" />
                   {preset.title}
@@ -263,7 +263,7 @@ export default function Habits() {
                 <button
                   type="button"
                   onClick={() => setSelectedDays([])}
-                  className="text-[11px] font-średnia text-fg-subtle hover:text-fg"
+                  className="text-[11px] font-medium text-fg-subtle hover:text-fg"
                 >
                   Clear
                 </button>
@@ -303,7 +303,7 @@ export default function Habits() {
 
           <div className="grid gap-5 px-6 py-5 sm:grid-cols-2 lg:grid-cols-4">
             {kind === "focus" ? (
-              <Field label="Godziny tygodniowo" hint="cel tygodniowy">
+              <Field label="Hours per week" hint="weekly target">
                 <input
                   type="number"
                   min={1}
@@ -314,7 +314,7 @@ export default function Habits() {
                 />
               </Field>
             ) : (
-              <Field label="Częstotliwość" hint="razy / tydzień">
+              <Field label="Frequency" hint="times / week">
                 <input
                   type="number"
                   min={1}
@@ -326,8 +326,8 @@ export default function Habits() {
               </Field>
             )}
             <Field
-              label={kind === "focus" ? "Maks. blok" : "Czas trwania"}
-              hint={kind === "focus" ? `na blok, min ${FOCUS_MIN_CHUNK}` : "na sesję"}
+              label={kind === "focus" ? "Max sitting" : "Duration"}
+              hint={kind === "focus" ? `per sitting, min ${FOCUS_MIN_CHUNK}` : "per session"}
             >
               <select
                 value={minutes}
@@ -341,7 +341,7 @@ export default function Habits() {
                 ))}
               </select>
             </Field>
-            <Field label="Najwcześniej" hint="początek okna">
+            <Field label="Earliest" hint="window start">
               <input
                 type="time"
                 value={clock(from)}
@@ -349,7 +349,7 @@ export default function Habits() {
                 className="tabular h-10 w-full rounded-xl border border-black/[0.08] bg-bg px-3.5 text-[14px] font-semibold outline-none focus:border-accent"
               />
             </Field>
-            <Field label="Najpóźniej" hint="koniec okna">
+            <Field label="Latest" hint="window end">
               <input
                 type="time"
                 value={clock(to)}
@@ -363,7 +363,7 @@ export default function Habits() {
             <div className="flex items-center gap-1.5">
               <PriorityPicker value={priority} onChange={setPriority} />
               <span className="mx-1 h-4 w-px bg-black/[0.08]" aria-hidden />
-              {(["wysoka", "średnia", "niska"] as const).map((level) => (
+              {(["high", "medium", "low"] as const).map((level) => (
                 <button
                   key={level}
                   type="button"
@@ -388,7 +388,7 @@ export default function Habits() {
                   className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-black/[0.08] bg-surface px-4 text-[13px] font-semibold text-fg-muted transition-all hover:bg-bg hover:text-fg disabled:opacity-40"
                 >
                   <X size={15} />
-                  Anuluj
+                  Cancel
                 </button>
               )}
 
@@ -400,17 +400,17 @@ export default function Habits() {
                 {editingId ? <Pencil size={15} /> : <Plus size={16} />}
                 {saving
                   ? editingId
-                    ? "Zapisywanie..."
-                    : "Planowanie..."
+                    ? "Saving..."
+                    : "Scheduling..."
                   : editingId
-                    ? "Zapisz zmiany"
-                    : "Dodaj rutynę"}
+                    ? "Save Changes"
+                    : "Add Routine"}
               </button>
             </div>
           </div>
 
           {windowTooSmall && (
-            <div className="flex items-center gap-2 border-t border-red-200 bg-red-50/70 px-6 py-3 text-[12.5px] font-średnia text-danger">
+            <div className="flex items-center gap-2 border-t border-red-200 bg-red-50/70 px-6 py-3 text-[12.5px] font-medium text-danger">
               <AlertTriangle size={15} />
               <span>
                 Window ({formatDuration(Math.max(0, to - from))}) is shorter than session duration ({formatDuration(minutes)}).
@@ -420,7 +420,7 @@ export default function Habits() {
         </form>
 
         <h2 className="mb-3.5 text-[12px] font-semibold tracking-wider uppercase text-fg-muted">
-          Aktywne rutyny {plan ? `(${habits.length})` : ""}
+          Active Routines {plan ? `(${habits.length})` : ""}
         </h2>
 
         {!plan ? (
@@ -441,8 +441,8 @@ export default function Habits() {
           </ul>
         ) : habits.length === 0 ? (
           <div className="rounded-card border border-black/[0.06] bg-surface p-10 text-center shadow-sm">
-            <p className="text-[14px] font-semibold text-fg">Brak aktywnych rutyn</p>
-            <p className="mt-1 text-[13px] text-fg-muted">Skonfiguruj nawyk powyżej albo opisz go Horologowi przez ⌘K.</p>
+            <p className="text-[14px] font-semibold text-fg">No active routines</p>
+            <p className="mt-1 text-[13px] text-fg-muted">Configure a habit above or use ⌘K to describe it.</p>
           </div>
         ) : (
           <ul className="space-y-3">
@@ -454,8 +454,8 @@ export default function Habits() {
                 : `${formatDuration(habit.minutes_per_period)} weekly · ${formatDuration(habit.min_chunk_minutes)}–${formatDuration(habit.max_chunk_minutes)} blocks`;
 
               const weekdayLabel =
-                habit.alniskaed_weekdays && habit.alniskaed_weekdays.length > 0
-                  ? habit.alniskaed_weekdays
+                habit.allowed_weekdays && habit.allowed_weekdays.length > 0
+                  ? habit.allowed_weekdays
                       .map((value) => WEEKDAYS.find((day) => day.value === value)?.label)
                       .filter(Boolean)
                       .join(" · ")
@@ -475,16 +475,16 @@ export default function Habits() {
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[15px] font-semibold text-fg">{habit.title}</div>
-                    <div className="tabular mt-1 text-[12.5px] font-średnia text-fg-muted">
-                      {cadence} · <span className="text-accent font-semibold">{blocks.length} zaplanowanych</span>
+                    <div className="tabular mt-1 text-[12.5px] font-medium text-fg-muted">
+                      {cadence} · <span className="text-accent font-semibold">{blocks.length} placed</span>
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
                     <button
                       type="button"
-                      onClick={() => editNawyk(habit)}
-                      aria-label={`Edytuj ${habit.title}`}
-                      title="Edytuj rutynę"
+                      onClick={() => editHabit(habit)}
+                      aria-label={`Edit ${habit.title}`}
+                      title="Edit routine"
                       className="flex h-8 w-8 items-center justify-center rounded-lg text-fg-subtle opacity-0 transition-all duration-150 hover:bg-secondary hover:text-accent focus-visible:opacity-100 group-hover:opacity-100"
                     >
                       <Pencil size={15} />
@@ -497,7 +497,7 @@ export default function Habits() {
                         if (editingId === habit.id) resetForm();
                         await load();
                       }}
-                      aria-label={`Usuń ${habit.title}`}
+                      aria-label={`Remove ${habit.title}`}
                       className="flex h-8 w-8 items-center justify-center rounded-lg text-fg-subtle opacity-0 transition-all duration-150 hover:bg-red-50 hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
                     >
                       <Trash2 size={15} />
