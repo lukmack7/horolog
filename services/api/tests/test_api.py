@@ -880,3 +880,78 @@ async def test_hard_latest_bound_keeps_meeting_on_selected_day(client: AsyncClie
     plan = (await client.get("/api/plan")).json()
     block = next(b for b in plan["blocks"] if b["title"] == "Future meeting")
     assert datetime.fromisoformat(block["start"]).date() == target.date()
+
+
+
+# ------------------------------------------------ conversational assistant execution
+
+
+@pytest.mark.asyncio
+async def test_assistant_executes_confirmed_task_only_after_execute(client: AsyncClient) -> None:
+    day = origin().date().isoformat()
+    before = (await client.get("/api/intents")).json()
+
+    action = {
+        "action": "create_task",
+        "title": "Prepare client notes",
+        "date": day,
+        "minutes": 30,
+        "quadrant": 1,
+    }
+
+    # A proposal object by itself has no side effect.
+    assert not any(row["title"] == "Prepare client notes" for row in before)
+
+    response = await client.post("/api/assistant/execute", json={"actions": [action]})
+    assert response.status_code == 200
+    assert response.json()["count"] == 1
+
+    after = (await client.get("/api/intents")).json()
+    assert any(row["title"] == "Prepare client notes" for row in after)
+
+
+@pytest.mark.asyncio
+async def test_assistant_confirmed_meeting_stays_on_requested_day(client: AsyncClient) -> None:
+    target = origin().date() + timedelta(days=2)
+    response = await client.post(
+        "/api/assistant/execute",
+        json={
+            "actions": [
+                {
+                    "action": "create_meeting",
+                    "title": "Anna AZAN",
+                    "date": target.isoformat(),
+                    "minutes": 45,
+                    "start_min": 10 * 60 + 30,
+                }
+            ]
+        },
+    )
+    assert response.status_code == 200
+
+    plan = (await client.get("/api/plan")).json()
+    block = next(b for b in plan["blocks"] if b["title"] == "Anna AZAN")
+    start = datetime.fromisoformat(block["start"])
+    assert start.date() == target
+    assert (start.hour, start.minute) == (10, 30)
+
+
+@pytest.mark.asyncio
+async def test_assistant_updates_daily_first_step(client: AsyncClient) -> None:
+    day = origin().date().isoformat()
+    response = await client.post(
+        "/api/assistant/execute",
+        json={
+            "actions": [
+                {
+                    "action": "update_daily_plan",
+                    "date": day,
+                    "first_step": "Open the mapping workbook",
+                }
+            ]
+        },
+    )
+    assert response.status_code == 200
+
+    daily = (await client.get(f"/api/daily/{day}")).json()
+    assert daily["plan"]["first_step"] == "Open the mapping workbook"
