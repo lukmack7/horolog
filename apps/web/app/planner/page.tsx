@@ -253,14 +253,14 @@ export default function Planner() {
 
   return (
     <Shell onPlanChange={load}>
-      <main className="mx-auto max-w-[1440px] px-6 py-8">
+      <main className="mx-auto max-w-[1440px] overflow-x-hidden px-4 py-5 sm:px-6 sm:py-8">
         {/* Header */}
-        <header className="mb-7 flex flex-wrap items-end justify-between gap-4">
+        <header className="mb-5 flex items-start justify-between gap-3 sm:mb-7 sm:items-end sm:gap-4">
           <div>
-            <h1 className="text-[28px] font-bold text-fg">Planner</h1>
+            <h1 className="text-[30px] font-bold leading-tight text-fg sm:text-[28px]">Planner</h1>
             <p className="mt-1 text-[13.5px] text-fg-muted">
               {plan ? (
-                <span className="inline-flex items-center gap-2">
+                <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                   <span className="font-semibold text-fg">{plan.blocks.length} blocks</span>
                   <span>·</span>
                   <span>{formatDuration(scheduledMinutes)} scheduled</span>
@@ -275,10 +275,11 @@ export default function Planner() {
 
           <a
             href="/api/plan.ics"
-            className="inline-flex h-9.5 items-center gap-1.5 rounded-xl border border-black/[0.08] bg-surface px-4 text-[13px] font-semibold text-fg shadow-sm transition-all duration-150 hover:bg-sunk hover:shadow-md"
+            className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-black/[0.08] bg-surface px-3 text-[12.5px] font-semibold text-fg shadow-sm transition-all duration-150 hover:bg-sunk hover:shadow-md sm:h-9.5 sm:px-4 sm:text-[13px]"
           >
             <Download size={14} className="text-fg-muted" />
-            Export .ics
+            <span className="sm:hidden">Export</span>
+            <span className="hidden sm:inline">Export .ics</span>
           </a>
         </header>
 
@@ -328,7 +329,7 @@ export default function Planner() {
 
         {/* Calendar + Sidebar */}
         <div className="grid gap-6 lg:grid-cols-[1fr_270px]">
-          <section aria-label="Calendar view">
+          <section aria-label="Calendar view" className="min-w-0">
             <EventManager
               events={calendarEvents}
               onEventCreate={handleEventCreate}
@@ -342,7 +343,7 @@ export default function Planner() {
             />
           </section>
 
-          <aside className="space-y-4">
+          <aside className="hidden space-y-4 lg:block">
             {movedCount > 0 && (
               <Panel title="Shift Stability">
                 <div className="flex items-start gap-2.5">
