@@ -53,6 +53,45 @@ function actionTitle(action: AssistantAction): string {
   return action.intent_id ?? "Zmiana w planie";
 }
 
+
+function executionSummary(results: Array<Record<string, unknown>>): string {
+  const lines = results.map((result) => {
+    const action = typeof result.action === "string" ? result.action : "change";
+    const title = typeof result.title === "string" ? result.title : "Zmiana";
+    const scheduled = Array.isArray(result.scheduled) ? result.scheduled : [];
+    const first = scheduled[0];
+
+    let when = "";
+    if (first && typeof first === "object" && first !== null) {
+      const start = (first as Record<string, unknown>).start;
+      const end = (first as Record<string, unknown>).end;
+      if (typeof start === "string" && typeof end === "string") {
+        const startDate = new Date(start);
+        const endDate = new Date(end);
+        when = ` — ${startDate.toLocaleDateString("pl-PL", {
+          weekday: "short",
+          day: "numeric",
+          month: "short",
+        })} ${startDate.toLocaleTimeString("pl-PL", {
+          hour: "2-digit",
+          minute: "2-digit",
+        })}–${endDate.toLocaleTimeString("pl-PL", {
+          hour: "2-digit",
+          minute: "2-digit",
+        })}`;
+      }
+    }
+
+    if (action === "complete_task") return `✓ Wykonane: ${title}`;
+    if (action === "update_daily_plan") return "✓ Daily zaktualizowane";
+    if (action === "reschedule_task") return `✓ Przełożone: ${title}${when}`;
+    if (action === "create_meeting") return `✓ Spotkanie: ${title}${when}`;
+    return `✓ Zadanie: ${title}${when}`;
+  });
+
+  return ["Gotowe. Wykonałem uzgodnione zmiany:", ...lines].join("\n");
+}
+
 export function CommandBar({
   open,
   onClose,
@@ -129,15 +168,11 @@ export function CommandBar({
     setError(null);
     try {
       const result = await api.assistantExecute(pendingActions);
-      const count = result.count;
       setMessages((current) => [
         ...current,
         {
           role: "assistant",
-          content:
-            count === 1
-              ? "Gotowe. Wykonałem uzgodnioną zmianę i plan został zaktualizowany."
-              : `Gotowe. Wykonałem ${count} uzgodnione zmiany i plan został zaktualizowany.`,
+          content: executionSummary(result.results),
         },
       ]);
       setPendingActions([]);
