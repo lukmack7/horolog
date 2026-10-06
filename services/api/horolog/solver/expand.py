@@ -114,7 +114,10 @@ def expand(
     # structurally impossible, which sounds tidy but silently converts "this
     # slipped to Saturday" into "this vanished". The due date is enforced as a
     # priced objective term instead, so an overloaded week degrades honestly.
-    hi = horizon_slots
+    hi = min(
+        horizon_slots,
+        intent.latest_slot if intent.latest_slot is not None else horizon_slots,
+    )
     if hi <= lo:
         return []
 
