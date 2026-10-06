@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
 
 export type Language = "en" | "pl";
 
@@ -83,11 +84,27 @@ type LanguageContextValue={language:Language;setLanguage:(language:Language)=>vo
 const LanguageContext=createContext<LanguageContextValue>({language:"pl",setLanguage:()=>undefined,t:(text)=>text});
 
 export function LanguageProvider({children}:{children:React.ReactNode}){
+  const pathname=usePathname();
   const [language,setLanguageState]=useState<Language>("pl");
   useEffect(()=>{const saved=window.localStorage.getItem("horolog-language");if(saved==="pl"||saved==="en")setLanguageState(saved);},[]);
   const setLanguage=(next:Language)=>{setLanguageState(next);window.localStorage.setItem("horolog-language",next);document.documentElement.lang=next;};
   useEffect(()=>{document.documentElement.lang=language;},[language]);
   const value=useMemo(()=>({language,setLanguage,t:(text:string)=>language==="pl"?translate(text):text}),[language]);
+  useEffect(()=>{
+    if(language!=="pl") return;
+    const root=document.querySelector("main#main") ?? document.body;
+    const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
+    const nodes:Text[]=[];
+    while(walker.nextNode()) nodes.push(walker.currentNode as Text);
+    for(const node of nodes){
+      const parent=node.parentElement;
+      if(!parent||["SCRIPT","STYLE","TEXTAREA","INPUT","OPTION"].includes(parent.tagName)) continue;
+      const next=translate(node.nodeValue??"");
+      if(next!==node.nodeValue) node.nodeValue=next;
+    }
+    const attrs=["placeholder","title","aria-label"] as const;
+    root.querySelectorAll<HTMLElement>("*").forEach(el=>attrs.forEach(attr=>{const v=el.getAttribute(attr);if(v){const next=translate(v);if(next!==v)el.setAttribute(attr,next);}}));
+  },[language,pathname,children]);
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }
 export function useLanguage(){return useContext(LanguageContext);}
