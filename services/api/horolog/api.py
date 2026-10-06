@@ -1274,6 +1274,86 @@ async def _execute_assistant_action(
     if action.action == "create_task":
         if not action.title or not action.date or not action.minutes or not action.quadrant:
             raise HTTPException(status_code=422, detail="create_task proposal is incomplete")
+
+        # A strict clock request must be honored exactly or rejected. Do not
+        # create a flexible Daily task and let the solver silently move it.
+        if action.start_min is not None and action.start_mode == "fixed":
+            day = _daily_date(action.date)
+            minutes = max(SLOT_MINUTES, minutes_to_slots(action.minutes) * SLOT_MINUTES)
+            start_min = (action.start_min // SLOT_MINUTES) * SLOT_MINUTES
+            start = day.replace(
+                hour=start_min // 60,
+                minute=start_min % 60,
+                second=0,
+                microsecond=0,
+            )
+            end = start + timedelta(minutes=minutes)
+            if end.date() != start.date():
+                raise HTTPException(
+                    status_code=422,
+                    detail="To zadanie nie mieści się w wybranym dniu.",
+                )
+
+            ident = uuid.uuid4().hex[:12]
+            wire = IntentIn(
+                title=action.title,
+                kind=IntentKind.TASK,
+                priority=Priority(action.quadrant),
+                minutes_per_period=minutes,
+                min_chunk_minutes=minutes,
+                max_chunk_minutes=minutes,
+                max_per_day=1,
+                earliest=start,
+                latest=end,
+                due=end,
+                preferred_start_min=start_min,
+                window_start_min=start_min,
+                window_end_min=start_min + minutes,
+            )
+            intent = wire.to_domain(ident, origin())
+            db.add(IntentRow(id=ident, payload=intent.model_dump(mode="json")))
+            await db.commit()
+            plan = await _replan(db)
+
+            blocks = [block for block in plan.blocks if block.intent_id == ident]
+            exact = bool(blocks) and all(
+                block.start == start and block.end == end for block in blocks
+            )
+            if not exact:
+                row = await db.get(IntentRow, ident)
+                if row is not None:
+                    await db.delete(row)
+                    await db.commit()
+                    await _replan(db)
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"Nie mogę zaplanować „{action.title}” dokładnie "
+                        f"{action.date} o {start.strftime('%H:%M')} na {minutes} min."
+                    ),
+                )
+
+            daily_row = DailyPlanItemRow(
+                id=uuid.uuid4().hex[:16],
+                plan_date=action.date,
+                title=action.title,
+                quadrant=action.quadrant,
+                minutes=minutes,
+                priority=action.quadrant,
+                intent_id=ident,
+                schedule_enabled=True,
+            )
+            db.add(daily_row)
+            await db.commit()
+            return {
+                "action": action.action,
+                "status": "done",
+                "title": action.title,
+                "date": action.date,
+                "item_id": daily_row.id,
+                "intent_id": ident,
+            }
+
         item = await create_daily_item(
             action.date,
             DailyItemIn(
@@ -1284,6 +1364,19 @@ async def _execute_assistant_action(
             ),
             db,
         )
+
+        # A preferred time is a hint, not a promise. Keep the ordinary flexible
+        # task semantics but preserve the preference on the linked intent.
+        if action.start_min is not None and action.start_mode == "preferred" and item.get("intent_id"):
+            intent_row = await db.get(IntentRow, item["intent_id"])
+            if intent_row is not None:
+                intent = Intent.model_validate(intent_row.payload)
+                intent_row.payload = intent.model_copy(
+                    update={"preferred_start_min": action.start_min}
+                ).model_dump(mode="json")
+                await db.commit()
+                await _replan(db)
+
         return {
             "action": action.action,
             "status": "done",
