@@ -181,6 +181,34 @@ class IntentIn(BaseModel):
     mirror: a colleague being booked at 2pm must stop *this meeting* landing at
     2pm without blanking 2pm out for your own focus time."""
 
+    @model_validator(mode="after")
+    def _snap_to_solver_grid(self) -> IntentIn:
+        """Accept human minute values at the HTTP boundary.
+
+        The solver operates on 15-minute slots. Direct UI/API calls used to
+        leak values such as 123 minutes into the domain model and fail with a
+        Pydantic validation error. Capture already snaps durations; every other
+        entry point should have the same forgiving boundary behaviour.
+        """
+        step = SLOT_MINUTES
+
+        def up(value: int) -> int:
+            return max(step, -(-value // step) * step)
+
+        self.minutes_per_period = up(self.minutes_per_period)
+        self.min_chunk_minutes = up(self.min_chunk_minutes)
+        self.max_chunk_minutes = max(self.min_chunk_minutes, up(self.max_chunk_minutes))
+
+        if self.window_start_min is not None:
+            self.window_start_min = max(0, (self.window_start_min // step) * step)
+        if self.window_end_min is not None:
+            self.window_end_min = min(24 * 60, -(-self.window_end_min // step) * step)
+        if self.preferred_start_min is not None:
+            snapped = ((self.preferred_start_min + step // 2) // step) * step
+            self.preferred_start_min = min(24 * 60 - step, max(0, snapped))
+
+        return self
+
     def to_domain(self, ident: str, base: datetime) -> Intent:
         cfg = settings()
         start = (
