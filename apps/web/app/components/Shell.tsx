@@ -24,14 +24,14 @@ import {
 import { CommandBar } from "@/app/components/CommandBar";
 
 const NAV = [
-  { href: "/time", label: "Dzień", icon: Clock },
-  { href: "/planner", label: "Planer", icon: Calendar },
-  { href: "/daily", label: "Dziennik", icon: BookOpenCheck },
-  { href: "/habits", label: "Nawyki", icon: RotateCcw },
-  { href: "/inbox", label: "Zadania", icon: Inbox },
-  { href: "/meetings", label: "Spotkania", icon: Users },
-  { href: "/analytics", label: "Analizy", icon: BarChart3 },
-  { href: "/connect", label: "Kalendarze", icon: Link2 },
+  { href: "/time", label: "Time", icon: Clock },
+  { href: "/planner", label: "Planner", icon: Calendar },
+  { href: "/daily", label: "Daily", icon: BookOpenCheck },
+  { href: "/habits", label: "Habits", icon: RotateCcw },
+  { href: "/inbox", label: "Task inbox", icon: Inbox },
+  { href: "/meetings", label: "Meetings", icon: Users },
+  { href: "/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/connect", label: "Calendars", icon: Link2 },
 ] as const;
 
 /** Ultra-Luxury Shell Navigation for Horolog.
@@ -70,7 +70,7 @@ export function Shell({
       onPlanChange?.();
     });
     // The browser retries a dropped SSE connection on its own, so this isn't
-    // a fatal error — but the "Plan aktualny" dot was previously static and
+    // a fatal error — but the "Engine steady" dot was previously static and
     // green regardless of whether the stream was actually alive, which is
     // misleading during a backend restart or outage.
     stream.onerror = () => setLive(false);
@@ -92,7 +92,7 @@ export function Shell({
           <div className="flex flex-col">
             <span className="text-[16px] font-serif tracking-tight text-foreground">Horolog</span>
             <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-              Chroń swój czas
+              Defend Time
             </span>
           </div>
         </Link>
@@ -135,7 +135,7 @@ export function Shell({
         >
           <span className="flex items-center gap-2 font-medium">
             <Sparkles size={14} className="text-foreground transition-transform duration-200 group-hover:rotate-12" />
-            Zapytaj Horologa
+            Ask Horolog
           </span>
           <kbd className="tabular inline-flex items-center gap-0.5 rounded-md border border-border bg-background px-1.5 py-0.5 text-[10.5px] font-mono text-muted-foreground">
             <Command size={10} />K
@@ -160,7 +160,7 @@ export function Shell({
               />
             </span>
             <span className="text-[11.5px] font-medium text-muted-foreground">
-              {!live ? "Ponowne łączenie..." : pulse ? "Optymalizuję..." : "Plan aktualny"}
+              {!live ? "Reconnecting..." : pulse ? "Optimizing..." : "Engine steady"}
             </span>
           </div>
           <Activity size={13} className={pulse ? "animate-spin text-foreground" : "text-muted-foreground"} />
@@ -173,7 +173,7 @@ export function Shell({
         <button
           type="button"
           onClick={() => setCommandOpen(true)}
-          aria-label="Zapytaj Horologa"
+          aria-label="Ask Horolog"
           className="fixed bottom-20 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-accent text-on-accent shadow-pop transition-transform active:scale-95 lg:hidden"
         >
           <Sparkles size={20} />
@@ -185,7 +185,7 @@ export function Shell({
         <>
           <button
             type="button"
-            aria-label="Zamknij dodatkową nawigację"
+            aria-label="Close more navigation"
             onClick={() => setMobileMoreOpen(false)}
             className="fixed inset-0 z-30 bg-black/20 lg:hidden"
           />
@@ -197,17 +197,17 @@ export function Shell({
             }}
             role="dialog"
             aria-modal="true"
-            aria-label="Dodatkowa nawigacja"
+            aria-label="More navigation"
           >
             <div className="mb-2 flex items-center justify-between px-1">
               <div className="flex items-center gap-2">
                 <MoreHorizontal size={18} className="text-muted-foreground" />
-                <span className="text-[13px] font-semibold text-foreground">Więcej</span>
+                <span className="text-[13px] font-semibold text-foreground">More</span>
               </div>
               <button
                 type="button"
                 onClick={() => setMobileMoreOpen(false)}
-                aria-label="Zamknij"
+                aria-label="Close"
                 className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-muted-foreground transition-colors hover:text-foreground"
               >
                 <X size={16} />
@@ -279,7 +279,7 @@ export function Shell({
           }`}
         >
           <MoreHorizontal size={20} />
-          <span className="text-[9.5px] leading-tight">Więcej</span>
+          <span className="text-[9.5px] leading-tight">More</span>
         </button>
       </div>
 
