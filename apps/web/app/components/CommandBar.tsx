@@ -58,6 +58,11 @@ function executionSummary(results: Array<Record<string, unknown>>): string {
   const lines = results.map((result) => {
     const action = typeof result.action === "string" ? result.action : "change";
     const title = typeof result.title === "string" ? result.title : "Zmiana";
+    const status = typeof result.status === "string" ? result.status : "done";
+    const detail = typeof result.detail === "string" ? result.detail : "";
+    if (status === "failed") {
+      return `⚠ Nie wykonano: ${title}${detail ? ` — ${detail}` : ""}`;
+    }
     const scheduled = Array.isArray(result.scheduled) ? result.scheduled : [];
     const first = scheduled[0];
 
