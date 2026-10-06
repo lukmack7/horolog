@@ -473,19 +473,40 @@ function QuadrantCard({
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const [minutes, setMinutes] = useState(30);
+  const [smartAdding, setSmartAdding] = useState(false);
+  const [smartResult, setSmartResult] = useState<string | null>(null);
 
   const submit = async () => {
     if (!title.trim()) return;
-    await api.createDailyItem(dateKey, {
-      title: title.trim(),
-      quadrant: quadrant.id,
-      minutes,
-      schedule_enabled: quadrant.schedule,
-    });
-    setTitle("");
-    setMinutes(30);
-    setAdding(false);
-    await reload();
+    setSmartAdding(true);
+    setSmartResult(null);
+    try {
+      const result = await api.captureDaily(dateKey, {
+        text: title.trim(),
+        quadrant: quadrant.id,
+        default_minutes: minutes,
+      });
+
+      const tasks = result.created.filter((item) => item.kind === "task").length;
+      const meetings = result.created.filter((item) => item.kind === "meeting").length;
+      const parts: string[] = [];
+      if (tasks) parts.push(`${tasks} ${tasks === 1 ? "zadanie" : "zadania"}`);
+      if (meetings) parts.push(`${meetings} ${meetings === 1 ? "spotkanie" : "spotkania"}`);
+      setSmartResult(parts.length ? `Dodano: ${parts.join(" + ")}` : "Dodano.");
+
+      setTitle("");
+      setMinutes(30);
+      setAdding(false);
+      await reload();
+    } catch (caught) {
+      setSmartResult(
+        caught instanceof Error
+          ? caught.message
+          : "Nie udało się zinterpretować wpisu.",
+      );
+    } finally {
+      setSmartAdding(false);
+    }
   };
 
   return (
@@ -621,7 +642,7 @@ function QuadrantCard({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") void submit();
+              if (e.key === "Enter" && !smartAdding) void submit();
               if (e.key === "Escape") setAdding(false);
             }}
             placeholder="Co trzeba zrobić?"
@@ -642,14 +663,26 @@ function QuadrantCard({
             </label>
             <div className="flex gap-2">
               <button type="button" onClick={() => setAdding(false)} className="rounded-lg px-2.5 py-1.5 text-[10.5px] font-semibold text-fg-muted">Anuluj</button>
-              <button type="button" onClick={() => void submit()} className="rounded-lg bg-primary px-3 py-1.5 text-[10.5px] font-semibold text-white">Dodaj</button>
+              <button
+                type="button"
+                onClick={() => void submit()}
+                disabled={smartAdding}
+                className="rounded-lg bg-primary px-3 py-1.5 text-[10.5px] font-semibold text-white disabled:opacity-50"
+              >
+                {smartAdding ? "Analizuję…" : "Dodaj"}
+              </button>
             </div>
           </div>
           <p className="mt-2 text-[9.5px] text-fg-subtle">
+            Możesz wpisać kilka rzeczy w jednym zdaniu. Horolog rozdzieli tylko wyraźne działania.
+            {" "}
             {quadrant.schedule
-              ? "To zadanie automatycznie trafi też do Plannera."
-              : "Domyślnie nie zajmuje miejsca w kalendarzu."}
+              ? "Zadania trafią też do Plannera."
+              : "Elementy tej ćwiartki domyślnie nie zajmują miejsca w kalendarzu."}
           </p>
+          {smartResult && (
+            <p className="mt-2 text-[10px] font-medium text-fg-muted">{smartResult}</p>
+          )}
         </div>
       ) : (
         <button
