@@ -87,7 +87,7 @@ export function EventManager({
   className,
   availableTags = ["Important", "Urgent", "Work", "Personal", "Team", "Client"],
 }: EventManagerProps) {
-  const { t, language } = useLanguage();
+  useLanguage();
   const [currentDate, setCurrentDate] = useState(new Date())
   const [view, setView] = useState<"month" | "week" | "day" | "list">(defaultView)
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
