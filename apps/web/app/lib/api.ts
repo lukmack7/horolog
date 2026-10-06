@@ -63,6 +63,41 @@ export interface DailyItem {
   cancelled_at?: string | null;
   carried: boolean;
   carry_days: number;
+  defer_until?: string | null;
+  needs_decision?: boolean;
+}
+
+export interface DailyHistoryEntry {
+  date: string;
+  win_condition: string;
+  first_step: string;
+  items: number;
+  completed_items: number;
+  review_answers: number;
+  has_review: boolean;
+}
+
+export interface DailyWeekly {
+  start: string;
+  end: string;
+  planned_days: number;
+  reviewed_days: number;
+  items_created: number;
+  items_completed: number;
+  carry_over: number;
+  stale_items: number;
+  days: Array<{
+    date: string;
+    planned: boolean;
+    review_answers: number;
+    items: number;
+    completed_items: number;
+  }>;
+  reflection_highlights: Array<{
+    date: string;
+    kind: "learned" | "improve";
+    text: string;
+  }>;
 }
 
 export interface DailySuggestion {
@@ -225,7 +260,7 @@ export const api = {
       title: string;
       quadrant: 1 | 2 | 3 | 4;
       minutes: number;
-      priority: Priority;
+      priority?: Priority;
       schedule_enabled: boolean;
       intent_id?: string;
     },
@@ -242,6 +277,18 @@ export const api = {
     request<{ date: string } & DailyReview>(`/api/daily/${date}/review`, {
       method: "PUT",
       body: JSON.stringify(body),
+    }),
+  dailyHistory: () => request<DailyHistoryEntry[]>("/api/daily-history"),
+  dailyWeekly: (date: string) => request<DailyWeekly>(`/api/daily-weekly/${date}`),
+  keepDailyItem: (id: string, date: string) =>
+    request<{ item_id: string; date: string; status: string }>(`/api/daily/items/${id}/keep`, {
+      method: "POST",
+      body: JSON.stringify({ date }),
+    }),
+  deferDailyItem: (id: string, until: string) =>
+    request<{ item_id: string; until: string; status: string }>(`/api/daily/items/${id}/defer`, {
+      method: "POST",
+      body: JSON.stringify({ until }),
     }),
 };
 
