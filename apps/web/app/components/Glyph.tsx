@@ -57,9 +57,9 @@ export function Glyph({ kind, size = 15 }: { kind: IntentKind; size?: number }) 
 }
 
 export const KIND_LABEL: Record<IntentKind, string> = {
-  task: "Zadanie",
-  habit: "Nawyk",
-  focus: "Skupienie",
-  buffer: "Przerwa / bufor",
-  meeting: "Spotkanie",
+  task: "Task",
+  habit: "Habit",
+  focus: "Focus",
+  buffer: "Buffer",
+  meeting: "Meeting",
 };
