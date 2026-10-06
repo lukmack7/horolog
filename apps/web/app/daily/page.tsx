@@ -1,0 +1,614 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Shell } from "@/app/components/Shell";
+import {
+  api,
+  formatDuration,
+  type DailyData,
+  type DailyReview,
+  type Priority,
+} from "@/app/lib/api";
+import {
+  ArrowLeft,
+  ArrowRight,
+  CalendarDays,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  CirclePlus,
+  Clock3,
+  Gratitude,
+  Lightbulb,
+  RotateCcw,
+  Sparkles,
+  Sunrise,
+  Target,
+  Trash2,
+} from "lucide-react";
+
+type DailyMode = "plan" | "review";
+
+const QUADRANTS = [
+  {
+    id: 1 as const,
+    title: "1. Zrób teraz",
+    subtitle: "Ważne + pilne",
+    helper: "Co mnie ugryzie, jeśli tego dziś nie zrobię?",
+    tone: "border-red-200 bg-red-50/45",
+    dot: "#dc2626",
+    priority: 1 as Priority,
+    schedule: true,
+  },
+  {
+    id: 2 as const,
+    title: "2. Zaplanuj",
+    subtitle: "Ważne + niepilne",
+    helper: "Co warto zrobić, zanim stanie się pilne?",
+    tone: "border-amber-200 bg-amber-50/45",
+    dot: "#f59e0b",
+    priority: 2 as Priority,
+    schedule: true,
+  },
+  {
+    id: 3 as const,
+    title: "3. Ogranicz / deleguj",
+    subtitle: "Nieważne + pilne",
+    helper: "Czy naprawdę muszę zrobić to osobiście i teraz?",
+    tone: "border-blue-200 bg-blue-50/40",
+    dot: "#2563eb",
+    priority: 3 as Priority,
+    schedule: false,
+  },
+  {
+    id: 4 as const,
+    title: "4. Usuń / odłóż",
+    subtitle: "Nieważne + niepilne",
+    helper: "Czy to zadanie zabiera czas ważniejszym rzeczom?",
+    tone: "border-stone-200 bg-stone-50/70",
+    dot: "#78716c",
+    priority: 4 as Priority,
+    schedule: false,
+  },
+];
+
+const REVIEW_FIELDS: Array<{
+  key: keyof DailyReview;
+  label: string;
+  icon: string;
+  placeholder: string;
+}> = [
+  { key: "did_well", label: "Co dziś zrobiłem dobrze?", icon: "✅", placeholder: "Co poszło dobrze, mimo wszystko?" },
+  { key: "grateful_for", label: "Za co jestem sobie wdzięczny?", icon: "🙏", placeholder: "Za jaką decyzję, wysiłek albo zachowanie sobie dziękuję?" },
+  { key: "would_change", label: "Co dziś zrobiłbym inaczej?", icon: "🔄", placeholder: "Bez biczowania się — co zrobiłbym inaczej drugi raz?" },
+  { key: "learned", label: "Czego mnie to uczy?", icon: "🧠", placeholder: "Jaki wniosek chcę zapamiętać?" },
+  { key: "improve_tomorrow", label: "Co poprawię jutro?", icon: "➡️", placeholder: "Jedna konkretna rzecz na jutro." },
+  { key: "first_step_morning", label: "Jaki jest mój pierwszy krok rano?", icon: "▶️", placeholder: "Najmniejszy konkretny krok, od którego zacznę." },
+];
+
+function dateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+export default function DailyPage() {
+  const [date, setDate] = useState(() => {
+    const now = new Date();
+    now.setDate(now.getDate() + 1);
+    return now;
+  });
+  const [mode, setMode] = useState<DailyMode>("plan");
+  const [data, setData] = useState<DailyData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState<string | null>(null);
+
+  const key = dateKey(date);
+
+  const load = useCallback(async () => {
+    try {
+      setData(await api.daily(key));
+      setError(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Nie udało się wczytać Daily.");
+    }
+  }, [key]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const moveDay = (days: number) => {
+    setDate((current) => {
+      const next = new Date(current);
+      next.setDate(current.getDate() + days);
+      return next;
+    });
+  };
+
+  const savePlan = async (patch: Partial<DailyData["plan"]>) => {
+    if (!data) return;
+    const next = { ...data.plan, ...patch };
+    setData({ ...data, plan: next });
+    setSaving("plan");
+    try {
+      await api.saveDailyPlan(key, {
+        win_condition: next.win_condition,
+        first_step: next.first_step,
+      });
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const saveReview = async (next: DailyReview) => {
+    if (!data) return;
+    setData({ ...data, review: next });
+    setSaving("review");
+    try {
+      await api.saveDailyReview(key, next);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  return (
+    <Shell onPlanChange={load}>
+      <main className="mx-auto max-w-[1280px] overflow-x-hidden px-4 py-5 sm:px-6 sm:py-8">
+        <header className="mb-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h1 className="text-[30px] font-bold leading-tight text-fg">Daily</h1>
+              <p className="mt-1 text-[13px] text-fg-muted">
+                Plan dnia, wykonanie i refleksja w jednym miejscu.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => moveDay(-1)} className="flex h-9 w-9 items-center justify-center rounded-xl border bg-white">
+                <ChevronLeft size={17} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setDate(new Date())}
+                className="h-9 rounded-xl border bg-white px-3 text-[12px] font-semibold"
+              >
+                Dziś
+              </button>
+              <button type="button" onClick={() => moveDay(1)} className="flex h-9 w-9 items-center justify-center rounded-xl border bg-white">
+                <ChevronRight size={17} />
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-fg-muted">
+                {date.toLocaleDateString("pl-PL", { weekday: "long" })}
+              </div>
+              <div className="font-serif text-[22px] font-bold text-fg">
+                {date.toLocaleDateString("pl-PL", { day: "numeric", month: "long", year: "numeric" })}
+              </div>
+            </div>
+            {data && (
+              <div className="flex gap-2 text-[10.5px] font-semibold text-fg-muted">
+                <span className="rounded-full bg-sunk px-2.5 py-1">
+                  {data.summary.completed_blocks}/{data.summary.total_blocks} bloków
+                </span>
+                {data.summary.carry_over > 0 && (
+                  <span className="rounded-full bg-amber-50 px-2.5 py-1 text-amber-700">
+                    {data.summary.carry_over} przeniesione
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-1 rounded-2xl border bg-white p-1 shadow-sm">
+            <button
+              type="button"
+              onClick={() => setMode("plan")}
+              className={`flex h-11 items-center justify-center gap-2 rounded-xl text-[12.5px] font-semibold ${
+                mode === "plan" ? "bg-primary text-white" : "text-fg-muted"
+              }`}
+            >
+              <CalendarDays size={16} /> Plan dnia
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("review")}
+              className={`flex h-11 items-center justify-center gap-2 rounded-xl text-[12.5px] font-semibold ${
+                mode === "review" ? "bg-primary text-white" : "text-fg-muted"
+              }`}
+            >
+              <Sparkles size={16} /> Koniec dnia
+            </button>
+          </div>
+        </header>
+
+        {error && (
+          <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-[13px] text-red-700">
+            {error}
+          </div>
+        )}
+
+        {!data && !error && (
+          <div className="space-y-3">
+            <div className="h-28 animate-pulse rounded-2xl bg-sunk" />
+            <div className="grid gap-3 lg:grid-cols-2">
+              <div className="h-72 animate-pulse rounded-2xl bg-sunk" />
+              <div className="h-72 animate-pulse rounded-2xl bg-sunk" />
+            </div>
+          </div>
+        )}
+
+        {data && mode === "plan" && (
+          <PlanView
+            data={data}
+            setData={setData}
+            dateKey={key}
+            savePlan={savePlan}
+            reload={load}
+          />
+        )}
+
+        {data && mode === "review" && (
+          <ReviewView
+            data={data}
+            saveReview={saveReview}
+          />
+        )}
+
+        {saving && (
+          <div className="fixed bottom-20 left-1/2 z-50 -translate-x-1/2 rounded-full bg-primary px-3 py-1.5 text-[10px] font-semibold text-white shadow-lg">
+            zapisuję…
+          </div>
+        )}
+      </main>
+    </Shell>
+  );
+}
+
+function PlanView({
+  data,
+  setData,
+  dateKey,
+  savePlan,
+  reload,
+}: {
+  data: DailyData;
+  setData: (data: DailyData) => void;
+  dateKey: string;
+  savePlan: (patch: Partial<DailyData["plan"]>) => Promise<void>;
+  reload: () => Promise<void>;
+}) {
+  return (
+    <div className="space-y-5">
+      {data.summary.carry_over > 0 && (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
+          <div className="flex items-start gap-3">
+            <RotateCcw size={17} className="mt-0.5 shrink-0 text-amber-700" />
+            <div>
+              <h2 className="text-[13px] font-bold text-amber-900">Przeniesione z wcześniejszych dni</h2>
+              <p className="mt-0.5 text-[11.5px] leading-relaxed text-amber-800">
+                Nic nie znika. Niewykonane zadania pozostają aktywne aż je wykonasz albo świadomie usuniesz.
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {data.suggestions.length > 0 && (
+        <section className="rounded-2xl border bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-2">
+            <CalendarDays size={16} className="text-fg-muted" />
+            <h2 className="text-[14px] font-bold">Już w Plannerze</h2>
+          </div>
+          <p className="mt-1 text-[11.5px] text-fg-muted">
+            Te zadania są już zaplanowane na ten dzień. Dodaj je do macierzy bez tworzenia duplikatu.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {data.suggestions.map((item) => (
+              <button
+                key={item.intent_id}
+                type="button"
+                onClick={async () => {
+                  const quadrant = item.priority <= 2 ? item.priority : 2;
+                  await api.createDailyItem(dateKey, {
+                    title: item.title,
+                    quadrant: quadrant as 1 | 2,
+                    minutes: Math.max(15, item.minutes),
+                    priority: item.priority,
+                    schedule_enabled: true,
+                    intent_id: item.intent_id,
+                  });
+                  await reload();
+                }}
+                className="flex max-w-full items-center gap-2 rounded-xl border bg-sunk/50 px-3 py-2 text-left text-[11.5px] font-medium hover:bg-sunk"
+              >
+                <CirclePlus size={14} className="shrink-0" />
+                <span className="truncate">{item.title}</span>
+                <span className="tabular shrink-0 text-[9px] text-fg-muted">{formatDuration(item.minutes)}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        {QUADRANTS.map((quadrant) => (
+          <QuadrantCard
+            key={quadrant.id}
+            quadrant={quadrant}
+            items={data.items.filter((item) => item.quadrant === quadrant.id && !item.completed_at)}
+            dateKey={dateKey}
+            reload={reload}
+          />
+        ))}
+      </div>
+
+      <section className="grid gap-3 lg:grid-cols-2">
+        <div className="rounded-2xl border bg-white p-4 shadow-sm">
+          <div className="mb-2 flex items-center gap-2">
+            <Target size={16} />
+            <h2 className="text-[13px] font-bold">Dzisiaj wygrywam, jeśli…</h2>
+          </div>
+          <textarea
+            value={data.plan.win_condition}
+            onChange={(e) => setData({ ...data, plan: { ...data.plan, win_condition: e.target.value } })}
+            onBlur={(e) => void savePlan({ win_condition: e.target.value })}
+            rows={3}
+            placeholder="Jedna rzecz, która sprawi, że ten dzień uznam za wygrany."
+            className="w-full resize-none rounded-xl border bg-sunk/30 px-3 py-2.5 text-[13px] outline-none focus:ring-2 focus:ring-black/10"
+          />
+        </div>
+        <div className="rounded-2xl border bg-white p-4 shadow-sm">
+          <div className="mb-2 flex items-center gap-2">
+            <Sunrise size={16} />
+            <h2 className="text-[13px] font-bold">Zaczynam od…</h2>
+          </div>
+          <textarea
+            value={data.plan.first_step}
+            onChange={(e) => setData({ ...data, plan: { ...data.plan, first_step: e.target.value } })}
+            onBlur={(e) => void savePlan({ first_step: e.target.value })}
+            rows={3}
+            placeholder="Najmniejszy konkretny krok, który zrobię jako pierwszy."
+            className="w-full resize-none rounded-xl border bg-sunk/30 px-3 py-2.5 text-[13px] outline-none focus:ring-2 focus:ring-black/10"
+          />
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function QuadrantCard({
+  quadrant,
+  items,
+  dateKey,
+  reload,
+}: {
+  quadrant: (typeof QUADRANTS)[number];
+  items: DailyData["items"];
+  dateKey: string;
+  reload: () => Promise<void>;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [title, setTitle] = useState("");
+  const [minutes, setMinutes] = useState(30);
+
+  const submit = async () => {
+    if (!title.trim()) return;
+    await api.createDailyItem(dateKey, {
+      title: title.trim(),
+      quadrant: quadrant.id,
+      minutes,
+      priority: quadrant.priority,
+      schedule_enabled: quadrant.schedule,
+    });
+    setTitle("");
+    setMinutes(30);
+    setAdding(false);
+    await reload();
+  };
+
+  return (
+    <section className={`rounded-2xl border p-4 shadow-sm ${quadrant.tone}`}>
+      <div className="mb-3">
+        <div className="flex items-center gap-2">
+          <span className="h-3 w-1 rounded-full" style={{ background: quadrant.dot }} />
+          <h2 className="text-[15px] font-bold text-fg">{quadrant.title}</h2>
+        </div>
+        <div className="mt-1 text-[10.5px] font-semibold uppercase tracking-wide text-fg-muted">{quadrant.subtitle}</div>
+        <p className="mt-1 text-[11px] text-fg-muted">{quadrant.helper}</p>
+      </div>
+
+      <div className="space-y-2">
+        {items.map((item) => (
+          <div key={item.id} className="rounded-xl border border-black/[0.06] bg-white/90 p-3">
+            <div className="flex items-start gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  await api.completeDailyItem(item.id);
+                  await reload();
+                }}
+                className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-black/15 text-fg-muted hover:bg-emerald-50 hover:text-emerald-700"
+                aria-label="Oznacz jako wykonane"
+              >
+                <Check size={13} />
+              </button>
+              <div className="min-w-0 flex-1">
+                <div className="text-[12.5px] font-semibold leading-snug text-fg">{item.title}</div>
+                <div className="mt-1 flex flex-wrap gap-1.5 text-[9.5px] font-medium text-fg-muted">
+                  <span className="rounded-full bg-sunk px-2 py-0.5">{formatDuration(item.minutes)}</span>
+                  {item.schedule_enabled && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">Planner</span>}
+                  {item.carried && (
+                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">
+                      przeniesione {item.carry_days}d
+                    </span>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  await api.cancelDailyItem(item.id);
+                  await reload();
+                }}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-fg-subtle hover:bg-red-50 hover:text-red-600"
+                aria-label="Usuń"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {adding ? (
+        <div className="mt-3 rounded-xl border border-black/[0.08] bg-white p-3">
+          <input
+            autoFocus
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void submit();
+              if (e.key === "Escape") setAdding(false);
+            }}
+            placeholder="Co trzeba zrobić?"
+            className="w-full border-0 bg-transparent text-[12.5px] font-medium outline-none"
+          />
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <label className="flex items-center gap-2 text-[10px] font-medium text-fg-muted">
+              <Clock3 size={13} />
+              <select
+                value={minutes}
+                onChange={(e) => setMinutes(Number(e.target.value))}
+                className="rounded-lg border bg-white px-2 py-1"
+              >
+                {[15, 30, 45, 60, 90, 120].map((value) => (
+                  <option key={value} value={value}>{value} min</option>
+                ))}
+              </select>
+            </label>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setAdding(false)} className="rounded-lg px-2.5 py-1.5 text-[10.5px] font-semibold text-fg-muted">Anuluj</button>
+              <button type="button" onClick={() => void submit()} className="rounded-lg bg-primary px-3 py-1.5 text-[10.5px] font-semibold text-white">Dodaj</button>
+            </div>
+          </div>
+          <p className="mt-2 text-[9.5px] text-fg-subtle">
+            {quadrant.schedule
+              ? "To zadanie automatycznie trafi też do Plannera."
+              : "Domyślnie nie zajmuje miejsca w kalendarzu."}
+          </p>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setAdding(true)}
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-black/15 bg-white/50 py-2.5 text-[11px] font-semibold text-fg-muted hover:bg-white"
+        >
+          <CirclePlus size={14} /> Dodaj
+        </button>
+      )}
+    </section>
+  );
+}
+
+function ReviewView({
+  data,
+  saveReview,
+}: {
+  data: DailyData;
+  saveReview: (review: DailyReview) => Promise<void>;
+}) {
+  const filled = REVIEW_FIELDS.filter((field) => data.review[field.key].trim()).length;
+
+  return (
+    <div className="space-y-5">
+      <section className="rounded-2xl border bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-fg-muted">🌙 Koniec dnia</div>
+            <h2 className="mt-1 font-serif text-[22px] font-bold">Zamknij dzień, nie oceniaj siebie.</h2>
+          </div>
+          <span className="rounded-full bg-sunk px-3 py-1.5 text-[10.5px] font-semibold text-fg-muted">
+            {filled}/6 odpowiedzi
+          </span>
+        </div>
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-3">
+          <MiniFact label="Wykonane bloki" value={`${data.summary.completed_blocks}/${data.summary.total_blocks}`} />
+          <MiniFact label="Przechodzi dalej" value={String(data.summary.carry_over)} />
+          <MiniFact label="Plan na rano" value={data.plan.first_step ? "gotowy" : "brak"} />
+        </div>
+      </section>
+
+      {data.summary.carry_over > 0 && (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
+          <div className="flex items-start gap-3">
+            <Lightbulb size={16} className="mt-0.5 shrink-0 text-amber-700" />
+            <p className="text-[12px] leading-relaxed text-amber-900">
+              {data.summary.carry_over} {data.summary.carry_over === 1 ? "zadanie przechodzi" : "zadania przechodzą"} na kolejny dzień.
+              To dobry kontekst do odpowiedzi „co zrobiłbym inaczej?” — bez automatycznego pisania refleksji za Ciebie.
+            </p>
+          </div>
+        </section>
+      )}
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        {REVIEW_FIELDS.map((field) => (
+          <ReviewCard
+            key={field.key}
+            field={field}
+            value={data.review[field.key]}
+            review={data.review}
+            saveReview={saveReview}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ReviewCard({
+  field,
+  value,
+  review,
+  saveReview,
+}: {
+  field: (typeof REVIEW_FIELDS)[number];
+  value: string;
+  review: DailyReview;
+  saveReview: (review: DailyReview) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => setDraft(value), [value]);
+
+  return (
+    <section className="rounded-2xl border bg-white p-4 shadow-sm">
+      <div className="mb-2 flex items-start gap-2">
+        <span className="text-lg">{field.icon}</span>
+        <h3 className="pt-0.5 text-[13px] font-bold text-fg">{field.label}</h3>
+      </div>
+      <textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => void saveReview({ ...review, [field.key]: draft })}
+        rows={5}
+        placeholder={field.placeholder}
+        className="w-full resize-none rounded-xl border bg-sunk/25 px-3 py-2.5 text-[12.5px] leading-relaxed outline-none focus:ring-2 focus:ring-black/10"
+      />
+    </section>
+  );
+}
+
+function MiniFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-sunk/55 px-3 py-2.5">
+      <div className="tabular text-[15px] font-bold text-fg">{value}</div>
+      <div className="mt-0.5 text-[9.5px] font-medium text-fg-muted">{label}</div>
+    </div>
+  );
+}
