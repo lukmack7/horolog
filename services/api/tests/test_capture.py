@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from horolog.capture import IntentDraft, capture, to_payload
+from horolog.capture import IntentDraft, capture, capture_daily_actions, to_payload
 from horolog.domain.intent import IntentKind, Priority
 from horolog.llm import ExtractionFailed, strict_schema
 
@@ -181,3 +181,38 @@ async def test_habit_shape_survives_the_round_trip() -> None:
     assert payload["max_per_day"] == 1
     assert payload["min_chunk_minutes"] == payload["max_chunk_minutes"] == 60
     assert (payload["window_start_min"], payload["window_end_min"]) == (600, 960)
+
+
+
+@pytest.mark.asyncio
+async def test_daily_capture_keeps_context_meeting_as_confirmation_suggestion() -> None:
+    provider = ScriptedProvider(
+        {
+            "actions": [
+                {
+                    "title": "Przeanalizować odpowiedzi od Vafo i przygotować się do spotkania",
+                    "day_offset": 0,
+                    "minutes": 30,
+                }
+            ],
+            "meeting_suggestions": [
+                {
+                    "title": "Spotkanie z Anną z AZAN",
+                    "day_offset": 1,
+                    "minutes": None,
+                    "preferred_start_min": None,
+                }
+            ],
+        }
+    )
+
+    result = await capture_daily_actions(
+        "przeanalizować odpowiedzi od Vafo i przygotować się na spotkanie jutro z Anną z AZAN",
+        "2026-10-06",
+        provider,
+    )
+
+    assert len(result.actions) == 1
+    assert result.actions[0].day_offset == 0
+    assert len(result.meeting_suggestions) == 1
+    assert result.meeting_suggestions[0].day_offset == 1
