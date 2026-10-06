@@ -161,6 +161,24 @@ class DailyPlanItemRow(Base):
     )
 
 
+class DailyItemDecisionRow(Base):
+    """Temporary rollover decisions without mutating an item's original date.
+
+    Keeping the original DailyPlanItemRow.plan_date intact preserves history.
+    This row only records that the user consciously deferred an item or already
+    confirmed that a stale item still matters on a particular day.
+    """
+
+    __tablename__ = "daily_item_decisions"
+
+    item_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    defer_until: Mapped[str | None] = mapped_column(String(10), default=None)
+    acknowledged_date: Mapped[str | None] = mapped_column(String(10), default=None)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
 class DailyReviewRow(Base):
     """The six end-of-day reflection prompts, one editable row per date."""
 
