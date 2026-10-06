@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useCallback, useMemo, useEffect } from "react"
+import React, { useState, useCallback, useMemo, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -91,7 +91,7 @@ export function EventManager({
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
-  const [draggedEvent, setDraggedEvent] = useState<Event | null>(null)
+  const draggedEventRef = useRef<Event | null>(null)
   const defaultColor = colors[0]?.value ?? "blue"
   const defaultCategory = categories[0] ?? "Meeting"
   const [newEvent, setNewEvent] = useState<Partial<Event>>({
@@ -195,18 +195,20 @@ export function EventManager({
   )
 
   const handleDragStart = useCallback((event: Event) => {
-    setDraggedEvent(event)
+    // Keep native HTML5 drag stable. Updating React state during dragstart can
+    // re-render the draggable node and cancel the browser drag operation.
+    draggedEventRef.current = event
   }, [])
 
   const handleDragEnd = useCallback(() => {
-    setDraggedEvent(null)
+    draggedEventRef.current = null
   }, [])
 
   const handleDrop = useCallback(
     (date: Date, hour?: number, eventId?: string) => {
       const source =
         (eventId ? events.find((event) => event.id === eventId) : undefined) ??
-        draggedEvent
+        draggedEventRef.current
       if (!source) return
 
       const duration = source.endTime.getTime() - source.startTime.getTime()
@@ -232,9 +234,9 @@ export function EventManager({
         startTime: newStartTime,
         endTime: newEndTime,
       })
-      setDraggedEvent(null)
+      draggedEventRef.current = null
     },
-    [draggedEvent, events, onEventUpdate],
+    [events, onEventUpdate],
   )
 
   const navigateDate = useCallback(
