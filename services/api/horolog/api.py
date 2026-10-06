@@ -267,6 +267,11 @@ class CompletedBlockIn(BaseModel):
     end: LocalDateTime
 
 
+class MoveIntentIn(BaseModel):
+    start: LocalDateTime
+    end: LocalDateTime
+
+
 class BusyIn(BaseModel):
     label: str = ""
     start: LocalDateTime
@@ -1267,6 +1272,125 @@ async def uncomplete_intent(intent_id: str, db: AsyncSession = Depends(session))
     await db.commit()
     await _replan(db)
     return intent.model_dump(mode="json")
+
+
+@app.post("/api/intents/{intent_id}/move")
+async def move_intent(
+    intent_id: str,
+    body: MoveIntentIn,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    """Move a one-shot task to a chosen Planner day/time.
+
+    Dragging is an explicit user decision, so it must not silently land on a
+    different day. The task is re-solved with the chosen start as the earliest
+    legal point and a same-day execution window. If the complete task cannot
+    fit on that day, the original intent is restored and the API returns 409.
+    """
+    row = await db.get(IntentRow, intent_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"no intent {intent_id!r}")
+
+    intent = Intent.model_validate(row.payload)
+    if intent.period_days is not None:
+        raise HTTPException(
+            status_code=422,
+            detail="Recurring routines are not draggable as whole tasks yet.",
+        )
+    if intent.kind != IntentKind.TASK:
+        raise HTTPException(
+            status_code=422,
+            detail="Only one-shot tasks can be moved by drag and drop.",
+        )
+    if intent.completed_at is not None:
+        raise HTTPException(status_code=422, detail="Completed tasks cannot be moved.")
+    if body.end <= body.start:
+        raise HTTPException(status_code=422, detail="Move end must be after start.")
+
+    start = body.start.astimezone(settings().zone)
+    end = body.end.astimezone(settings().zone)
+    if start.date() < origin().date():
+        raise HTTPException(status_code=422, detail="A task cannot be moved into the past.")
+
+    original_payload = dict(row.payload)
+    base = origin()
+    target_day_start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+    target_day_end = target_day_start + timedelta(days=1)
+
+    start_min = start.hour * 60 + start.minute
+    dragged_minutes = max(SLOT_MINUTES, int((end - start).total_seconds() // 60))
+    required_window = max(
+        dragged_minutes,
+        intent.minutes_per_period,
+        intent.max_chunk_minutes,
+    )
+    window_end = min(24 * 60, start_min + required_window)
+    if window_end - start_min < intent.min_chunk_minutes:
+        raise HTTPException(
+            status_code=409,
+            detail="There is not enough time left on that day for this task.",
+        )
+
+    moved = intent.model_copy(
+        update={
+            "earliest_slot": to_slot(start, base),
+            # Keep the deadline marker on the selected day for scoring/reporting.
+            "due_slot": to_slot(target_day_end, base) - 1,
+            "preferred_start_min": start_min,
+            "daily_windows": [
+                DailyWindow(start_min=start_min, end_min=window_end)
+            ],
+            "allowed_weekdays": [],
+        }
+    )
+    row.payload = moved.model_dump(mode="json")
+    await db.commit()
+
+    new_plan = await _replan(db)
+    target_blocks = [block for block in new_plan.blocks if block.intent_id == intent_id]
+    target_date = start.date()
+    all_on_target_day = bool(target_blocks) and all(
+        from_slot(block.start_slot, base).astimezone(settings().zone).date() == target_date
+        for block in target_blocks
+    )
+    placed_slots = sum(
+        block.end_slot - block.start_slot for block in target_blocks
+    )
+    required_slots = minutes_to_slots(intent.minutes_per_period)
+
+    if not all_on_target_day or placed_slots < required_slots:
+        row.payload = original_payload
+        await db.commit()
+        await _replan(db)
+        raise HTTPException(
+            status_code=409,
+            detail="This task does not fully fit on the selected day. Choose another day or free more time.",
+        )
+
+    # Daily is a lens over the same task. If it was already classified there,
+    # move that classification with the task rather than leaving stale history
+    # on the old planning date.
+    linked_daily = (
+        await db.execute(
+            select(DailyPlanItemRow).where(
+                DailyPlanItemRow.intent_id == intent_id,
+                DailyPlanItemRow.completed_at.is_(None),
+                DailyPlanItemRow.cancelled_at.is_(None),
+            )
+        )
+    ).scalars().all()
+    target_key = target_date.isoformat()
+    for daily_row in linked_daily:
+        daily_row.plan_date = target_key
+    if linked_daily:
+        await db.commit()
+
+    return {
+        "intent_id": intent_id,
+        "date": target_key,
+        "start": from_slot(target_blocks[0].start_slot, base).isoformat(),
+        "blocks": len(target_blocks),
+    }
 
 
 @app.put("/api/intents/{intent_id}")
