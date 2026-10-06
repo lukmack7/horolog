@@ -221,6 +221,11 @@ export function Shell({
               </button>
             </div>
 
+            <div className="mb-2 grid grid-cols-2 gap-1 rounded-xl bg-secondary p-1">
+              <button type="button" onClick={() => setLanguage("pl")} className={`rounded-lg px-3 py-2 text-[12px] font-semibold ${language === "pl" ? "bg-white text-foreground shadow-sm" : "text-muted-foreground"}`}>Polski</button>
+              <button type="button" onClick={() => setLanguage("en")} className={`rounded-lg px-3 py-2 text-[12px] font-semibold ${language === "en" ? "bg-white text-foreground shadow-sm" : "text-muted-foreground"}`}>English</button>
+            </div>
+
             <nav
               className="overflow-hidden rounded-2xl border border-black/[0.07]"
               style={{ backgroundColor: "#ffffff" }}
