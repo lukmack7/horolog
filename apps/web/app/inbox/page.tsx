@@ -22,7 +22,7 @@ import { Trash2, AlertCircle, Clock, CheckCircle, Circle, Sparkles, Pencil } fro
  *  Displays all scheduling intents, their placed time progress bars, and unmet demand callouts.
  */
 export default function Inbox() {
-  useLanguage();
+  const { t, language } = useLanguage();
   const [intents, setIntents] = useState<Intent[]>([]);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -132,7 +132,7 @@ export default function Inbox() {
       <main className="mx-auto max-w-[920px] px-6 py-8">
         <header className="mb-8 flex flex-wrap items-baseline justify-between gap-4">
           <div>
-            <h1 className="text-[28px] font-bold text-fg">Task Inbox</h1>
+            <h1 className="text-[28px] font-bold text-fg">{t("Task Inbox")}</h1>
             <p className="mt-1 text-[13.5px] text-fg-muted">
               {plan ? (
                 <>
@@ -163,7 +163,7 @@ export default function Inbox() {
             <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary text-indigo-600">
               <Sparkles size={22} />
             </div>
-            <p className="text-[16px] font-semibold text-fg">Nothing scheduled yet</p>
+            <p className="text-[16px] font-semibold text-fg">{t("Nothing scheduled yet")}</p>
             <p className="mx-auto mt-1.5 max-w-sm text-[13.5px] leading-relaxed text-fg-muted">
               Press <kbd className="tabular rounded-md border border-black/5 bg-sunk px-2 py-0.5 text-[11.5px] font-mono">⌘K</kbd> and describe what you need time for - &quot;write the Q3 doc, 3 hours by Friday&quot;.
             </p>
@@ -287,7 +287,7 @@ export default function Inbox() {
 
                     <div className="tabular mt-1.5 flex flex-wrap items-center gap-2 text-[12.5px] text-fg-muted">
                       {intent.completed_at ? (
-                        <span className="font-medium text-accent">Done</span>
+                        <span className="font-medium text-accent">{t("Done")}</span>
                       ) : next ? (
                         <>
                           <span className="inline-flex items-center gap-1 font-medium text-fg">
@@ -304,7 +304,7 @@ export default function Inbox() {
                           <span>{formatDuration(scheduled)} of {formatDuration(intent.minutes_per_period)}</span>
                         </>
                       ) : (
-                        <span className="font-semibold text-danger">Not placed</span>
+                        <span className="font-semibold text-danger">{t("Not placed")}</span>
                       )}
                     </div>
 
