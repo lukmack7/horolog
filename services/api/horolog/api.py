@@ -1199,6 +1199,70 @@ class AssistantChatIn(BaseModel):
     context_page: str | None = Field(default=None, max_length=100)
 
 
+async def _assistant_context(db: AsyncSession, context_page: str | None) -> dict[str, Any]:
+    rendered = await get_plan(db)
+    rows = (await db.execute(select(IntentRow))).scalars().all()
+    base = origin()
+
+    scheduled: dict[str, list[dict[str, Any]]] = {}
+    for block in rendered.blocks:
+        scheduled.setdefault(block.intent_id, []).append({
+            "start": block.start.isoformat(),
+            "end": block.end.isoformat(),
+            "completed": block.completed,
+        })
+
+    active: list[dict[str, Any]] = []
+    for row in rows:
+        intent = Intent.model_validate(row.payload)
+        if intent.completed_at is not None:
+            continue
+        active.append({
+            "id": intent.id,
+            "title": intent.title,
+            "kind": intent.kind.value,
+            "priority": int(intent.priority),
+            "minutes": intent.minutes_per_period,
+            "scheduled": scheduled.get(intent.id, []),
+        })
+
+    return {
+        "page": context_page,
+        "today": base.date().isoformat(),
+        "workday_start_min": settings().workday_start_min,
+        "workday_end_min": settings().workday_end_min,
+        "active_items": active[:80],
+        "unmet": [
+            {
+                "intent_id": item.intent_id,
+                "title": item.title,
+                "shortfall_minutes": item.shortfall_minutes,
+            }
+            for item in rendered.unmet
+        ],
+    }
+
+
+@app.post("/api/assistant/chat")
+async def assistant_chat(
+    body: AssistantChatIn,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    try:
+        decision = await converse(
+            body.messages,
+            await _assistant_context(db, body.context_page),
+            pending_actions=body.pending_actions,
+        )
+    except ExtractionFailed as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (ProviderError, httpx.HTTPError, RuntimeError) as exc:
+        raise HTTPException(status_code=503, detail=f"language model unreachable: {exc}") from exc
+    return decision.model_dump(mode="json")
+
+
+
+
 class AssistantExecuteIn(BaseModel):
     actions: list[AssistantAction] = Field(min_length=1, max_length=8)
 
