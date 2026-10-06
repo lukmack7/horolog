@@ -25,7 +25,7 @@ function localDateKey(date: Date): string {
  *  what's in progress and what's next. Complements Planner (week grid) and
  *  Analytics (aggregate stats) rather than duplicating either. */
 export default function TimePage() {
-  useLanguage();
+  const { t, language } = useLanguage();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [daily, setDaily] = useState<DailyData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -80,13 +80,13 @@ export default function TimePage() {
       <main className="mx-auto max-w-[1440px] overflow-x-hidden px-4 py-5 sm:px-6 sm:py-8">
         <header className="mb-7 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-[28px] font-bold text-fg">Time</h1>
+            <h1 className="text-[28px] font-bold text-fg">{t("Time")}</h1>
             <p className="mt-1 text-[13.5px] text-fg-muted">
-              {now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}
+              {now.toLocaleDateString(language === "pl" ? "pl-PL" : "en-US", { weekday: "long", month: "long", day: "numeric" })}
             </p>
           </div>
           <div className="tabular text-[32px] font-semibold leading-none text-fg">
-            {now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}
+            {now.toLocaleTimeString(language === "pl" ? "pl-PL" : "en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" })}
           </div>
         </header>
 
@@ -105,7 +105,7 @@ export default function TimePage() {
                     <Sunrise size={18} />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-amber-700">Start here</div>
+                    <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-amber-700">{t("Start here")}</div>
                     <div className="mt-1 text-[14px] font-semibold leading-relaxed text-fg">{daily.plan.first_step}</div>
                     <Link href="/daily" className="mt-2 inline-flex text-[10.5px] font-semibold text-amber-800 hover:underline">
                       Otwórz Daily →
@@ -194,9 +194,9 @@ function StatusCard({
               <span>{KIND_LABEL[block.kind]}</span>
               <span>·</span>
               <span>
-                {new Date(block.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                {new Date(block.start).toLocaleTimeString(language === "pl" ? "pl-PL" : "en-US", { hour: "numeric", minute: "2-digit" })}
                 <ArrowRight size={10} className="mx-1 inline align-middle" />
-                {new Date(block.end).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                {new Date(block.end).toLocaleTimeString(language === "pl" ? "pl-PL" : "en-US", { hour: "numeric", minute: "2-digit" })}
               </span>
               {untilNow && (
                 <>
