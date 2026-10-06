@@ -158,7 +158,7 @@ function buildDerived(plan: Plan): Derived {
 }
 
 export default function AnalyticsPage() {
-  useLanguage();
+  const { t, language } = useLanguage();
   const [data, setData] = useState<Analytics | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [view, setView] = useState<AnalyticsView>("overview");
@@ -660,8 +660,8 @@ function ExecutiveView({ data, derived }: { data: Analytics; derived: Derived })
 
       <section className="rounded-card border border-amber-200/70 bg-amber-50/45 p-4 shadow-sm sm:p-5">
         <div className="mb-4">
-          <h2 className="text-[17px] font-bold text-fg">This plan at a glance</h2>
-          <p className="mt-0.5 text-[12.5px] text-fg-muted">Decision-oriented signals from the current planning horizon.</p>
+          <h2 className="text-[17px] font-bold text-fg">{t("This plan at a glance")}</h2>
+          <p className="mt-0.5 text-[12.5px] text-fg-muted">{t("Decision-oriented signals from the current planning horizon.")}</p>
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
           {insights.map((item) => (
@@ -966,7 +966,7 @@ function InsightStrip({ data, derived, plan }: { data: Analytics; derived: Deriv
     <section className="rounded-card border border-indigo-100 bg-indigo-50/35 p-4 shadow-sm sm:p-5">
       <div className="mb-3 flex items-center gap-2">
         <Lightbulb size={16} className="text-indigo-600" />
-        <h2 className="text-[15px] font-bold text-fg">Key insights</h2>
+        <h2 className="text-[15px] font-bold text-fg">{t("Key insights")}</h2>
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
         {insights.map((insight) => (
