@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useCallback, useMemo } from "react"
+import React, { useState, useCallback, useMemo, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -308,39 +308,33 @@ export function EventManager({
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          {/* Mobile: Select dropdown */}
-          <div className="sm:hidden">
-            <Select value={view} onValueChange={(value: any) => setView(value)}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="month">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4" />
-                    Month View
-                  </div>
-                </SelectItem>
-                <SelectItem value="week">
-                  <div className="flex items-center gap-2">
-                    <Grid3x3 className="h-4 w-4" />
-                    Week View
-                  </div>
-                </SelectItem>
-                <SelectItem value="day">
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4" />
-                    Day View
-                  </div>
-                </SelectItem>
-                <SelectItem value="list">
-                  <div className="flex items-center gap-2">
-                    <List className="h-4 w-4" />
-                    List View
-                  </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
+          {/* Mobile: direct view switcher. A native-width select used to open
+              over the search/filter row on narrow screens, so all four views
+              are now one tap away without an overlay. */}
+          <div className="grid grid-cols-4 gap-1 rounded-xl border bg-background p-1 sm:hidden">
+            {[
+              { value: "month", label: "Month", icon: Calendar },
+              { value: "week", label: "Week", icon: Grid3x3 },
+              { value: "day", label: "Day", icon: Clock },
+              { value: "list", label: "List", icon: List },
+            ].map((item) => {
+              const Icon = item.icon
+              const active = view === item.value
+              return (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => setView(item.value as "month" | "week" | "day" | "list")}
+                  className={cn(
+                    "flex min-h-10 items-center justify-center gap-1 rounded-lg px-1.5 text-[11px] font-semibold transition-colors",
+                    active ? "bg-secondary text-foreground shadow-sm" : "text-muted-foreground",
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  <span>{item.label}</span>
+                </button>
+              )
+            })}
           </div>
 
           {/* Desktop: Button group */}
@@ -388,7 +382,7 @@ export function EventManager({
               setIsCreating(true)
               setIsDialogOpen(true)
             }}
-            className="w-full sm:w-auto"
+            className="h-10 w-full rounded-xl sm:w-auto"
           >
             <Plus className="mr-2 h-4 w-4" />
             New Event
@@ -1241,8 +1235,13 @@ function MonthView({
   onDrop: (date: Date) => void
   getColorClasses: (color: string) => { bg: string; text: string }
 }) {
+  const [selectedDay, setSelectedDay] = useState(new Date(currentDate))
+
+  useEffect(() => {
+    setSelectedDay(new Date(currentDate))
+  }, [currentDate])
+
   const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
-  const lastDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
   const startDate = new Date(firstDayOfMonth)
   const mondayOffset = (startDate.getDay() + 6) % 7
   startDate.setDate(startDate.getDate() - mondayOffset)
@@ -1266,62 +1265,172 @@ function MonthView({
     })
   }
 
-  return (
-    <Card className="overflow-hidden bg-white">
-      <div className="grid grid-cols-7 border-b">
-        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
-          <div key={day} className="border-r p-2 text-center text-xs font-medium last:border-r-0 sm:text-sm">
-            <span className="hidden sm:inline">{day}</span>
-            <span className="sm:hidden">{day.charAt(0)}</span>
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-7">
-        {days.map((day, index) => {
-          const dayEvents = getEventsForDay(day)
-          const isCurrentMonth = day.getMonth() === currentDate.getMonth()
-          const isToday = day.toDateString() === new Date().toDateString()
+  const selectedEvents = getEventsForDay(selectedDay).sort(
+    (a, b) => a.startTime.getTime() - b.startTime.getTime(),
+  )
 
-          return (
-            <div
-              key={index}
-              className={cn(
-                "min-h-20 border-b border-r p-1 transition-colors last:border-r-0 sm:min-h-24 sm:p-2",
-                !isCurrentMonth && "bg-muted/30",
-                "hover:bg-accent/50",
-              )}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={() => onDrop(day)}
-            >
+  return (
+    <>
+      {/* Mobile month is intentionally an overview, not a squeezed desktop
+          calendar. Tap a day to see the readable agenda directly below. */}
+      <div className="space-y-3 sm:hidden">
+        <Card className="overflow-hidden bg-white">
+          <div className="grid grid-cols-7 border-b bg-muted/20">
+            {["M", "T", "W", "T", "F", "S", "S"].map((day, index) => (
               <div
-                className={cn(
-                  "mb-1 flex h-5 w-5 items-center justify-center rounded-full text-xs sm:h-6 sm:w-6 sm:text-sm",
-                  isToday && "bg-primary text-primary-foreground font-semibold",
-                )}
+                key={`${day}-${index}`}
+                className="py-2 text-center text-[10px] font-semibold text-muted-foreground"
               >
-                {day.getDate()}
+                {day}
               </div>
-              <div className="space-y-1">
-                {dayEvents.slice(0, 3).map((event) => (
-                  <EventCard
-                    key={event.id}
-                    event={event}
-                    onEventClick={onEventClick}
-                    onDragStart={onDragStart}
-                    onDragEnd={onDragEnd}
-                    getColorClasses={getColorClasses}
-                    variant="compact"
-                  />
-                ))}
-                {dayEvents.length > 3 && (
-                  <div className="text-[10px] text-muted-foreground sm:text-xs">+{dayEvents.length - 3} more</div>
-                )}
-              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7">
+            {days.map((day, index) => {
+              const dayEvents = getEventsForDay(day)
+              const isCurrentMonth = day.getMonth() === currentDate.getMonth()
+              const isToday = day.toDateString() === new Date().toDateString()
+              const isSelected = day.toDateString() === selectedDay.toDateString()
+
+              return (
+                <button
+                  type="button"
+                  key={index}
+                  onClick={() => setSelectedDay(new Date(day))}
+                  className={cn(
+                    "min-h-14 border-b border-r px-1 py-1.5 text-left last:border-r-0",
+                    !isCurrentMonth && "bg-muted/20 text-muted-foreground/50",
+                    isSelected && "bg-secondary",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "mx-auto flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-medium",
+                      isToday && "bg-primary font-semibold text-primary-foreground",
+                      isSelected && !isToday && "ring-1 ring-border",
+                    )}
+                  >
+                    {day.getDate()}
+                  </span>
+                  <span className="mt-1 flex h-2 items-center justify-center gap-0.5">
+                    {dayEvents.slice(0, 3).map((event) => (
+                      <span
+                        key={event.id}
+                        className="h-1.5 w-1.5 rounded-full"
+                        style={{
+                          background: event.priority
+                            ? RULE[event.priority]
+                            : undefined,
+                        }}
+                      />
+                    ))}
+                    {dayEvents.length > 3 && (
+                      <span className="text-[8px] leading-none text-muted-foreground">+</span>
+                    )}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </Card>
+
+        <div className="rounded-xl border bg-white p-3">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Selected day
+              </p>
+              <h3 className="text-sm font-semibold text-foreground">
+                {selectedDay.toLocaleDateString("en-US", {
+                  weekday: "long",
+                  month: "short",
+                  day: "numeric",
+                })}
+              </h3>
             </div>
-          )
-        })}
+            <span className="rounded-full bg-secondary px-2 py-1 text-[10px] font-semibold text-muted-foreground">
+              {selectedEvents.length} {selectedEvents.length === 1 ? "event" : "events"}
+            </span>
+          </div>
+
+          {selectedEvents.length > 0 ? (
+            <div className="space-y-2">
+              {selectedEvents.map((event) => (
+                <EventCard
+                  key={event.id}
+                  event={event}
+                  onEventClick={onEventClick}
+                  onDragStart={onDragStart}
+                  onDragEnd={onDragEnd}
+                  getColorClasses={getColorClasses}
+                  variant="detailed"
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg bg-muted/30 px-3 py-6 text-center text-xs text-muted-foreground">
+              Nothing scheduled for this day.
+            </div>
+          )}
+        </div>
       </div>
-    </Card>
+
+      {/* Desktop month view remains unchanged in density and behaviour. */}
+      <Card className="hidden overflow-hidden bg-white sm:block">
+        <div className="grid grid-cols-7 border-b">
+          {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
+            <div key={day} className="border-r p-2 text-center text-sm font-medium last:border-r-0">
+              {day}
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7">
+          {days.map((day, index) => {
+            const dayEvents = getEventsForDay(day)
+            const isCurrentMonth = day.getMonth() === currentDate.getMonth()
+            const isToday = day.toDateString() === new Date().toDateString()
+
+            return (
+              <div
+                key={index}
+                className={cn(
+                  "min-h-24 border-b border-r p-2 transition-colors last:border-r-0",
+                  !isCurrentMonth && "bg-muted/30",
+                  "hover:bg-accent/50",
+                )}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => onDrop(day)}
+              >
+                <div
+                  className={cn(
+                    "mb-1 flex h-6 w-6 items-center justify-center rounded-full text-sm",
+                    isToday && "bg-primary font-semibold text-primary-foreground",
+                  )}
+                >
+                  {day.getDate()}
+                </div>
+                <div className="space-y-1">
+                  {dayEvents.slice(0, 3).map((event) => (
+                    <EventCard
+                      key={event.id}
+                      event={event}
+                      onEventClick={onEventClick}
+                      onDragStart={onDragStart}
+                      onDragEnd={onDragEnd}
+                      getColorClasses={getColorClasses}
+                      variant="compact"
+                    />
+                  ))}
+                  {dayEvents.length > 3 && (
+                    <div className="text-xs text-muted-foreground">+{dayEvents.length - 3} more</div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </Card>
+    </>
   )
 }
 
@@ -1355,6 +1464,18 @@ function WeekView({
 
   const hours = Array.from({ length: 24 }, (_, i) => i)
 
+  const getEventsForDay = (date: Date) =>
+    events
+      .filter((event) => {
+        const eventDate = new Date(event.startTime)
+        return (
+          eventDate.getDate() === date.getDate() &&
+          eventDate.getMonth() === date.getMonth() &&
+          eventDate.getFullYear() === date.getFullYear()
+        )
+      })
+      .sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
+
   const getEventsForDayAndHour = (date: Date, hour: number) => {
     return events.filter((event) => {
       const eventDate = new Date(event.startTime)
@@ -1369,59 +1490,113 @@ function WeekView({
   }
 
   return (
-    <Card className="overflow-auto bg-white">
-      <div className="grid grid-cols-8 border-b">
-        <div className="border-r p-2 text-center text-xs font-medium sm:text-sm">Time</div>
-        {weekDays.map((day) => (
-          <div
-            key={day.toISOString()}
-            className="border-r p-2 text-center text-xs font-medium last:border-r-0 sm:text-sm"
-          >
-            <div className="hidden sm:block">{day.toLocaleDateString("en-US", { weekday: "short" })}</div>
-            <div className="sm:hidden">{day.toLocaleDateString("en-US", { weekday: "narrow" })}</div>
-            <div className="text-[10px] text-muted-foreground sm:text-xs">
-              {day.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-8">
-        {hours.map((hour) => (
-          <React.Fragment key={`row-${hour}`}>
-            <div
-              className="border-b border-r p-1 text-[10px] text-muted-foreground sm:p-2 sm:text-xs"
-            >
-              {hour.toString().padStart(2, "0")}:00
-            </div>
-            {weekDays.map((day) => {
-              const dayEvents = getEventsForDayAndHour(day, hour)
-              return (
-                <div
-                  key={`${day.toISOString()}-${hour}`}
-                  className="min-h-12 border-b border-r p-0.5 transition-colors hover:bg-accent/50 last:border-r-0 sm:min-h-16 sm:p-1"
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => onDrop(day, hour)}
-                >
-                  <div className="space-y-1">
-                    {dayEvents.map((event) => (
-                      <EventCard
-                        key={event.id}
-                        event={event}
-                        onEventClick={onEventClick}
-                        onDragStart={onDragStart}
-                        onDragEnd={onDragEnd}
-                        getColorClasses={getColorClasses}
-                        variant="default"
-                      />
-                    ))}
+    <>
+      {/* A seven-column hourly grid is unreadable on a phone. Mobile week is
+          therefore a chronological agenda grouped by day. */}
+      <div className="space-y-3 sm:hidden">
+        {weekDays.map((day) => {
+          const dayEvents = getEventsForDay(day)
+          const isToday = day.toDateString() === new Date().toDateString()
+          return (
+            <section key={day.toISOString()} className="rounded-xl border bg-white p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={cn(
+                      "flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold",
+                      isToday ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground",
+                    )}
+                  >
+                    {day.getDate()}
+                  </span>
+                  <div>
+                    <h3 className="text-sm font-semibold">
+                      {day.toLocaleDateString("en-US", { weekday: "long" })}
+                    </h3>
+                    <p className="text-[10px] text-muted-foreground">
+                      {day.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </p>
                   </div>
                 </div>
-              )
-            })}
-          </React.Fragment>
-        ))}
+                <span className="text-[10px] font-medium text-muted-foreground">
+                  {dayEvents.length || "No"} {dayEvents.length === 1 ? "event" : "events"}
+                </span>
+              </div>
+              {dayEvents.length > 0 ? (
+                <div className="space-y-2">
+                  {dayEvents.map((event) => (
+                    <EventCard
+                      key={event.id}
+                      event={event}
+                      onEventClick={onEventClick}
+                      onDragStart={onDragStart}
+                      onDragEnd={onDragEnd}
+                      getColorClasses={getColorClasses}
+                      variant="detailed"
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-lg bg-muted/20 px-3 py-3 text-center text-[11px] text-muted-foreground">
+                  Open
+                </div>
+              )}
+            </section>
+          )
+        })}
       </div>
-    </Card>
+
+      <Card className="hidden overflow-auto bg-white sm:block">
+        <div className="grid grid-cols-8 border-b">
+          <div className="border-r p-2 text-center text-sm font-medium">Time</div>
+          {weekDays.map((day) => (
+            <div
+              key={day.toISOString()}
+              className="border-r p-2 text-center text-sm font-medium last:border-r-0"
+            >
+              <div>{day.toLocaleDateString("en-US", { weekday: "short" })}</div>
+              <div className="text-xs text-muted-foreground">
+                {day.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-8">
+          {hours.map((hour) => (
+            <React.Fragment key={`row-${hour}`}>
+              <div className="border-b border-r p-2 text-xs text-muted-foreground">
+                {hour.toString().padStart(2, "0")}:00
+              </div>
+              {weekDays.map((day) => {
+                const dayEvents = getEventsForDayAndHour(day, hour)
+                return (
+                  <div
+                    key={`${day.toISOString()}-${hour}`}
+                    className="min-h-16 border-b border-r p-1 transition-colors hover:bg-accent/50 last:border-r-0"
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => onDrop(day, hour)}
+                  >
+                    <div className="space-y-1">
+                      {dayEvents.map((event) => (
+                        <EventCard
+                          key={event.id}
+                          event={event}
+                          onEventClick={onEventClick}
+                          onDragStart={onDragStart}
+                          onDragEnd={onDragEnd}
+                          getColorClasses={getColorClasses}
+                          variant="default"
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </React.Fragment>
+          ))}
+        </div>
+      </Card>
+    </>
   )
 }
 
