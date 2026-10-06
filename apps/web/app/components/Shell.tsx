@@ -19,14 +19,16 @@ import {
   MoreHorizontal,
   X,
   ChevronRight,
+  BookOpenCheck,
 } from "lucide-react";
 import { CommandBar } from "@/app/components/CommandBar";
 
 const NAV = [
   { href: "/time", label: "Time", icon: Clock },
   { href: "/planner", label: "Planner", icon: Calendar },
-  { href: "/inbox", label: "Task inbox", icon: Inbox },
+  { href: "/daily", label: "Daily", icon: BookOpenCheck },
   { href: "/habits", label: "Habits", icon: RotateCcw },
+  { href: "/inbox", label: "Task inbox", icon: Inbox },
   { href: "/meetings", label: "Meetings", icon: Users },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/connect", label: "Calendars", icon: Link2 },
