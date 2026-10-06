@@ -125,6 +125,10 @@ export interface DailyData {
   };
   items: DailyItem[];
   suggestions: DailySuggestion[];
+  yesterday: {
+    improve: string;
+    first_step: string;
+  };
   review: DailyReview;
   summary: {
     completed_blocks: number;
