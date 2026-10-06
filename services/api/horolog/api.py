@@ -1290,6 +1290,7 @@ async def _execute_assistant_action(
             "title": action.title,
             "date": action.date,
             "item_id": item["id"],
+            "intent_id": item.get("intent_id"),
         }
 
     if action.action == "create_meeting":
@@ -1310,6 +1311,12 @@ async def _execute_assistant_action(
     if action.action == "complete_task":
         if not action.intent_id:
             raise HTTPException(status_code=422, detail="complete_task needs intent_id")
+        row = await db.get(IntentRow, action.intent_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail=f"no intent {action.intent_id!r}")
+        current_intent = Intent.model_validate(row.payload)
+        if current_intent.kind != IntentKind.TASK or current_intent.period_days is not None:
+            raise HTTPException(status_code=422, detail="only one-shot tasks can be completed here")
         completed = await complete_intent(action.intent_id, db)
         return {
             "action": action.action,
@@ -1384,6 +1391,25 @@ async def assistant_execute(
     results = []
     for action in body.actions:
         results.append(await _execute_assistant_action(action, db))
+
+    # Report what actually landed in the authoritative plan, not merely what
+    # the proposal requested. This makes the assistant's confirmation factual.
+    rendered = await get_plan(db)
+    for result in results:
+        intent_id = result.get("intent_id")
+        if not intent_id:
+            continue
+        blocks = [
+            {
+                "start": block.start.isoformat(),
+                "end": block.end.isoformat(),
+            }
+            for block in rendered.blocks
+            if block.intent_id == intent_id
+        ]
+        if blocks:
+            result["scheduled"] = blocks
+
     return {"count": len(results), "results": results}
 
 
