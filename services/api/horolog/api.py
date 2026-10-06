@@ -30,6 +30,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from horolog import oauth
 from horolog.analytics import Analytics, analyse
+from horolog.assistant import AssistantAction, AssistantMessage, converse
 from horolog.capture import capture, capture_daily_actions, to_payload
 from horolog.db import (
     BusyRow,
@@ -1190,6 +1191,16 @@ async def create_intent(body: IntentIn, db: AsyncSession = Depends(session)) -> 
     await db.commit()
     await _replan(db)
     return intent.model_dump(mode="json")
+
+
+class AssistantChatIn(BaseModel):
+    messages: list[AssistantMessage] = Field(min_length=1, max_length=20)
+    pending_actions: list[AssistantAction] = Field(default_factory=list, max_length=8)
+    context_page: str | None = Field(default=None, max_length=100)
+
+
+class AssistantExecuteIn(BaseModel):
+    actions: list[AssistantAction] = Field(min_length=1, max_length=8)
 
 
 class CaptureIn(BaseModel):
