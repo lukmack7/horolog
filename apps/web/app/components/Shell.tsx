@@ -284,10 +284,10 @@ export function Shell({
       </div>
 
       <main id="main" className="min-w-0 flex-1 overflow-x-hidden pb-24 lg:overflow-visible lg:pb-0">{children}</main>
-      <CommandBar 
-        open={commandOpen} 
-        onClose={() => setCommandOpen(false)} 
-        onCaptured={() => setCommandOpen(false)} 
+      <CommandBar
+        open={commandOpen}
+        onClose={() => setCommandOpen(false)}
+        onCaptured={() => onPlanChange?.()}
       />
     </div>
   );
