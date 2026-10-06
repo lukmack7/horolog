@@ -8,19 +8,19 @@ import {
   PRIORITY_NAME,
   PRIORITY_TINT,
   api,
-  formatDuration,
+  formatCzas trwania,
   intentToEditPayload,
   minutesBetween,
   type Intent,
   type Plan,
-  type Priority,
+  type Priorytet,
 } from "@/app/lib/api";
 import { Trash2, AlertCircle, Clock, CheckCircle, Circle, Sparkles, Pencil } from "lucide-react";
 
-/** Ultra-Luxury Task Inbox View for Horolog.
+/** Ultra-Luxury Zadania View for Horolog.
  *  Displays all scheduling intents, their placed time progress bars, and unmet demand callouts.
  */
-export default function Inbox() {
+export default function Zadania() {
   const [intents, setIntents] = useState<Intent[]>([]);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +28,7 @@ export default function Inbox() {
   const [editing, setEditing] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editMinutes, setEditMinutes] = useState(60);
-  const [editPriority, setEditPriority] = useState<Priority>(3);
+  const [editPriorytet, setEditPriorytet] = useState<Priorytet>(3);
 
   const load = useCallback(async () => {
     try {
@@ -83,7 +83,7 @@ export default function Inbox() {
     }
   }
 
-  async function toggleComplete(intent: Intent) {
+  async function toggleWykonaj(intent: Intent) {
     setBusy(intent.id);
     try {
       if (intent.completed_at) {
@@ -103,7 +103,7 @@ export default function Inbox() {
     setEditing(intent.id);
     setEditTitle(intent.title);
     setEditMinutes(intent.minutes_per_period);
-    setEditPriority(intent.priority);
+    setEditPriorytet(intent.priority);
   }
 
   async function saveEdit(intent: Intent) {
@@ -114,7 +114,7 @@ export default function Inbox() {
         ...intentToEditPayload(intent, plan.origin),
         title: editTitle.trim() || intent.title,
         minutes_per_period: editMinutes,
-        priority: editPriority,
+        priority: editPriorytet,
       });
       setEditing(null);
       await load();
@@ -130,12 +130,12 @@ export default function Inbox() {
       <main className="mx-auto max-w-[920px] px-6 py-8">
         <header className="mb-8 flex flex-wrap items-baseline justify-between gap-4">
           <div>
-            <h1 className="text-[28px] font-bold text-fg">Task Inbox</h1>
+            <h1 className="text-[28px] font-bold text-fg">Zadania</h1>
             <p className="mt-1 text-[13.5px] text-fg-muted">
               {plan ? (
                 <>
                   {rows.length} {rows.length === 1 ? "intent" : "intents"} ·{" "}
-                  {formatDuration(rows.reduce((s, r) => s + r.scheduled, 0))} scheduled
+                  {formatCzas trwania(rows.reduce((s, r) => s + r.scheduled, 0))} scheduled
                   {!plan.complete && (
                     <span className="font-semibold text-danger">
                       {" "}
@@ -193,17 +193,17 @@ export default function Inbox() {
               className="group relative overflow-hidden rounded-card border border-black/[0.06] bg-surface p-4.5 shadow-sm transition-all duration-200 ease-spring hover:border-black/15 hover:shadow-md"
             >
               <div className="flex items-start gap-4">
-                {/* Left Priority Bar Indicator */}
+                {/* Left Priorytet Bar Indicator */}
                 <div
                   className="mt-1 h-10 w-1 shrink-0 rounded-full"
-                  style={{ background: PRIORITY_TINT[intent.priority as Priority] }}
+                  style={{ background: PRIORITY_TINT[intent.priority as Priorytet] }}
                   aria-hidden
                 />
 
                 {intent.period_days == null ? (
                   <button
                     type="button"
-                    onClick={() => toggleComplete(intent)}
+                    onClick={() => toggleWykonaj(intent)}
                     disabled={busy === intent.id}
                     aria-label={intent.completed_at ? "Mark not done" : "Mark done"}
                     className="mt-1 shrink-0 text-fg-subtle transition-colors hover:text-accent disabled:opacity-40"
@@ -239,12 +239,12 @@ export default function Inbox() {
                         className="tabular w-20 rounded-lg border border-black/10 bg-background px-2.5 py-1.5 text-[13px] text-fg outline-none focus:border-accent"
                       />
                       <select
-                        value={editPriority}
-                        onChange={(e) => setEditPriority(Number(e.target.value) as Priority)}
-                        aria-label="Priority"
+                        value={editPriorytet}
+                        onChange={(e) => setEditPriorytet(Number(e.target.value) as Priorytet)}
+                        aria-label="Priorytet"
                         className="rounded-lg border border-black/10 bg-background px-2 py-1.5 text-[13px] text-fg outline-none focus:border-accent"
                       >
-                        {([1, 2, 3, 4] as Priority[]).map((p) => (
+                        {([1, 2, 3, 4] as Priorytet[]).map((p) => (
                           <option key={p} value={p}>
                             {PRIORITY_NAME[p]}
                           </option>
@@ -278,7 +278,7 @@ export default function Inbox() {
                         {intent.title}
                       </span>
                       <span className="tabular text-[12px] font-medium text-fg-muted">
-                        {KIND_LABEL[intent.kind]} · {PRIORITY_NAME[intent.priority as Priority]}
+                        {KIND_LABEL[intent.kind]} · {PRIORITY_NAME[intent.priority as Priorytet]}
                         {intent.period_days ? ` · every ${intent.period_days}d` : ""}
                       </span>
                     </div>
@@ -299,7 +299,7 @@ export default function Inbox() {
                           <span>·</span>
                           <span>{blocks.length} {blocks.length === 1 ? "block" : "blocks"}</span>
                           <span>·</span>
-                          <span>{formatDuration(scheduled)} of {formatDuration(intent.minutes_per_period)}</span>
+                          <span>{formatCzas trwania(scheduled)} of {formatCzas trwania(intent.minutes_per_period)}</span>
                         </>
                       ) : (
                         <span className="font-semibold text-danger">Not placed</span>
@@ -322,7 +322,7 @@ export default function Inbox() {
                         {short > 0 && (
                           <div className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-red-50 px-2.5 py-1 text-[12px] font-medium text-danger">
                             <AlertCircle size={13} />
-                            {formatDuration(short)} could not be placed - widen its window or lower priority.
+                            {formatCzas trwania(short)} could not be placed - widen its window or lower priority.
                           </div>
                         )}
                       </>
