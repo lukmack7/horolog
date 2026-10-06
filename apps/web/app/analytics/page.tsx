@@ -1,5 +1,6 @@
 "use client";
 
+import { useLanguage } from "@/app/components/LanguageProvider";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Shell } from "@/app/components/Shell";
 import { Skeleton } from "@/app/components/Skeleton";
@@ -157,6 +158,7 @@ function buildDerived(plan: Plan): Derived {
 }
 
 export default function AnalyticsPage() {
+  const { t, language } = useLanguage();
   const [data, setData] = useState<Analytics | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [view, setView] = useState<AnalyticsView>("overview");
