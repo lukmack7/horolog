@@ -5,7 +5,7 @@ import { Shell } from "@/app/components/Shell";
 import { api, calendarPush, connections, sync, type Plan, type Provider } from "@/app/lib/api";
 import {
   AlertCircle,
-  Kalendarz,
+  Calendar,
   Check,
   CheckCircle2,
   Copy,
@@ -23,7 +23,7 @@ type Result =
 const CALENDAR_PROVIDERS: { id: Provider; label: string; icon: React.ReactNode }[] = [
   {
     id: "google",
-    label: "Google Kalendarz",
+    label: "Kalendarz Google",
     icon: (
       <svg viewBox="0 0 24 24" width="18" height="18" className="shrink-0">
         <path d="M21.35,11.1H12v2.7h5.38c-0.24,1.28 -0.96,2.37 -2.04,3.1v2.58h3.3c1.93,-1.78 3.04,-4.4 3.04,-7.48c0,-0.61 -0.05,-1.2 -0.15,-1.78Z" fill="#4285F4" />
@@ -365,7 +365,7 @@ export default function Połącz() {
 
           <div className="border-t border-black/[0.06] pt-5">
             <div className="mb-2 flex items-center gap-2 text-[13.5px] font-semibold text-fg">
-              <Kalendarz size={15} className="text-accent" />
+              <Calendar size={15} className="text-accent" />
               Subscribe to a published iCal (.ics) feed
             </div>
             <div className="flex flex-wrap gap-2.5">
