@@ -799,3 +799,59 @@ async def test_daily_history_and_weekly_summary_are_available(client: AsyncClien
     assert weekly["planned_days"] >= 1
     assert weekly["reviewed_days"] >= 1
     assert any(row["text"] == "Small starts work" for row in weekly["reflection_highlights"])
+
+
+
+@pytest.mark.asyncio
+async def test_removing_daily_item_keeps_linked_task_in_inbox(client: AsyncClient) -> None:
+    day = origin().date().isoformat()
+    created = (
+        await client.post(
+            f"/api/daily/{day}/items",
+            json={
+                "title": "Do not delete me",
+                "quadrant": 1,
+                "minutes": 30,
+                "schedule_enabled": True,
+            },
+        )
+    ).json()
+
+    removed = await client.post(f"/api/daily/items/{created['id']}/cancel")
+    assert removed.status_code == 200
+
+    intents = (await client.get("/api/intents")).json()
+    assert any(intent["id"] == created["intent_id"] for intent in intents)
+
+    daily = (await client.get(f"/api/daily/{day}")).json()
+    assert not any(item["id"] == created["id"] for item in daily["items"])
+
+
+@pytest.mark.asyncio
+async def test_dragging_daily_item_changes_quadrant_and_task_priority(
+    client: AsyncClient,
+) -> None:
+    day = origin().date().isoformat()
+    created = (
+        await client.post(
+            f"/api/daily/{day}/items",
+            json={
+                "title": "Move me",
+                "quadrant": 2,
+                "minutes": 45,
+                "schedule_enabled": True,
+            },
+        )
+    ).json()
+
+    moved = await client.post(
+        f"/api/daily/items/{created['id']}/move",
+        json={"quadrant": 1, "date": day},
+    )
+    assert moved.status_code == 200
+    assert moved.json()["quadrant"] == 1
+    assert moved.json()["priority"] == 1
+
+    intents = (await client.get("/api/intents")).json()
+    linked = next(intent for intent in intents if intent["id"] == created["intent_id"])
+    assert linked["priority"] == 1
