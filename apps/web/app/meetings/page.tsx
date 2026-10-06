@@ -9,7 +9,7 @@ import {
   PRIORITY_TINT,
   api,
   createIntent,
-  formatDuration,
+  formatCzas trwania,
   type AttendeeBusy,
   type Intent,
   type Priority,
@@ -24,19 +24,19 @@ interface BusyRow {
 
 const EMPTY_ROW: BusyRow = { start: "", end: "", attendee: "" };
 
-/** Smart Meeting creation - the one intent kind whose scheduling engine
+/** Smart Spotkanie creation - the one intent kind whose scheduling engine
  *  (attendee free/busy intersection, `Intent.blocked_slots`) already exists
  *  and is tested server-side but had no way to reach it from the app. */
-export default function Meetings() {
+export default function Spotkania() {
   const [intents, setIntents] = useState<Intent[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const [title, setTitle] = useState("");
+  const [title, setTytuł] = useState("");
   const [minutes, setMinutes] = useState(30);
   const [priority, setPriority] = useState<Priority>(2);
-  const [meetingDate, setMeetingDate] = useState(() => {
+  const [meetingDate, setSpotkanieDate] = useState(() => {
     const next = new Date();
     next.setDate(next.getDate() + 1);
     return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
@@ -49,7 +49,7 @@ export default function Meetings() {
       setIntents(await api.intents());
       setError(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not reach the scheduler.");
+      setError(caught instanceof Error ? caught.message : "Nie udało się reach the scheduler.");
     } finally {
       setLoaded(true);
     }
@@ -95,12 +95,12 @@ export default function Meetings() {
         preferred_start_min,
         attendee_busy,
       });
-      setTitle("");
+      setTytuł("");
       setPreferredTime("");
       setRows([{ ...EMPTY_ROW }]);
       await load();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not save that meeting.");
+      setError(caught instanceof Error ? caught.message : "Nie udało się save that meeting.");
     } finally {
       setSaving(false);
     }
@@ -114,7 +114,7 @@ export default function Meetings() {
     <Shell onPlanChange={load}>
       <main className="mx-auto max-w-[920px] px-6 py-8">
         <header className="mb-8">
-          <h1 className="text-[28px] font-bold text-fg">Smart Meetings</h1>
+          <h1 className="text-[28px] font-bold text-fg">Smart Spotkania</h1>
           <p className="mt-1 text-[13.5px] text-fg-muted">
             Placed only where every attendee is free - their busy time never touches your own calendar.
           </p>
@@ -133,18 +133,18 @@ export default function Meetings() {
           <div className="grid gap-5 border-b border-black/[0.06] px-6 py-4.5 sm:grid-cols-2 lg:grid-cols-4">
             <label className="block sm:col-span-2 lg:col-span-2">
               <span className="mb-1.5 block text-[12px] font-semibold tracking-wider uppercase text-fg-muted">
-                Meeting Title
+                Spotkanie Tytuł
               </span>
               <input
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={(e) => setTytuł(e.target.value)}
                 placeholder="Weekly sync"
                 className="h-11 w-full rounded-xl border border-black/[0.08] bg-bg px-4 text-[15px] font-medium outline-none transition-colors focus:border-accent"
               />
             </label>
             <label className="block">
               <span className="mb-1.5 block text-[12px] font-semibold tracking-wider uppercase text-fg-muted">
-                Duration
+                Czas trwania
               </span>
               <select
                 value={minutes}
@@ -160,12 +160,12 @@ export default function Meetings() {
             </label>
             <label className="block">
               <span className="mb-1.5 block text-[12px] font-semibold tracking-wider uppercase text-fg-muted">
-                Meeting date
+                Spotkanie date
               </span>
               <input
                 type="date"
                 value={meetingDate}
-                onChange={(e) => setMeetingDate(e.target.value)}
+                onChange={(e) => setSpotkanieDate(e.target.value)}
                 className="tabular h-11 w-full rounded-xl border border-black/[0.08] bg-bg px-3.5 text-[14px] font-semibold outline-none focus:border-accent"
               />
             </label>
@@ -246,13 +246,13 @@ export default function Meetings() {
               className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-accent px-5 text-[13.5px] font-semibold text-on-accent shadow-sm transition-all duration-150 hover:bg-accent-hover hover:shadow-md disabled:opacity-40"
             >
               <Plus size={16} />
-              {saving ? "Scheduling..." : "Add Meeting"}
+              {saving ? "Scheduling..." : "Add Spotkanie"}
             </button>
           </div>
         </form>
 
         <h2 className="mb-3.5 text-[12px] font-semibold tracking-wider uppercase text-fg-muted">
-          Smart Meetings {loaded ? `(${meetings.length})` : ""}
+          Smart Spotkania {loaded ? `(${meetings.length})` : ""}
         </h2>
 
         {!loaded ? (
@@ -296,7 +296,7 @@ export default function Meetings() {
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[15px] font-semibold text-fg">{meeting.title}</div>
                     <div className="tabular mt-1 text-[12.5px] font-medium text-fg-muted">
-                      {formatDuration(meeting.minutes_per_period)} ·{" "}
+                      {formatCzas trwania(meeting.minutes_per_period)} ·{" "}
                       {ranges > 0 ? `${ranges} attendee range${ranges === 1 ? "" : "s"} avoided` : "no attendee ranges"}
                     </div>
                     {meeting.zoom_join_url && (
