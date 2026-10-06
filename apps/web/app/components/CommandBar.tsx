@@ -91,6 +91,7 @@ function executionSummary(results: Array<Record<string, unknown>>): string {
     if (action === "update_daily_plan") return "✓ Daily zaktualizowane";
     if (action === "reschedule_task") return `✓ Przełożone: ${title}${when}`;
     if (action === "create_meeting") return `✓ Spotkanie: ${title}${when}`;
+    if (action === "create_break") return `✓ Przerwa: ${title}${when}`;
     return `✓ Zadanie: ${title}${when}`;
   });
 
