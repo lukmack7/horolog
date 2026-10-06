@@ -1412,6 +1412,66 @@ async def _execute_assistant_action(
             "intent_id": item.get("intent_id"),
         }
 
+    if action.action == "create_break":
+        if not action.date or action.start_min is None or not action.minutes:
+            raise HTTPException(status_code=422, detail="create_break proposal is incomplete")
+        day = _daily_date(action.date)
+        minutes = max(SLOT_MINUTES, minutes_to_slots(action.minutes) * SLOT_MINUTES)
+        start_min = (action.start_min // SLOT_MINUTES) * SLOT_MINUTES
+        start = day.replace(
+            hour=start_min // 60,
+            minute=start_min % 60,
+            second=0,
+            microsecond=0,
+        )
+        end = start + timedelta(minutes=minutes)
+        if end.date() != start.date():
+            raise HTTPException(status_code=422, detail="Przerwa nie mieści się w wybranym dniu.")
+
+        ident = uuid.uuid4().hex[:12]
+        title = action.title or "Przerwa"
+        wire = IntentIn(
+            title=title,
+            kind=IntentKind.BUFFER,
+            priority=Priority.P1,
+            minutes_per_period=minutes,
+            min_chunk_minutes=minutes,
+            max_chunk_minutes=minutes,
+            max_per_day=1,
+            earliest=start,
+            latest=end,
+            due=end,
+            preferred_start_min=start_min,
+            window_start_min=start_min,
+            window_end_min=start_min + minutes,
+        )
+        intent = wire.to_domain(ident, origin())
+        db.add(IntentRow(id=ident, payload=intent.model_dump(mode="json")))
+        await db.commit()
+        plan = await _replan(db)
+        blocks = [b for b in plan.blocks if b.intent_id == ident]
+        exact = bool(blocks) and all(b.start == start and b.end == end for b in blocks)
+        if not exact:
+            row = await db.get(IntentRow, ident)
+            if row is not None:
+                await db.delete(row)
+                await db.commit()
+                await _replan(db)
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Nie mogę dodać przerwy dokładnie {action.date} "
+                    f"{start.strftime('%H:%M')}–{end.strftime('%H:%M')}."
+                ),
+            )
+        return {
+            "action": action.action,
+            "status": "done",
+            "title": title,
+            "date": action.date,
+            "intent_id": ident,
+        }
+
     if action.action == "create_meeting":
         if not action.title or not action.date or action.start_min is None or not action.minutes:
             raise HTTPException(status_code=422, detail="create_meeting proposal is incomplete")
