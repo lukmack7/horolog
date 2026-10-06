@@ -277,6 +277,11 @@ export const api = {
     request<DailyItem>(`/api/daily/items/${id}/complete`, { method: "POST" }),
   cancelDailyItem: (id: string) =>
     request<DailyItem>(`/api/daily/items/${id}/cancel`, { method: "POST" }),
+  moveDailyItem: (id: string, quadrant: 1 | 2 | 3 | 4, date: string) =>
+    request<DailyItem>(`/api/daily/items/${id}/move`, {
+      method: "POST",
+      body: JSON.stringify({ quadrant, date }),
+    }),
   saveDailyReview: (date: string, body: DailyReview) =>
     request<{ date: string } & DailyReview>(`/api/daily/${date}/review`, {
       method: "PUT",
