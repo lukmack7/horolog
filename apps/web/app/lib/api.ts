@@ -156,6 +156,7 @@ export interface Intent {
   daily_windows?: DailyWindow[];
   allowed_weekdays?: number[];
   earliest_slot?: number | null;
+  latest_slot?: number | null;
   due_slot?: number | null;
   preferred_start_min?: number | null;
   /** Set once, on a one-shot task only - see `complete`/`uncomplete` below. */
@@ -198,6 +199,7 @@ export function intentToEditPayload(intent: Intent, origin: string): Record<stri
     window_end_min: window?.end_min,
     due: intent.due_slot != null ? slotToISO(intent.due_slot, origin) : undefined,
     earliest: intent.earliest_slot != null ? slotToISO(intent.earliest_slot, origin) : undefined,
+    latest: intent.latest_slot != null ? slotToISO(intent.latest_slot, origin) : undefined,
     preferred_start_min: intent.preferred_start_min ?? undefined,
   };
 }
