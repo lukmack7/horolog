@@ -26,6 +26,7 @@ class AssistantAction(BaseModel):
     action: Literal[
         "create_task",
         "create_meeting",
+        "create_break",
         "reschedule_task",
         "complete_task",
         "update_daily_plan",
@@ -102,6 +103,11 @@ Core rules:
   If the user says "musi się zaczynać o 8:30, jeśli nie dasz rady napisz",
   propose start_min=510 and start_mode="fixed". Never silently substitute 9:00.
 - create_meeting requires title, date, start_min, minutes.
+- create_break represents an actual protected break in Planner, not a sentence
+  in the reply. It requires date, start_min and minutes; title may be "Przerwa".
+  If the user asks for a break between two known fixed blocks, calculate its
+  start and duration from those blocks. If the boundaries are not known, ask.
+  Never say a break was/will be added unless create_break is present in actions.
 - reschedule_task requires an intent_id from FACTUAL CONTEXT and date; start_min
   is optional. Never guess an intent_id.
 - complete_task requires an intent_id from FACTUAL CONTEXT.
