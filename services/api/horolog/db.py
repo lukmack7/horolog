@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from functools import lru_cache
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Integer, String, Text, select
+from sqlalchemy import JSON, Boolean, DateTime, Integer, String, Text, select
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -116,6 +116,69 @@ class SyncedBlockRow(Base):
     event_id: Mapped[str] = mapped_column(String(256))
     start_slot: Mapped[int] = mapped_column(Integer)
     end_slot: Mapped[int] = mapped_column(Integer)
+
+
+class DailyPlanRow(Base):
+    """One day's deliberate plan: the win condition and the first action."""
+
+    __tablename__ = "daily_plans"
+
+    date: Mapped[str] = mapped_column(String(10), primary_key=True)
+    win_condition: Mapped[str] = mapped_column(Text, default="")
+    first_step: Mapped[str] = mapped_column(Text, default="")
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class DailyPlanItemRow(Base):
+    """A deliberate Eisenhower item.
+
+    The row is never copied forward. An unfinished item remains active and is
+    projected into every later Daily view until it is completed or cancelled,
+    which gives rollover history without creating duplicate tasks.
+    """
+
+    __tablename__ = "daily_plan_items"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    plan_date: Mapped[str] = mapped_column(String(10), index=True)
+    title: Mapped[str] = mapped_column(String(300))
+    quadrant: Mapped[int] = mapped_column(Integer)
+    minutes: Mapped[int] = mapped_column(Integer, default=30)
+    priority: Mapped[int] = mapped_column(Integer, default=3)
+    energy: Mapped[str | None] = mapped_column(String(16), default=None)
+    intent_id: Mapped[str | None] = mapped_column(String(64), default=None, index=True)
+    schedule_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class DailyReviewRow(Base):
+    """The six end-of-day reflection prompts, one editable row per date."""
+
+    __tablename__ = "daily_reviews"
+
+    date: Mapped[str] = mapped_column(String(10), primary_key=True)
+    did_well: Mapped[str] = mapped_column(Text, default="")
+    grateful_for: Mapped[str] = mapped_column(Text, default="")
+    would_change: Mapped[str] = mapped_column(Text, default="")
+    learned: Mapped[str] = mapped_column(Text, default="")
+    improve_tomorrow: Mapped[str] = mapped_column(Text, default="")
+    first_step_morning: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
 
 
 @lru_cache(maxsize=1)
