@@ -56,7 +56,7 @@ function toMinutes(value: string): number {
  *  Allows configuring recurring routines in natural human terms.
  */
 export default function Habits() {
-  useLanguage();
+  const { t, language } = useLanguage();
   const [intents, setIntents] = useState<Intent[]>([]);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -181,7 +181,7 @@ export default function Habits() {
     <Shell onPlanChange={load}>
       <main className="mx-auto max-w-[920px] px-6 py-8">
         <header className="mb-8">
-          <h1 className="text-[28px] font-bold text-fg">Habits & Focus Time</h1>
+          <h1 className="text-[28px] font-bold text-fg">{t("Habits & Focus Time")}</h1>
           <p className="mt-1 text-[13.5px] text-fg-muted">
             Recurring commitments placed around real calendar events and moved automatically when meetings land.
           </p>
@@ -443,7 +443,7 @@ export default function Habits() {
           </ul>
         ) : habits.length === 0 ? (
           <div className="rounded-card border border-black/[0.06] bg-surface p-10 text-center shadow-sm">
-            <p className="text-[14px] font-semibold text-fg">No active routines</p>
+            <p className="text-[14px] font-semibold text-fg">{t("No active routines")}</p>
             <p className="mt-1 text-[13px] text-fg-muted">Configure a habit above or use ⌘K to describe it.</p>
           </div>
         ) : (
