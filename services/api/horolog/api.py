@@ -30,7 +30,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from horolog import oauth
 from horolog.analytics import Analytics, analyse
-from horolog.capture import capture, to_payload
+from horolog.capture import capture, capture_daily_actions, to_payload
 from horolog.db import (
     BusyRow,
     DailyItemDecisionRow,
@@ -282,6 +282,12 @@ class BusyIn(BaseModel):
 class DailyPlanIn(BaseModel):
     win_condition: str = Field(default="", max_length=1000)
     first_step: str = Field(default="", max_length=1000)
+
+
+class DailyCaptureIn(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+    quadrant: int = Field(ge=1, le=4)
+    default_minutes: int = Field(default=30, gt=0, le=480)
 
 
 class DailyItemIn(BaseModel):
@@ -799,6 +805,110 @@ async def put_daily(date: str, body: DailyPlanIn, db: AsyncSession = Depends(ses
     row.updated_at = datetime.now(UTC)
     await db.commit()
     return {"date": date, "win_condition": row.win_condition, "first_step": row.first_step}
+
+
+@app.post("/api/daily/{date}/capture", status_code=201)
+async def capture_daily(
+    date: str,
+    body: DailyCaptureIn,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    """Turn one Daily quick-add sentence into one or more explicit actions.
+
+    The language model only splits/extracts. It never invents appointments:
+    a referenced meeting remains context unless the sentence explicitly asks
+    for that meeting as a separate action.
+    """
+    selected = _daily_date(date)
+
+    try:
+        batch = await capture_daily_actions(body.text, date)
+    except ExtractionFailed as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (ProviderError, httpx.HTTPError, RuntimeError) as exc:
+        raise HTTPException(status_code=503, detail=f"language model unreachable: {exc}") from exc
+
+    created: list[dict[str, Any]] = []
+    for action in batch.actions:
+        action_day = selected + timedelta(days=action.day_offset)
+        action_date = action_day.strftime("%Y-%m-%d")
+        minutes = action.minutes or body.default_minutes
+        minutes = max(SLOT_MINUTES, minutes_to_slots(minutes) * SLOT_MINUTES)
+
+        if action.kind == IntentKind.MEETING:
+            # A real meeting needs an explicit clock time. Without one we keep
+            # the wording as a task rather than guessing a time into the calendar.
+            if action.preferred_start_min is None:
+                item = await create_daily_item(
+                    action_date,
+                    DailyItemIn(
+                        title=action.title,
+                        quadrant=body.quadrant,
+                        minutes=minutes,
+                        schedule_enabled=body.quadrant <= 2,
+                    ),
+                    db,
+                )
+                created.append({"kind": "task", "date": action_date, "item": item})
+                continue
+
+            start_min = action.preferred_start_min
+            start = action_day.replace(
+                hour=start_min // 60,
+                minute=start_min % 60,
+                second=0,
+                microsecond=0,
+            )
+            end = start + timedelta(minutes=minutes)
+            ident = uuid.uuid4().hex[:12]
+            wire = IntentIn(
+                title=action.title,
+                kind=IntentKind.MEETING,
+                priority=Priority(body.quadrant),
+                minutes_per_period=minutes,
+                period_days=None,
+                min_chunk_minutes=minutes,
+                max_chunk_minutes=minutes,
+                max_per_day=1,
+                earliest=start,
+                due=end,
+                preferred_start_min=start_min,
+                window_start_min=start_min,
+                window_end_min=min(24 * 60, start_min + minutes),
+            )
+            intent = wire.to_domain(ident, origin())
+            db.add(IntentRow(id=ident, payload=intent.model_dump(mode="json")))
+            await db.commit()
+            await _replan(db)
+            created.append(
+                {
+                    "kind": "meeting",
+                    "date": action_date,
+                    "intent_id": ident,
+                    "title": action.title,
+                    "minutes": minutes,
+                    "start": start.isoformat(),
+                }
+            )
+            continue
+
+        item = await create_daily_item(
+            action_date,
+            DailyItemIn(
+                title=action.title,
+                quadrant=body.quadrant,
+                minutes=minutes,
+                schedule_enabled=body.quadrant <= 2,
+            ),
+            db,
+        )
+        created.append({"kind": "task", "date": action_date, "item": item})
+
+    return {
+        "source": body.text,
+        "count": len(created),
+        "created": created,
+    }
 
 
 @app.post("/api/daily/{date}/items", status_code=201)
