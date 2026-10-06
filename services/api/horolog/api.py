@@ -1390,7 +1390,17 @@ async def assistant_execute(
 ) -> dict[str, Any]:
     results = []
     for action in body.actions:
-        results.append(await _execute_assistant_action(action, db))
+        try:
+            results.append(await _execute_assistant_action(action, db))
+        except HTTPException as exc:
+            results.append(
+                {
+                    "action": action.action,
+                    "status": "failed",
+                    "title": action.title,
+                    "detail": str(exc.detail),
+                }
+            )
 
     # Report what actually landed in the authoritative plan, not merely what
     # the proposal requested. This makes the assistant's confirmation factual.
@@ -1410,7 +1420,11 @@ async def assistant_execute(
         if blocks:
             result["scheduled"] = blocks
 
-    return {"count": len(results), "results": results}
+    return {
+        "count": len(results),
+        "success_count": sum(1 for result in results if result.get("status") == "done"),
+        "results": results,
+    }
 
 
 
