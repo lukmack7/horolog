@@ -178,41 +178,44 @@ export function Shell({
         </button>
       )}
 
-      {/* Mobile secondary navigation as a proper bottom sheet. */}
+      {/* Mobile secondary navigation: compact, opaque action sheet. */}
       {mobileMoreOpen && (
         <>
           <button
             type="button"
             aria-label="Close more navigation"
             onClick={() => setMobileMoreOpen(false)}
-            className="fixed inset-0 z-30 bg-black/25 backdrop-blur-[1px] lg:hidden"
+            className="fixed inset-0 z-30 bg-black/20 lg:hidden"
           />
           <div
-            className="fixed inset-x-0 z-40 rounded-t-3xl border-t border-border bg-background px-4 pb-4 pt-2 shadow-2xl lg:hidden"
-            style={{ bottom: "calc(4rem + env(safe-area-inset-bottom))" }}
+            className="fixed left-3 right-3 z-40 rounded-[24px] border border-black/[0.08] p-3 shadow-2xl lg:hidden"
+            style={{
+              bottom: "calc(4.5rem + env(safe-area-inset-bottom))",
+              backgroundColor: "#ffffff",
+            }}
             role="dialog"
             aria-modal="true"
             aria-label="More navigation"
           >
-            <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-border" />
             <div className="mb-2 flex items-center justify-between px-1">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                  More
-                </p>
-                <p className="text-sm font-semibold text-foreground">Other Horolog sections</p>
+              <div className="flex items-center gap-2">
+                <MoreHorizontal size={18} className="text-muted-foreground" />
+                <span className="text-[13px] font-semibold text-foreground">More</span>
               </div>
               <button
                 type="button"
                 onClick={() => setMobileMoreOpen(false)}
                 aria-label="Close"
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary text-muted-foreground transition-colors hover:text-foreground"
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-muted-foreground transition-colors hover:text-foreground"
               >
-                <X size={17} />
+                <X size={16} />
               </button>
             </div>
 
-            <nav className="overflow-hidden rounded-2xl border border-border bg-background">
+            <nav
+              className="overflow-hidden rounded-2xl border border-black/[0.07]"
+              style={{ backgroundColor: "#ffffff" }}
+            >
               {NAV.slice(4).map((item, index) => {
                 const active = pathname === item.href;
                 const Icon = item.icon;
@@ -221,21 +224,19 @@ export function Shell({
                     key={item.href}
                     href={item.href}
                     onClick={() => setMobileMoreOpen(false)}
-                    className={`flex min-h-14 items-center gap-3 px-4 transition-colors ${
-                      index > 0 ? "border-t border-border" : ""
+                    className={`flex h-[54px] items-center gap-3 px-3.5 transition-colors ${
+                      index > 0 ? "border-t border-black/[0.06]" : ""
                     } ${
                       active
                         ? "bg-secondary font-semibold text-foreground"
                         : "text-foreground hover:bg-secondary/60"
                     }`}
                   >
-                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
-                      active ? "bg-background" : "bg-secondary"
-                    }`}>
-                      <Icon size={18} />
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-secondary text-foreground">
+                      <Icon size={17} />
                     </span>
                     <span className="min-w-0 flex-1 text-[13px] font-medium">{item.label}</span>
-                    <ChevronRight size={16} className="shrink-0 text-muted-foreground" />
+                    <ChevronRight size={15} className="shrink-0 text-muted-foreground" />
                   </Link>
                 );
               })}
@@ -246,7 +247,7 @@ export function Shell({
 
       {/* Mobile Nav */}
       <div
-        className="fixed bottom-0 left-0 right-0 z-40 grid h-16 grid-cols-5 border-t border-border bg-background/95 px-1 backdrop-blur-md lg:hidden"
+        className="fixed bottom-0 left-0 right-0 z-40 grid h-16 grid-cols-5 border-t border-border bg-white px-1 lg:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         {NAV.slice(0, 4).map((item) => {
