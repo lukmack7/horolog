@@ -10,7 +10,7 @@ import {
   minutesBetween,
   PRIORITY_NAME,
   PRIORITY_TINT,
-  type Analizy,
+  type Analytics,
   type Block,
   type IntentKind,
   type Plan,
@@ -31,9 +31,9 @@ import {
   Users,
 } from "lucide-react";
 
-type AnalizyView = "overview" | "priorities" | "map" | "executive";
+type AnalyticsView = "overview" | "priorities" | "map" | "executive";
 
-const VIEWS: { id: AnalizyView; label: string; icon: typeof LayoutDashboard }[] = [
+const VIEWS: { id: AnalyticsView; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "overview", label: "Przegląd", icon: LayoutDashboard },
   { id: "priorities", label: "Priorytety", icon: Flag },
   { id: "map", label: "Mapa tygodnia", icon: CalendarDays },
@@ -159,7 +159,7 @@ function buildDerived(plan: Plan): Derived {
 export default function AnalizyPage() {
   const [data, setData] = useState<Analizy | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
-  const [view, setView] = useState<AnalizyView>("overview");
+  const [view, setView] = useState<AnalyticsView>("overview");
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
