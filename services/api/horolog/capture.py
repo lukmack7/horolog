@@ -91,50 +91,62 @@ Infer only what the text supports. Use null rather than inventing a constraint.\
 
 
 DAILY_SYSTEM = """\
-You split one Daily quick-add into explicit actionable items.
+You interpret one Daily quick-add written in Polish or English.
 
-The user may write one action or several actions in one sentence. Return one
-item per EXPLICIT action. Do not invent follow-up work, appointments, reminders,
-or meetings that are merely mentioned as context.
+Return:
+1. actions: actionable TASKS the user explicitly wants to do.
+2. meeting_suggestions: every meeting/call/appointment the text refers to that
+   may deserve its own calendar entry, EVEN when it is only context for a task.
 
-Critical distinction:
-- "przeanalizować odpowiedzi od Vafo i przygotować się na spotkanie jutro z Anną z AZAN"
-  is ONE task. The meeting is context for the preparation; do NOT create a
-  second meeting.
+Important:
+- Never create a meeting automatically. Meeting suggestions are only proposals
+  shown to the user for confirmation.
+- "przeanalizować odpowiedzi od Vafo i przygotować się na spotkanie jutro z
+  Anną z AZAN" => one task in actions AND one meeting suggestion for tomorrow.
 - "przeanalizować odpowiedzi od Vafo dziś i jutro o 10:00 spotkanie z Anną z
-  AZAN na 45 minut" is TWO explicit actions: one task and one meeting.
-- "zadzwonić do Ani i wysłać ofertę do Marka" is TWO tasks.
-- A conjunction does not always mean two items. Keep closely coupled work as
-  one task when it describes one outcome, e.g. "przeanalizować dane i
-  przygotować wnioski do prezentacji".
+  AZAN na 45 minut" => one task AND one meeting suggestion tomorrow at 10:00,
+  duration 45.
+- "zadzwonić do Ani i wysłać ofertę do Marka" => two tasks, no meeting.
+- Keep closely coupled work as one task when it describes one outcome, e.g.
+  "przeanalizować dane i przygotować wnioski do prezentacji".
+- Do not invent people, dates, times or durations.
 
 Fields:
-- kind: "task" or "meeting".
-- day_offset: calendar days from the selected Daily date. 0 means that selected
-  day, 1 means the next day. Use another value only when the text explicitly
-  names a relative day. Context dates belonging to a referenced meeting do not
-  move a preparation task.
+- day_offset: calendar days from the selected Daily date. 0 means selected day,
+  1 means next day. Use another value only when the text supports it.
 - minutes: explicit duration when stated, otherwise null.
 - preferred_start_min: explicit start time as minutes from midnight, otherwise
-  null. Do not infer a clock time.
-- title: short, natural Polish action title. Preserve names and business terms.
+  null. Never guess a clock time.
+- title: short natural action/meeting title preserving names and business terms.
 
-Never create an item that is only implied. Prefer one accurate item over two
-speculative ones.\
+For a preparation task whose sentence mentions a future meeting, keep the task
+on the selected Daily date unless the task itself is explicitly assigned to a
+different day. The meeting suggestion can have its own future day_offset.\
 """
 
 
 class DailyActionDraft(BaseModel):
     title: str = Field(min_length=1, max_length=200)
-    kind: IntentKind
+    day_offset: int = 0
+    minutes: int | None = None
+
+    @model_validator(mode="after")
+    def _daily_sane(self) -> DailyActionDraft:
+        if self.day_offset < 0 or self.day_offset > 14:
+            raise ValueError("day_offset must be between 0 and 14")
+        if self.minutes is not None and self.minutes <= 0:
+            raise ValueError("minutes must be positive when provided")
+        return self
+
+
+class DailyMeetingSuggestionDraft(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
     day_offset: int = 0
     minutes: int | None = None
     preferred_start_min: int | None = None
 
     @model_validator(mode="after")
-    def _daily_sane(self) -> DailyActionDraft:
-        if self.kind not in (IntentKind.TASK, IntentKind.MEETING):
-            raise ValueError("Daily quick-add only supports task or meeting")
+    def _meeting_sane(self) -> DailyMeetingSuggestionDraft:
         if self.day_offset < 0 or self.day_offset > 14:
             raise ValueError("day_offset must be between 0 and 14")
         if self.minutes is not None and self.minutes <= 0:
@@ -146,13 +158,14 @@ class DailyActionDraft(BaseModel):
 
 class DailyBatchDraft(BaseModel):
     actions: list[DailyActionDraft]
+    meeting_suggestions: list[DailyMeetingSuggestionDraft]
 
     @model_validator(mode="after")
     def _batch_sane(self) -> DailyBatchDraft:
-        if not self.actions:
-            raise ValueError("at least one explicit action is required")
-        if len(self.actions) > 8:
-            raise ValueError("Daily quick-add supports at most 8 actions at once")
+        if not self.actions and not self.meeting_suggestions:
+            raise ValueError("at least one action or meeting suggestion is required")
+        if len(self.actions) > 8 or len(self.meeting_suggestions) > 4:
+            raise ValueError("Daily quick-add contains too many separate items")
         return self
 
 
