@@ -17,7 +17,7 @@ import {
 } from "@/app/lib/api";
 import { Trash2, AlertCircle, Clock, CheckCircle, Circle, Sparkles, Pencil } from "lucide-react";
 
-/** Ultra-Luxury Zadania View for Horolog.
+/** Ultra-Luxury Task Inbox View for Horolog.
  *  Displays all scheduling intents, their placed time progress bars, and unmet demand callouts.
  */
 export default function Inbox() {
@@ -83,7 +83,7 @@ export default function Inbox() {
     }
   }
 
-  async function toggleWykonaj(intent: Intent) {
+  async function toggleComplete(intent: Intent) {
     setBusy(intent.id);
     try {
       if (intent.completed_at) {
@@ -130,7 +130,7 @@ export default function Inbox() {
       <main className="mx-auto max-w-[920px] px-6 py-8">
         <header className="mb-8 flex flex-wrap items-baseline justify-between gap-4">
           <div>
-            <h1 className="text-[28px] font-bold text-fg">Zadania</h1>
+            <h1 className="text-[28px] font-bold text-fg">Task Inbox</h1>
             <p className="mt-1 text-[13.5px] text-fg-muted">
               {plan ? (
                 <>
@@ -193,17 +193,17 @@ export default function Inbox() {
               className="group relative overflow-hidden rounded-card border border-black/[0.06] bg-surface p-4.5 shadow-sm transition-all duration-200 ease-spring hover:border-black/15 hover:shadow-md"
             >
               <div className="flex items-start gap-4">
-                {/* Left Priorytet Bar Indicator */}
+                {/* Left Priority Bar Indicator */}
                 <div
                   className="mt-1 h-10 w-1 shrink-0 rounded-full"
-                  style={{ background: PRIORITY_TINT[intent.priority as Priorytet] }}
+                  style={{ background: PRIORITY_TINT[intent.priority as Priority] }}
                   aria-hidden
                 />
 
                 {intent.period_days == null ? (
                   <button
                     type="button"
-                    onClick={() => toggleWykonaj(intent)}
+                    onClick={() => toggleComplete(intent)}
                     disabled={busy === intent.id}
                     aria-label={intent.completed_at ? "Mark not done" : "Mark done"}
                     className="mt-1 shrink-0 text-fg-subtle transition-colors hover:text-accent disabled:opacity-40"
@@ -240,11 +240,11 @@ export default function Inbox() {
                       />
                       <select
                         value={editPriority}
-                        onChange={(e) => setEditPriority(Number(e.target.value) as Priorytet)}
-                        aria-label="Priorytet"
+                        onChange={(e) => setEditPriority(Number(e.target.value) as Priority)}
+                        aria-label="Priority"
                         className="rounded-lg border border-black/10 bg-background px-2 py-1.5 text-[13px] text-fg outline-none focus:border-accent"
                       >
-                        {([1, 2, 3, 4] as Priorytet[]).map((p) => (
+                        {([1, 2, 3, 4] as Priority[]).map((p) => (
                           <option key={p} value={p}>
                             {PRIORITY_NAME[p]}
                           </option>
@@ -278,7 +278,7 @@ export default function Inbox() {
                         {intent.title}
                       </span>
                       <span className="tabular text-[12px] font-medium text-fg-muted">
-                        {KIND_LABEL[intent.kind]} · {PRIORITY_NAME[intent.priority as Priorytet]}
+                        {KIND_LABEL[intent.kind]} · {PRIORITY_NAME[intent.priority as Priority]}
                         {intent.period_days ? ` · every ${intent.period_days}d` : ""}
                       </span>
                     </div>
