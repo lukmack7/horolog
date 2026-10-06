@@ -90,7 +90,7 @@ const TRACKER_PROVIDERS: {
 ];
 
 export default function Connect() {
-  const { t, language } = useLanguage();
+  useLanguage();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [connected, setConnected] = useState<Record<string, boolean>>({});
   const [icsUrl, setIcsUrl] = useState("");
