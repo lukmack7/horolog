@@ -785,6 +785,7 @@ export function EventManager({
                 <Input
                   id="startTime"
                   type="datetime-local"
+                  step={900}
                   value={
                     isCreating
                       ? newEvent.startTime
@@ -814,6 +815,7 @@ export function EventManager({
                 <Input
                   id="endTime"
                   type="datetime-local"
+                  step={900}
                   value={
                     isCreating
                       ? newEvent.endTime
