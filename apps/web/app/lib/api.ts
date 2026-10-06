@@ -232,6 +232,14 @@ export const api = {
   complete: (id: string) => request<Intent>(`/api/intents/${id}/complete`, { method: "POST" }),
   uncomplete: (id: string) =>
     request<Intent>(`/api/intents/${id}/complete`, { method: "DELETE" }),
+  moveIntent: (id: string, start: string, end: string) =>
+    request<{ intent_id: string; date: string; start: string; blocks: number }>(
+      `/api/intents/${id}/move`,
+      {
+        method: "POST",
+        body: JSON.stringify({ start, end }),
+      },
+    ),
   completeBlock: (id: string, start: string, end: string) =>
     request<Intent>(`/api/intents/${id}/complete-block`, {
       method: "POST",
