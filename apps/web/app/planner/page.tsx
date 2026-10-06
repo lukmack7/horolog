@@ -109,7 +109,7 @@ function busyToEvents(busy: Busy[]): Event[] {
 }
 
 export default function Planner() {
-  useLanguage();
+  const { t, language } = useLanguage();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -296,7 +296,7 @@ export default function Planner() {
         {/* Header */}
         <header className="mb-5 flex items-start justify-between gap-3 sm:mb-7 sm:items-end sm:gap-4">
           <div>
-            <h1 className="text-[30px] font-bold leading-tight text-fg sm:text-[28px]">Planner</h1>
+            <h1 className="text-[30px] font-bold leading-tight text-fg sm:text-[28px]">{t("Planner")}</h1>
             <p className="mt-1 text-[13.5px] text-fg-muted">
               {plan ? (
                 <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -317,8 +317,8 @@ export default function Planner() {
             className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-black/[0.08] bg-surface px-3 text-[12.5px] font-semibold text-fg shadow-sm transition-all duration-150 hover:bg-sunk hover:shadow-md sm:h-9.5 sm:px-4 sm:text-[13px]"
           >
             <Download size={14} className="text-fg-muted" />
-            <span className="sm:hidden">Export</span>
-            <span className="hidden sm:inline">Export .ics</span>
+            <span className="sm:hidden">{t("Export")}</span>
+            <span className="hidden sm:inline">{t("Export .ics")}</span>
           </a>
         </header>
 
@@ -337,7 +337,7 @@ export default function Planner() {
 
         {plan && plan.blocks.length === 0 && plan.busy.length === 0 && (
           <div className="mb-6 rounded-card border border-black/[0.08] bg-surface p-5 shadow-sm">
-            <h2 className="text-[14px] font-semibold text-fg">Nothing scheduled yet</h2>
+            <h2 className="text-[14px] font-semibold text-fg">{t("Nothing scheduled yet")}</h2>
             <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">
               A fresh install starts with an empty calendar on purpose — nothing is faked. Get a
               real week on the board with any of these:
