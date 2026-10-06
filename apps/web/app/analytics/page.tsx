@@ -577,6 +577,7 @@ function WeekMapView({
 }
 
 function ExecutiveView({ data, derived }: { data: Analytics; derived: Derived }) {
+  const { t } = useLanguage();
   const focusShare = data.scheduled_minutes > 0 ? data.focus_minutes / data.scheduled_minutes : 0;
   const meetingShare = derived.totalVisibleMinutes > 0 ? data.meeting_minutes / derived.totalVisibleMinutes : 0;
   const completionShare = derived.totalBlocks > 0 ? derived.completedBlocks / derived.totalBlocks : 0;
