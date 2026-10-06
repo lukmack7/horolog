@@ -801,6 +801,7 @@ async def create_daily_item(date: str, body: DailyItemIn, db: AsyncSession = Dep
     day = _daily_date(date)
     item_id = uuid.uuid4().hex[:16]
     intent_id = body.intent_id
+    linked_existing = intent_id is not None
     matrix_priority = Priority(body.quadrant)
 
     if intent_id is not None:
@@ -834,9 +835,19 @@ async def create_daily_item(date: str, body: DailyItemIn, db: AsyncSession = Dep
     )
     db.add(row)
     await db.commit()
-    if intent_id and body.schedule_enabled:
+
+    # Linking a task that is already visible in Planner is classification only.
+    # Do not solve again here: even a stable solver is allowed to move work when
+    # the constraint set changes elsewhere, and merely adding a matrix label
+    # must never send an already-planned task to another day.
+    if intent_id and body.schedule_enabled and not linked_existing:
         await _replan(db)
-    return _daily_item_dict(row, date, None)
+
+    intent_payload = None
+    if intent_id:
+        intent_row = await db.get(IntentRow, intent_id)
+        intent_payload = intent_row.payload if intent_row else None
+    return _daily_item_dict(row, date, intent_payload)
 
 
 @app.post("/api/daily/items/{item_id}/complete")
