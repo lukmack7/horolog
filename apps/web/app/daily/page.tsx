@@ -215,7 +215,10 @@ export default function DailyPage() {
             </button>
             <button
               type="button"
-              onClick={() => setMode("review")}
+              onClick={() => {
+                if (dateKey(date) > dateKey(new Date())) setDate(new Date());
+                setMode("review");
+              }}
               className={`flex h-11 items-center justify-center gap-2 rounded-xl text-[12.5px] font-semibold ${
                 mode === "review" ? "bg-primary text-white" : "text-fg-muted"
               }`}
@@ -302,6 +305,22 @@ function PlanView({
 }) {
   return (
     <div className="space-y-5">
+      {data.yesterday.improve && (
+        <section className="rounded-2xl border border-indigo-100 bg-indigo-50/45 p-4">
+          <div className="flex items-start gap-3">
+            <Brain size={16} className="mt-0.5 shrink-0 text-indigo-700" />
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-indigo-700">
+                Wczoraj chciałeś poprawić
+              </div>
+              <p className="mt-1 text-[12.5px] font-medium leading-relaxed text-indigo-950">
+                {data.yesterday.improve}
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
+
       {data.summary.carry_over > 0 && (
         <section className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
           <div className="flex items-start gap-3">
@@ -351,6 +370,11 @@ function PlanView({
           </div>
         </section>
       )}
+
+      <div className="flex items-center gap-2 px-1 text-[10.5px] text-fg-muted">
+        <Target size={13} />
+        <span>Macierz ustala priorytet zadania automatycznie — bez osobnego P1/P2/P3/P4 w Daily.</span>
+      </div>
 
       <div className="grid gap-3 lg:grid-cols-2">
         {QUADRANTS.map((quadrant) => (
