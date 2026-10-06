@@ -32,7 +32,7 @@ const PL: Record<string, string> = {
   "Calendars & Sync":"Kalendarze i synchronizacja","Connect a calendar":"Połącz kalendarz","Connect a tracker":"Połącz narzędzie zadań",
   "Subscribe to your Horolog plan":"Subskrybuj plan Horolog","Connect":"Połącz","Working…":"Pracuję…","Syncing…":"Synchronizuję…",
   "Sync Feed":"Synchronizuj kanał","Copy Feed Link":"Kopiuj link kanału","Copied!":"Skopiowano!","Disconnect":"Rozłącz",
-  "Overview":"Przegląd","Priorities":"Priorytety","Week map":"Mapa tygodnia","Executive":"Zarządczy","Priority":"Priorytet",
+  "Overview":"Przegląd","Priorities":"Priorytety","Week map":"Mapa tygodnia","Executive":"Zarządczy",
   "Scheduled work":"Zaplanowana praca","Deep-work time":"Czas głębokiej pracy","No scheduled work":"Brak zaplanowanej pracy",
   "Meeting load":"Obciążenie spotkaniami","High priority":"Wysoki priorytet","Time per day":"Czas dziennie",
   "The next seven days, stacked by work type.":"Najbliższe siedem dni według rodzaju pracy.","Time by type":"Czas według typu",
