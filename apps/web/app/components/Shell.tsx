@@ -22,6 +22,7 @@ import {
   BookOpenCheck,
 } from "lucide-react";
 import { CommandBar } from "@/app/components/CommandBar";
+import { useLanguage } from "@/app/components/LanguageProvider";
 
 const NAV = [
   { href: "/time", label: "Time", icon: Clock },
@@ -46,6 +47,7 @@ export function Shell({
   onPlanChange?: () => void;
 }) {
   const pathname = usePathname();
+  const { language, setLanguage, t } = useLanguage();
   const [commandOpen, setCommandOpen] = useState(false);
   const [pulse, setPulse] = useState(false);
   const [live, setLive] = useState(true);
@@ -92,7 +94,7 @@ export function Shell({
           <div className="flex flex-col">
             <span className="text-[16px] font-serif tracking-tight text-foreground">Horolog</span>
             <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-              Defend Time
+              {t("Defend Time")}
             </span>
           </div>
         </Link>
@@ -121,7 +123,7 @@ export function Shell({
                 <span className="relative z-10">
                   <Icon size={17} className={active ? "text-foreground" : "text-muted-foreground"} />
                 </span>
-                <span className="relative z-10">{item.label}</span>
+                <span className="relative z-10">{t(item.label)}</span>
               </Link>
             );
           })}
@@ -135,12 +137,17 @@ export function Shell({
         >
           <span className="flex items-center gap-2 font-medium">
             <Sparkles size={14} className="text-foreground transition-transform duration-200 group-hover:rotate-12" />
-            Ask Horolog
+            {t("Ask Horolog")}
           </span>
           <kbd className="tabular inline-flex items-center gap-0.5 rounded-md border border-border bg-background px-1.5 py-0.5 text-[10.5px] font-mono text-muted-foreground">
             <Command size={10} />K
           </kbd>
         </button>
+
+        <div className="mt-4 flex items-center gap-1 rounded-xl border border-border bg-secondary/30 p-1" aria-label="Language">
+          <button type="button" onClick={() => setLanguage("pl")} className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition-colors ${language === "pl" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`}>PL</button>
+          <button type="button" onClick={() => setLanguage("en")} className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition-colors ${language === "en" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`}>EN</button>
+        </div>
 
         {/* Live SSE Plan Status Indicator */}
         <div className="mt-auto flex items-center justify-between rounded-xl border border-border bg-secondary/30 px-3 py-2.5">
@@ -160,7 +167,7 @@ export function Shell({
               />
             </span>
             <span className="text-[11.5px] font-medium text-muted-foreground">
-              {!live ? "Reconnecting..." : pulse ? "Optimizing..." : "Engine steady"}
+              {t(!live ? "Reconnecting..." : pulse ? "Optimizing..." : "Engine steady")}
             </span>
           </div>
           <Activity size={13} className={pulse ? "animate-spin text-foreground" : "text-muted-foreground"} />
@@ -173,7 +180,7 @@ export function Shell({
         <button
           type="button"
           onClick={() => setCommandOpen(true)}
-          aria-label="Ask Horolog"
+          aria-label={t("Ask Horolog")}
           className="fixed bottom-20 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-accent text-on-accent shadow-pop transition-transform active:scale-95 lg:hidden"
         >
           <Sparkles size={20} />
@@ -185,7 +192,7 @@ export function Shell({
         <>
           <button
             type="button"
-            aria-label="Close more navigation"
+            aria-label={t("Close more navigation")}
             onClick={() => setMobileMoreOpen(false)}
             className="fixed inset-0 z-30 bg-black/20 lg:hidden"
           />
@@ -197,17 +204,17 @@ export function Shell({
             }}
             role="dialog"
             aria-modal="true"
-            aria-label="More navigation"
+            aria-label={t("More navigation")}
           >
             <div className="mb-2 flex items-center justify-between px-1">
               <div className="flex items-center gap-2">
                 <MoreHorizontal size={18} className="text-muted-foreground" />
-                <span className="text-[13px] font-semibold text-foreground">More</span>
+                <span className="text-[13px] font-semibold text-foreground">{t("More")}</span>
               </div>
               <button
                 type="button"
                 onClick={() => setMobileMoreOpen(false)}
-                aria-label="Close"
+                aria-label={t("Close")}
                 className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-muted-foreground transition-colors hover:text-foreground"
               >
                 <X size={16} />
@@ -237,7 +244,7 @@ export function Shell({
                     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-secondary text-foreground">
                       <Icon size={17} />
                     </span>
-                    <span className="min-w-0 flex-1 text-[13px] font-medium">{item.label}</span>
+                    <span className="min-w-0 flex-1 text-[13px] font-medium">{t(item.label)}</span>
                     <ChevronRight size={15} className="shrink-0 text-muted-foreground" />
                   </Link>
                 );
@@ -264,7 +271,7 @@ export function Shell({
               }`}
             >
               <Icon size={19} className={active ? "text-foreground" : "text-muted-foreground"} />
-              <span className="max-w-full truncate text-[9.5px] leading-tight">{item.label}</span>
+              <span className="max-w-full truncate text-[9.5px] leading-tight">{t(item.label)}</span>
             </Link>
           );
         })}
@@ -279,7 +286,7 @@ export function Shell({
           }`}
         >
           <MoreHorizontal size={20} />
-          <span className="text-[9.5px] leading-tight">More</span>
+          <span className="text-[9.5px] leading-tight">{t("More")}</span>
         </button>
       </div>
 
