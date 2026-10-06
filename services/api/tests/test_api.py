@@ -22,7 +22,15 @@ from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from horolog.api import IntentIn, app, origin
-from horolog.db import BusyRow, DailyPlanItemRow, DailyPlanRow, DailyReviewRow, init_db, session
+from horolog.db import (
+    BusyRow,
+    DailyItemDecisionRow,
+    DailyPlanItemRow,
+    DailyPlanRow,
+    DailyReviewRow,
+    init_db,
+    session,
+)
 
 
 @pytest_asyncio.fixture
@@ -45,6 +53,7 @@ async def client() -> AsyncIterator[AsyncClient]:
         gen = cast("AsyncGenerator[AsyncSession, None]", session())
         db = await anext(gen)
         await db.execute(delete(BusyRow))
+        await db.execute(delete(DailyItemDecisionRow))
         await db.execute(delete(DailyPlanItemRow))
         await db.execute(delete(DailyPlanRow))
         await db.execute(delete(DailyReviewRow))
@@ -692,3 +701,101 @@ async def test_daily_review_seeds_tomorrows_first_step(client: AsyncClient) -> N
 
     next_day = (await client.get(f"/api/daily/{tomorrow}")).json()
     assert next_day["plan"]["first_step"] == "Open the mapping file"
+
+
+
+@pytest.mark.asyncio
+async def test_daily_matrix_sets_priority_without_a_second_priority_choice(
+    client: AsyncClient,
+) -> None:
+    day = origin().date().isoformat()
+    created = (
+        await client.post(
+            f"/api/daily/{day}/items",
+            json={
+                "title": "Matrix decides",
+                "quadrant": 1,
+                "minutes": 30,
+                "priority": 4,
+                "schedule_enabled": True,
+            },
+        )
+    ).json()
+    assert created["priority"] == 1
+
+    intents = (await client.get("/api/intents")).json()
+    intent = next(row for row in intents if row["id"] == created["intent_id"])
+    assert intent["priority"] == 1
+
+
+@pytest.mark.asyncio
+async def test_stale_daily_item_can_be_acknowledged_or_deferred(
+    client: AsyncClient,
+) -> None:
+    today = origin().date()
+    old = (today - timedelta(days=3)).isoformat()
+    current = today.isoformat()
+    tomorrow = (today + timedelta(days=1)).isoformat()
+
+    created = (
+        await client.post(
+            f"/api/daily/{old}/items",
+            json={
+                "title": "Persistent task",
+                "quadrant": 2,
+                "minutes": 30,
+                "schedule_enabled": True,
+            },
+        )
+    ).json()
+
+    daily = (await client.get(f"/api/daily/{current}")).json()
+    item = next(row for row in daily["items"] if row["id"] == created["id"])
+    assert item["needs_decision"] is True
+
+    kept = await client.post(
+        f"/api/daily/items/{created['id']}/keep",
+        json={"date": current},
+    )
+    assert kept.status_code == 200
+    daily = (await client.get(f"/api/daily/{current}")).json()
+    item = next(row for row in daily["items"] if row["id"] == created["id"])
+    assert item["needs_decision"] is False
+
+    deferred = await client.post(
+        f"/api/daily/items/{created['id']}/defer",
+        json={"until": tomorrow},
+    )
+    assert deferred.status_code == 200
+    today_view = (await client.get(f"/api/daily/{current}")).json()
+    assert not any(row["id"] == created["id"] for row in today_view["items"])
+    tomorrow_view = (await client.get(f"/api/daily/{tomorrow}")).json()
+    assert any(row["id"] == created["id"] for row in tomorrow_view["items"])
+
+
+@pytest.mark.asyncio
+async def test_daily_history_and_weekly_summary_are_available(client: AsyncClient) -> None:
+    day = origin().date().isoformat()
+    await client.put(
+        f"/api/daily/{day}",
+        json={"win_condition": "Ship one thing", "first_step": "Open the file"},
+    )
+    await client.put(
+        f"/api/daily/{day}/review",
+        json={
+            "did_well": "Started before email",
+            "grateful_for": "",
+            "would_change": "",
+            "learned": "Small starts work",
+            "improve_tomorrow": "",
+            "first_step_morning": "",
+        },
+    )
+
+    history = (await client.get("/api/daily-history")).json()
+    assert any(row["date"] == day and row["review_answers"] == 2 for row in history)
+
+    weekly = (await client.get(f"/api/daily-weekly/{day}")).json()
+    assert weekly["planned_days"] >= 1
+    assert weekly["reviewed_days"] >= 1
+    assert any(row["text"] == "Small starts work" for row in weekly["reflection_highlights"])
