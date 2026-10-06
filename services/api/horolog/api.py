@@ -268,6 +268,11 @@ class DailyDecisionIn(BaseModel):
     date: str = Field(min_length=10, max_length=10)
 
 
+class DailyMoveIn(BaseModel):
+    quadrant: int = Field(ge=1, le=4)
+    date: str = Field(min_length=10, max_length=10)
+
+
 class DailyReviewIn(BaseModel):
     did_well: str = Field(default="", max_length=4000)
     grateful_for: str = Field(default="", max_length=4000)
@@ -825,18 +830,73 @@ async def complete_daily_item(item_id: str, db: AsyncSession = Depends(session))
 
 @app.post("/api/daily/items/{item_id}/cancel")
 async def cancel_daily_item(item_id: str, db: AsyncSession = Depends(session)) -> dict[str, Any]:
+    """Remove an item from the matrix, never from the underlying task system.
+
+    A Daily row is a planning lens over a task, not the task itself. Detaching
+    it must therefore make a linked intent available to planning again rather
+    than deleting it from Planner/Inbox.
+    """
     row = await db.get(DailyPlanItemRow, item_id)
     if row is None:
         raise HTTPException(status_code=404, detail="daily item not found")
     row.cancelled_at = datetime.now(UTC)
     await db.commit()
-    if row.intent_id and row.schedule_enabled:
+    return _daily_item_dict(row, row.plan_date, None)
+
+
+@app.post("/api/daily/items/{item_id}/move")
+async def move_daily_item(
+    item_id: str,
+    body: DailyMoveIn,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    """Move an item between Eisenhower quadrants and keep priority in sync."""
+    target_day = _daily_date(body.date)
+    row = await db.get(DailyPlanItemRow, item_id)
+    if row is None or row.cancelled_at is not None:
+        raise HTTPException(status_code=404, detail="daily item not found")
+
+    row.quadrant = body.quadrant
+    row.priority = body.quadrant
+
+    # If this was a note-only Q3/Q4 item and it becomes actionable (Q1/Q2),
+    # promote it to a real Planner task. Existing linked tasks keep their
+    # identity in every quadrant; moving the card never creates duplicates.
+    if row.intent_id is None and body.quadrant <= 2:
+        intent_id = uuid.uuid4().hex[:12]
+        wire = IntentIn(
+            title=row.title,
+            kind=IntentKind.TASK,
+            priority=Priority(body.quadrant),
+            minutes_per_period=row.minutes,
+            min_chunk_minutes=min(30, row.minutes),
+            max_chunk_minutes=row.minutes,
+            max_per_day=1,
+            earliest=target_day,
+            due=target_day + timedelta(days=1) - timedelta(minutes=1),
+        )
+        intent = wire.to_domain(intent_id, origin())
+        db.add(IntentRow(id=intent_id, payload=intent.model_dump(mode="json")))
+        row.intent_id = intent_id
+        row.schedule_enabled = True
+    elif row.intent_id:
         intent_row = await db.get(IntentRow, row.intent_id)
         if intent_row is not None:
-            await db.delete(intent_row)
-            await db.commit()
-            await _replan(db)
-    return _daily_item_dict(row, row.plan_date, None)
+            intent = Intent.model_validate(intent_row.payload)
+            intent = intent.model_copy(update={"priority": Priority(body.quadrant)})
+            intent_row.payload = intent.model_dump(mode="json")
+            if row.schedule_enabled:
+                await _roll_daily_intent(row, body.date, db)
+
+    await db.commit()
+    if row.intent_id:
+        await _replan(db)
+
+    intent_payload = None
+    if row.intent_id:
+        intent_row = await db.get(IntentRow, row.intent_id)
+        intent_payload = intent_row.payload if intent_row else None
+    return _daily_item_dict(row, body.date, intent_payload)
 
 
 @app.post("/api/daily/items/{item_id}/keep")
