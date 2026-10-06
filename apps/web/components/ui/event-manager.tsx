@@ -53,7 +53,7 @@ export interface Event {
 }
 
 export interface EventManagerProps {
-  events?: Event[]
+  wydarzeń?: Event[]
   onEventCreate?: (event: Omit<Event, "id">) => void
   onEventUpdate?: (id: string, event: Partial<Event>) => void
   onEventDelete?: (id: string) => void
@@ -313,7 +313,7 @@ export function EventManager({
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <Button variant="outline" size="sm" onClick={() => setCurrentDate(new Date())}>
-              Today
+              Dziś
             </Button>
             <Button variant="outline" size="icon" onClick={() => navigateDate("next")} className="h-8 w-8">
               <ChevronRight className="h-4 w-4" />
@@ -399,7 +399,7 @@ export function EventManager({
             className="h-10 w-full rounded-xl sm:w-auto"
           >
             <Plus className="mr-2 h-4 w-4" />
-            Nowe event
+            Nowe wydarzenie
           </Button>
         </div>
       </div>
@@ -408,7 +408,7 @@ export function EventManager({
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Szukaj events..."
+            placeholder="Szukaj wydarzeń..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9"
@@ -649,7 +649,7 @@ export function EventManager({
 
       {hasActiveFilters && (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm text-muted-foreground">Active filters:</span>
+          <span className="text-sm text-muted-foreground">Aktywne filtry:</span>
           {selectedColors.map((colorValue) => {
             const color = getColorClasses(colorValue)
             return (
@@ -658,7 +658,7 @@ export function EventManager({
                 {color.name}
                 <button
                   onClick={() => setSelectedColors((prev) => prev.filter((c) => c !== colorValue))}
-                  aria-label={`Remove ${color.name} filter`}
+                  aria-label={`Usuń ${color.name} filtr`}
                   className="ml-1 hover:text-foreground"
                 >
                   <X className="h-3 w-3" />
@@ -671,7 +671,7 @@ export function EventManager({
               {tag}
               <button
                 onClick={() => setSelectedTags((prev) => prev.filter((t) => t !== tag))}
-                aria-label={`Remove ${tag} filter`}
+                aria-label={`Usuń ${tag} filtr`}
                 className="ml-1 hover:text-foreground"
               >
                 <X className="h-3 w-3" />
@@ -683,7 +683,7 @@ export function EventManager({
               {category}
               <button
                 onClick={() => setSelectedCategories((prev) => prev.filter((c) => c !== category))}
-                aria-label={`Remove ${category} filter`}
+                aria-label={`Usuń ${category} filtr`}
                 className="ml-1 hover:text-foreground"
               >
                 <X className="h-3 w-3" />
@@ -693,7 +693,7 @@ export function EventManager({
         </div>
       )}
 
-      {/* Calendar Views - Pass filteredEvents instead of events */}
+      {/* Calendar Views - Pass filteredEvents instead of wydarzeń */}
       {view === "month" && (
         <MonthView
           currentDate={currentDate}
@@ -754,9 +754,9 @@ export function EventManager({
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto bg-white">
           <DialogHeader>
-            <DialogTitle>{isCreating ? "Create Event" : "Szczegóły wydarzenia"}</DialogTitle>
+            <DialogTitle>{isCreating ? "Nowe wydarzenie" : "Szczegóły wydarzenia"}</DialogTitle>
             <DialogDescription>
-              {isCreating ? "Add a new event to your calendar" : "Wyświetl i edytuj szczegóły wydarzenia"}
+              {isCreating ? "Dodaj nowe wydarzenie do kalendarza" : "Wyświetl i edytuj szczegóły wydarzenia"}
             </DialogDescription>
           </DialogHeader>
 
@@ -1246,7 +1246,7 @@ function EventCard({
 // Month View Component
 function MonthView({
   currentDate,
-  events,
+  wydarzeń,
   onEventClick,
   onDragStart,
   onDragEnd,
@@ -1315,7 +1315,7 @@ function MonthView({
             {days.map((day, index) => {
               const dayEvents = getEventsForDay(day)
               const isCurrentMonth = day.getMonth() === currentDate.getMonth()
-              const isToday = day.toDateString() === new Date().toDateString()
+              const isDziś = day.toDateString() === new Date().toDateString()
               const isSelected = day.toDateString() === selectedDay.toDateString()
 
               return (
@@ -1332,8 +1332,8 @@ function MonthView({
                   <span
                     className={cn(
                       "mx-auto flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-medium",
-                      isToday && "bg-primary font-semibold text-primary-foreground",
-                      isSelected && !isToday && "ring-1 ring-border",
+                      isDziś && "bg-primary font-semibold text-primary-foreground",
+                      isSelected && !isDziś && "ring-1 ring-border",
                     )}
                   >
                     {day.getDate()}
@@ -1375,7 +1375,7 @@ function MonthView({
               </h3>
             </div>
             <span className="rounded-full bg-secondary px-2 py-1 text-[10px] font-semibold text-muted-foreground">
-              {selectedEvents.length} {selectedEvents.length === 1 ? "event" : "events"}
+              {selectedEvents.length} {selectedEvents.length === 1 ? "event" : "wydarzeń"}
             </span>
           </div>
 
@@ -1395,7 +1395,7 @@ function MonthView({
             </div>
           ) : (
             <div className="rounded-lg bg-muted/30 px-3 py-6 text-center text-xs text-muted-foreground">
-              Brak zaplanowanych events na ten dzień.
+              Brak zaplanowanych wydarzeń na ten dzień.
             </div>
           )}
         </div>
@@ -1414,7 +1414,7 @@ function MonthView({
           {days.map((day, index) => {
             const dayEvents = getEventsForDay(day)
             const isCurrentMonth = day.getMonth() === currentDate.getMonth()
-            const isToday = day.toDateString() === new Date().toDateString()
+            const isDziś = day.toDateString() === new Date().toDateString()
 
             return (
               <div
@@ -1436,7 +1436,7 @@ function MonthView({
                 <div
                   className={cn(
                     "mb-1 flex h-6 w-6 items-center justify-center rounded-full text-sm",
-                    isToday && "bg-primary font-semibold text-primary-foreground",
+                    isDziś && "bg-primary font-semibold text-primary-foreground",
                   )}
                 >
                   {day.getDate()}
@@ -1469,7 +1469,7 @@ function MonthView({
 // Week View Component
 function WeekView({
   currentDate,
-  events,
+  wydarzeń,
   onEventClick,
   onDragStart,
   onDragEnd,
@@ -1497,7 +1497,7 @@ function WeekView({
   const hours = Array.from({ length: 24 }, (_, i) => i)
 
   const getEventsForDay = (date: Date) =>
-    events
+    wydarzeń
       .filter((event) => {
         const eventDate = new Date(event.startTime)
         return (
@@ -1528,7 +1528,7 @@ function WeekView({
       <div className="space-y-3 sm:hidden">
         {weekDays.map((day) => {
           const dayEvents = getEventsForDay(day)
-          const isToday = day.toDateString() === new Date().toDateString()
+          const isDziś = day.toDateString() === new Date().toDateString()
           return (
             <section key={day.toISOString()} className="rounded-xl border bg-white p-3">
               <div className="mb-2 flex items-center justify-between">
@@ -1536,7 +1536,7 @@ function WeekView({
                   <span
                     className={cn(
                       "flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold",
-                      isToday ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground",
+                      isDziś ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground",
                     )}
                   >
                     {day.getDate()}
@@ -1551,7 +1551,7 @@ function WeekView({
                   </div>
                 </div>
                 <span className="text-[10px] font-medium text-muted-foreground">
-                  {dayEvents.length || "No"} {dayEvents.length === 1 ? "event" : "events"}
+                  {dayEvents.length || "No"} {dayEvents.length === 1 ? "event" : "wydarzeń"}
                 </span>
               </div>
               {dayEvents.length > 0 ? (
@@ -1645,7 +1645,7 @@ function WeekView({
 // Day View Component
 function DayView({
   currentDate,
-  events,
+  wydarzeń,
   onEventClick,
   onDragStart,
   onDragEnd,
@@ -1725,7 +1725,7 @@ function DayView({
 
 // List View Component
 function ListView({
-  events,
+  wydarzeń,
   onEventClick,
   getColorClasses,
 }: {
@@ -1733,7 +1733,7 @@ function ListView({
   onEventClick: (event: Event) => void
   getColorClasses: (color: string) => { bg: string; text: string }
 }) {
-  const sortedEvents = [...events].sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
+  const sortedEvents = [...wydarzeń].sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
 
   const groupedEvents = sortedEvents.reduce(
     (acc, event) => {
@@ -1830,7 +1830,7 @@ function ListView({
           </div>
         ))}
         {sortedEvents.length === 0 && (
-          <div className="py-12 text-center text-sm text-muted-foreground sm:text-base">No events found</div>
+          <div className="py-12 text-center text-sm text-muted-foreground sm:text-base">Brak wydarzeń found</div>
         )}
       </div>
     </Card>
