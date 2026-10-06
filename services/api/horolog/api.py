@@ -33,6 +33,9 @@ from horolog.analytics import Analytics, analyse
 from horolog.capture import capture, to_payload
 from horolog.db import (
     BusyRow,
+    DailyPlanItemRow,
+    DailyPlanRow,
+    DailyReviewRow,
     IntentRow,
     SyncedBlockRow,
     init_db,
@@ -242,6 +245,29 @@ class BusyIn(BaseModel):
     source: str = "manual"
 
 
+class DailyPlanIn(BaseModel):
+    win_condition: str = Field(default="", max_length=1000)
+    first_step: str = Field(default="", max_length=1000)
+
+
+class DailyItemIn(BaseModel):
+    title: str = Field(min_length=1, max_length=300)
+    quadrant: int = Field(ge=1, le=4)
+    minutes: int = Field(default=30, gt=0, le=480)
+    priority: Priority = Priority.P3
+    schedule_enabled: bool = True
+    intent_id: str | None = None
+
+
+class DailyReviewIn(BaseModel):
+    did_well: str = Field(default="", max_length=4000)
+    grateful_for: str = Field(default="", max_length=4000)
+    would_change: str = Field(default="", max_length=4000)
+    learned: str = Field(default="", max_length=4000)
+    improve_tomorrow: str = Field(default="", max_length=4000)
+    first_step_morning: str = Field(default="", max_length=4000)
+
+
 class BlockOut(BaseModel):
     intent_id: str
     title: str
@@ -347,6 +373,276 @@ async def health(db: AsyncSession = Depends(session)) -> dict[str, str]:
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"database unreachable: {exc}") from exc
     return {"status": "ok"}
+
+
+def _daily_date(value: str) -> datetime:
+    try:
+        parsed = datetime.strptime(value, "%Y-%m-%d")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="date must be YYYY-MM-DD") from exc
+    return parsed.replace(tzinfo=settings().zone)
+
+
+def _daily_item_dict(row: DailyPlanItemRow, requested_date: str, intent_payload: dict[str, Any] | None) -> dict[str, Any]:
+    completed_at = row.completed_at
+    if completed_at is None and intent_payload and intent_payload.get("completed_at"):
+        completed_at = datetime.fromisoformat(intent_payload["completed_at"])
+    return {
+        "id": row.id,
+        "plan_date": row.plan_date,
+        "title": row.title,
+        "quadrant": row.quadrant,
+        "minutes": row.minutes,
+        "priority": row.priority,
+        "intent_id": row.intent_id,
+        "schedule_enabled": row.schedule_enabled,
+        "completed_at": completed_at.isoformat() if completed_at else None,
+        "cancelled_at": row.cancelled_at.isoformat() if row.cancelled_at else None,
+        "carried": row.plan_date < requested_date and completed_at is None and row.cancelled_at is None,
+        "carry_days": max(
+            0,
+            (_daily_date(requested_date).date() - _daily_date(row.plan_date).date()).days,
+        ),
+    }
+
+
+async def _roll_daily_intent(
+    row: DailyPlanItemRow,
+    target_date: str,
+    db: AsyncSession,
+) -> None:
+    """Move one unfinished Daily task into target_date without duplicating it."""
+    if not row.schedule_enabled or not row.intent_id:
+        return
+    intent_row = await db.get(IntentRow, row.intent_id)
+    if intent_row is None:
+        return
+    intent = Intent.model_validate(intent_row.payload)
+    if intent.completed_at is not None or intent.period_days is not None:
+        return
+
+    day = _daily_date(target_date)
+    earliest = day
+    due = day + timedelta(days=1) - timedelta(minutes=1)
+    wire = IntentIn(
+        title=intent.title,
+        kind=intent.kind,
+        priority=intent.priority,
+        energy=intent.energy,
+        minutes_per_period=intent.minutes_per_period,
+        period_days=None,
+        min_chunk_minutes=intent.min_chunk_minutes,
+        max_chunk_minutes=intent.max_chunk_minutes,
+        max_per_day=intent.max_per_day,
+        allowed_weekdays=[],
+        earliest=earliest,
+        due=due,
+        preferred_start_min=intent.preferred_start_min,
+    )
+    moved = wire.to_domain(intent.id, origin()).model_copy(
+        update={
+            "completed_at": intent.completed_at,
+            "completed_blocks": intent.completed_blocks,
+        }
+    )
+    intent_row.payload = moved.model_dump(mode="json")
+
+
+@app.get("/api/daily/{date}")
+async def get_daily(date: str, db: AsyncSession = Depends(session)) -> dict[str, Any]:
+    requested = _daily_date(date)
+    today = origin().date()
+    plan_row = await db.get(DailyPlanRow, date)
+    review_row = await db.get(DailyReviewRow, date)
+
+    rows = (
+        await db.execute(
+            select(DailyPlanItemRow).where(
+                DailyPlanItemRow.plan_date <= date,
+                DailyPlanItemRow.cancelled_at.is_(None),
+            )
+        )
+    ).scalars().all()
+
+    # Rollover happens only when opening today (or tomorrow while planning it).
+    # Historical browsing is read-only and can never move current tasks.
+    if requested.date() >= today:
+        changed = False
+        for row in rows:
+            if row.completed_at is None and row.plan_date < date:
+                await _roll_daily_intent(row, date, db)
+                changed = True
+        if changed:
+            await db.commit()
+            await _replan(db)
+
+    intent_ids = [row.intent_id for row in rows if row.intent_id]
+    intent_map: dict[str, dict[str, Any]] = {}
+    if intent_ids:
+        intent_rows = (
+            await db.execute(select(IntentRow).where(IntentRow.id.in_(intent_ids)))
+        ).scalars().all()
+        intent_map = {row.id: row.payload for row in intent_rows}
+
+    items = [
+        _daily_item_dict(row, date, intent_map.get(row.intent_id or ""))
+        for row in rows
+        if row.completed_at is None or row.plan_date == date
+    ]
+
+    rendered = await get_plan(db)
+    linked_ids = {row.intent_id for row in rows if row.intent_id}
+    suggestions: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for block in rendered.blocks:
+        if block.start.astimezone(settings().zone).date() != requested.date():
+            continue
+        if block.kind != IntentKind.TASK or block.intent_id in linked_ids or block.intent_id in seen:
+            continue
+        seen.add(block.intent_id)
+        suggestions.append(
+            {
+                "intent_id": block.intent_id,
+                "title": block.title,
+                "priority": int(block.priority),
+                "minutes": sum(
+                    int((other.end - other.start).total_seconds() // 60)
+                    for other in rendered.blocks
+                    if other.intent_id == block.intent_id
+                    and other.start.astimezone(settings().zone).date() == requested.date()
+                ),
+            }
+        )
+
+    completed_today = sum(1 for block in rendered.blocks if block.completed and block.start.astimezone(settings().zone).date() == requested.date())
+    total_today = sum(1 for block in rendered.blocks if block.start.astimezone(settings().zone).date() == requested.date())
+
+    return {
+        "date": date,
+        "plan": {
+            "win_condition": plan_row.win_condition if plan_row else "",
+            "first_step": plan_row.first_step if plan_row else "",
+            "closed_at": plan_row.closed_at.isoformat() if plan_row and plan_row.closed_at else None,
+        },
+        "items": items,
+        "suggestions": suggestions,
+        "review": {
+            "did_well": review_row.did_well if review_row else "",
+            "grateful_for": review_row.grateful_for if review_row else "",
+            "would_change": review_row.would_change if review_row else "",
+            "learned": review_row.learned if review_row else "",
+            "improve_tomorrow": review_row.improve_tomorrow if review_row else "",
+            "first_step_morning": review_row.first_step_morning if review_row else "",
+        },
+        "summary": {
+            "completed_blocks": completed_today,
+            "total_blocks": total_today,
+            "carry_over": sum(1 for item in items if item["carried"]),
+        },
+    }
+
+
+@app.put("/api/daily/{date}")
+async def put_daily(date: str, body: DailyPlanIn, db: AsyncSession = Depends(session)) -> dict[str, Any]:
+    _daily_date(date)
+    row = await db.get(DailyPlanRow, date)
+    if row is None:
+        row = DailyPlanRow(date=date)
+        db.add(row)
+    row.win_condition = body.win_condition
+    row.first_step = body.first_step
+    row.updated_at = datetime.now(UTC)
+    await db.commit()
+    return {"date": date, "win_condition": row.win_condition, "first_step": row.first_step}
+
+
+@app.post("/api/daily/{date}/items", status_code=201)
+async def create_daily_item(date: str, body: DailyItemIn, db: AsyncSession = Depends(session)) -> dict[str, Any]:
+    day = _daily_date(date)
+    item_id = uuid.uuid4().hex[:16]
+    intent_id = body.intent_id
+
+    if intent_id is not None:
+        if await db.get(IntentRow, intent_id) is None:
+            raise HTTPException(status_code=404, detail=f"no intent {intent_id!r}")
+    elif body.schedule_enabled:
+        intent_id = uuid.uuid4().hex[:12]
+        wire = IntentIn(
+            title=body.title,
+            kind=IntentKind.TASK,
+            priority=body.priority,
+            minutes_per_period=body.minutes,
+            min_chunk_minutes=min(30, body.minutes),
+            max_chunk_minutes=body.minutes,
+            max_per_day=1,
+            earliest=day,
+            due=day + timedelta(days=1) - timedelta(minutes=1),
+        )
+        intent = wire.to_domain(intent_id, origin())
+        db.add(IntentRow(id=intent_id, payload=intent.model_dump(mode="json")))
+
+    row = DailyPlanItemRow(
+        id=item_id,
+        plan_date=date,
+        title=body.title,
+        quadrant=body.quadrant,
+        minutes=body.minutes,
+        priority=int(body.priority),
+        intent_id=intent_id,
+        schedule_enabled=body.schedule_enabled,
+    )
+    db.add(row)
+    await db.commit()
+    if intent_id and body.schedule_enabled:
+        await _replan(db)
+    return _daily_item_dict(row, date, None)
+
+
+@app.post("/api/daily/items/{item_id}/complete")
+async def complete_daily_item(item_id: str, db: AsyncSession = Depends(session)) -> dict[str, Any]:
+    row = await db.get(DailyPlanItemRow, item_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="daily item not found")
+    if row.completed_at is None:
+        row.completed_at = datetime.now(UTC)
+        await db.commit()
+    if row.intent_id:
+        intent_row = await db.get(IntentRow, row.intent_id)
+        if intent_row:
+            intent = Intent.model_validate(intent_row.payload)
+            if intent.period_days is None and intent.completed_at is None:
+                await complete_intent(row.intent_id, db)
+    return _daily_item_dict(row, row.plan_date, None)
+
+
+@app.post("/api/daily/items/{item_id}/cancel")
+async def cancel_daily_item(item_id: str, db: AsyncSession = Depends(session)) -> dict[str, Any]:
+    row = await db.get(DailyPlanItemRow, item_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="daily item not found")
+    row.cancelled_at = datetime.now(UTC)
+    await db.commit()
+    if row.intent_id and row.schedule_enabled:
+        intent_row = await db.get(IntentRow, row.intent_id)
+        if intent_row is not None:
+            await db.delete(intent_row)
+            await db.commit()
+            await _replan(db)
+    return _daily_item_dict(row, row.plan_date, None)
+
+
+@app.put("/api/daily/{date}/review")
+async def put_daily_review(date: str, body: DailyReviewIn, db: AsyncSession = Depends(session)) -> dict[str, Any]:
+    _daily_date(date)
+    row = await db.get(DailyReviewRow, date)
+    if row is None:
+        row = DailyReviewRow(date=date)
+        db.add(row)
+    for field, value in body.model_dump().items():
+        setattr(row, field, value)
+    row.updated_at = datetime.now(UTC)
+    await db.commit()
+    return {"date": date, **body.model_dump()}
 
 
 @app.get("/api/intents")
