@@ -10,15 +10,12 @@ import {
   type Priority,
 } from "@/app/lib/api";
 import {
-  ArrowLeft,
-  ArrowRight,
   CalendarDays,
   Check,
   ChevronLeft,
   ChevronRight,
   CirclePlus,
   Clock3,
-  Gratitude,
   Lightbulb,
   RotateCcw,
   Sparkles,
