@@ -1,5 +1,6 @@
 "use client";
 
+import { useLanguage } from "@/app/components/LanguageProvider";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Glyph, KIND_LABEL } from "@/app/components/Glyph";
 import { Shell } from "@/app/components/Shell";
@@ -21,6 +22,7 @@ import { Trash2, AlertCircle, Clock, CheckCircle, Circle, Sparkles, Pencil } fro
  *  Displays all scheduling intents, their placed time progress bars, and unmet demand callouts.
  */
 export default function Inbox() {
+  const { t, language } = useLanguage();
   const [intents, setIntents] = useState<Intent[]>([]);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
