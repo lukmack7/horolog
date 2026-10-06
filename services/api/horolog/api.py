@@ -630,6 +630,8 @@ async def get_daily(date: str, db: AsyncSession = Depends(session)) -> dict[str,
     today = origin().date()
     plan_row = await db.get(DailyPlanRow, date)
     review_row = await db.get(DailyReviewRow, date)
+    previous_date = (requested - timedelta(days=1)).strftime("%Y-%m-%d")
+    previous_review = await db.get(DailyReviewRow, previous_date)
 
     rows = (
         await db.execute(
@@ -727,6 +729,10 @@ async def get_daily(date: str, db: AsyncSession = Depends(session)) -> dict[str,
         },
         "items": items,
         "suggestions": suggestions,
+        "yesterday": {
+            "improve": previous_review.improve_tomorrow if previous_review else "",
+            "first_step": previous_review.first_step_morning if previous_review else "",
+        },
         "review": {
             "did_well": review_row.did_well if review_row else "",
             "grateful_for": review_row.grateful_for if review_row else "",
