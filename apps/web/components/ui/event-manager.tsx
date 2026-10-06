@@ -43,7 +43,7 @@ export interface Event {
   tags?: string[]
   /** When set, the card renders the same Glyph + accent-tint left-rule
    *  system every other view (Grid, Inbox, Analytics) uses for priority and
-   *  kind, instead of the generic named `color`. Left unset for an event
+   *  kind, instead of the generic named `color`. Left unset for an wydarzenie
    *  with no priority of its own (a real, external, immovable meeting) —
    *  see `busyToEvents` in `app/planner/page.tsx`. */
   priority?: Priority
@@ -53,11 +53,11 @@ export interface Event {
 }
 
 export interface EventManagerProps {
-  events?: Event[]
-  onEventCreate?: (event: Omit<Event, "id">) => void
-  onEventUpdate?: (id: string, event: Partial<Event>) => void
+  wydarzeń?: Event[]
+  onEventCreate?: (wydarzenie: Omit<Event, "id">) => void
+  onEventUpdate?: (id: string, wydarzenie: Partial<Event>) => void
   onEventDelete?: (id: string) => void
-  onEventComplete?: (event: Event) => void | Promise<void>
+  onEventComplete?: (wydarzenie: Event) => void | Promise<void>
   categories?: string[]
   colors?: { name: string; value: string; bg: string; text: string }[]
   defaultView?: "month" | "week" | "day" | "list"
@@ -66,25 +66,25 @@ export interface EventManagerProps {
 }
 
 const defaultColors = [
-  { name: "Blue", value: "blue", bg: "bg-blue-500", text: "text-blue-700" },
-  { name: "Green", value: "green", bg: "bg-green-500", text: "text-green-700" },
-  { name: "Purple", value: "purple", bg: "bg-purple-500", text: "text-purple-700" },
-  { name: "Orange", value: "orange", bg: "bg-orange-500", text: "text-orange-700" },
-  { name: "Pink", value: "pink", bg: "bg-pink-500", text: "text-pink-700" },
-  { name: "Red", value: "red", bg: "bg-red-500", text: "text-red-700" },
+  { name: "Niebieski", value: "blue", bg: "bg-blue-500", text: "text-blue-700" },
+  { name: "Zielony", value: "green", bg: "bg-green-500", text: "text-green-700" },
+  { name: "Fioletowy", value: "purple", bg: "bg-purple-500", text: "text-purple-700" },
+  { name: "Pomarańczowy", value: "orange", bg: "bg-orange-500", text: "text-orange-700" },
+  { name: "Różowy", value: "pink", bg: "bg-pink-500", text: "text-pink-700" },
+  { name: "Czerwony", value: "red", bg: "bg-red-500", text: "text-red-700" },
 ]
 
 export function EventManager({
-  events = [],
+  wydarzeń = [],
   onEventCreate,
   onEventUpdate,
   onEventDelete,
   onEventComplete,
-  categories = ["Meeting", "Task", "Reminder", "Personal"],
+  categories = ["Spotkanie", "Zadanie", "Przypomnienie", "Osobiste"],
   colors = defaultColors,
   defaultView = "month",
   className,
-  availableTags = ["Important", "Urgent", "Work", "Personal", "Team", "Client"],
+  availableTags = ["Ważne", "Pilne", "Praca", "Osobiste", "Zespół", "Klient"],
 }: EventManagerProps) {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [view, setView] = useState<"month" | "week" | "day" | "list">(defaultView)
@@ -93,7 +93,7 @@ export function EventManager({
   const [isCreating, setIsCreating] = useState(false)
   const draggedEventRef = useRef<Event | null>(null)
   const defaultColor = colors[0]?.value ?? "blue"
-  const defaultCategory = categories[0] ?? "Meeting"
+  const defaultCategory = categories[0] ?? "Spotkanie"
   const [newEvent, setNewEvent] = useState<Partial<Event>>({
     title: "",
     description: "",
@@ -108,38 +108,38 @@ export function EventManager({
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
 
   const filteredEvents = useMemo(() => {
-    return events.filter((event) => {
+    return wydarzeń.filter((wydarzenie) => {
       // Search filter
       if (searchQuery) {
         const query = searchQuery.toLowerCase()
         const matchesSearch =
-          event.title.toLowerCase().includes(query) ||
-          event.description?.toLowerCase().includes(query) ||
-          event.category?.toLowerCase().includes(query) ||
-          event.tags?.some((tag) => tag.toLowerCase().includes(query))
+          wydarzenie.title.toLowerCase().includes(query) ||
+          wydarzenie.description?.toLowerCase().includes(query) ||
+          wydarzenie.category?.toLowerCase().includes(query) ||
+          wydarzenie.tags?.some((tag) => tag.toLowerCase().includes(query))
 
         if (!matchesSearch) return false
       }
 
       // Color filter
-      if (selectedColors.length > 0 && !selectedColors.includes(event.color)) {
+      if (selectedColors.length > 0 && !selectedColors.includes(wydarzenie.color)) {
         return false
       }
 
       // Tag filter
       if (selectedTags.length > 0) {
-        const hasMatchingTag = event.tags?.some((tag) => selectedTags.includes(tag))
+        const hasMatchingTag = wydarzenie.tags?.some((tag) => selectedTags.includes(tag))
         if (!hasMatchingTag) return false
       }
 
       // Category filter
-      if (selectedCategories.length > 0 && event.category && !selectedCategories.includes(event.category)) {
+      if (selectedCategories.length > 0 && wydarzenie.category && !selectedCategories.includes(wydarzenie.category)) {
         return false
       }
 
       return true
     })
-  }, [events, searchQuery, selectedColors, selectedTags, selectedCategories])
+  }, [wydarzeń, searchQuery, selectedColors, selectedTags, selectedCategories])
 
   const hasActiveFilters = selectedColors.length > 0 || selectedTags.length > 0 || selectedCategories.length > 0
 
@@ -153,7 +153,7 @@ export function EventManager({
   const handleCreateEvent = useCallback(() => {
     if (!newEvent.title || !newEvent.startTime || !newEvent.endTime) return
 
-    const event: Event = {
+    const wydarzenie: Event = {
       id: Math.random().toString(36).substr(2, 9),
       title: newEvent.title,
       description: newEvent.description,
@@ -165,7 +165,7 @@ export function EventManager({
       tags: newEvent.tags || [],
     }
 
-    onEventCreate?.(event)
+    onEventCreate?.(wydarzenie)
     setIsDialogOpen(false)
     setIsCreating(false)
     setNewEvent({
@@ -194,10 +194,10 @@ export function EventManager({
     [onEventDelete],
   )
 
-  const handleDragStart = useCallback((event: Event) => {
+  const handleDragStart = useCallback((wydarzenie: Event) => {
     // Keep native HTML5 drag stable. Updating React state during dragstart can
     // re-render the draggable node and cancel the browser drag operation.
-    draggedEventRef.current = event
+    draggedEventRef.current = wydarzenie
   }, [])
 
   const handleDragEnd = useCallback(() => {
@@ -205,9 +205,9 @@ export function EventManager({
   }, [])
 
   const handleDrop = useCallback(
-    (date: Date, hour?: number, eventId?: string) => {
+    (date: Date, hour?: number, wydarzenieId?: string) => {
       const source =
-        (eventId ? events.find((event) => event.id === eventId) : undefined) ??
+        (wydarzenieId ? wydarzeń.find((wydarzenie) => wydarzenie.id === wydarzenieId) : undefined) ??
         draggedEventRef.current
       if (!source) return
 
@@ -236,7 +236,7 @@ export function EventManager({
       })
       draggedEventRef.current = null
     },
-    [events, onEventUpdate],
+    [wydarzeń, onEventUpdate],
   )
 
   const navigateDate = useCallback(
@@ -256,7 +256,7 @@ export function EventManager({
     [view],
   )
 
-  const fallbackColor = colors[0] ?? { name: "Blue", value: "blue", bg: "bg-blue-500", text: "text-blue-700" }
+  const fallbackColor = colors[0] ?? { name: "Niebieski", value: "blue", bg: "bg-blue-500", text: "text-blue-700" }
   const getColorClasses = useCallback(
     (colorValue: string): { name: string; value: string; bg: string; text: string } => {
       const color = colors.find((c) => c.value === colorValue)
@@ -290,23 +290,23 @@ export function EventManager({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
           <h2 className="text-xl font-semibold sm:text-2xl">
             {view === "month" &&
-              currentDate.toLocaleDateString("en-US", {
+              currentDate.toLocaleDateString("pl-PL", {
                 month: "long",
                 year: "numeric",
               })}
             {view === "week" &&
-              `Week of ${currentDate.toLocaleDateString("en-US", {
+              `Tydzień od ${currentDate.toLocaleDateString("pl-PL", {
                 month: "short",
                 day: "numeric",
               })}`}
             {view === "day" &&
-              currentDate.toLocaleDateString("en-US", {
+              currentDate.toLocaleDateString("pl-PL", {
                 weekday: "long",
                 month: "long",
                 day: "numeric",
                 year: "numeric",
               })}
-            {view === "list" && "All Events"}
+            {view === "list" && "Wszystkie wydarzenia"}
           </h2>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="icon" onClick={() => navigateDate("prev")} className="h-8 w-8">
@@ -327,10 +327,10 @@ export function EventManager({
               are now one tap away without an overlay. */}
           <div className="grid grid-cols-4 gap-1 rounded-xl border bg-background p-1 sm:hidden">
             {[
-              { value: "month", label: "Month", icon: Calendar },
-              { value: "week", label: "Week", icon: Grid3x3 },
-              { value: "day", label: "Day", icon: Clock },
-              { value: "list", label: "List", icon: List },
+              { value: "month", label: "Miesiąc", icon: Calendar },
+              { value: "week", label: "Tydzień", icon: Grid3x3 },
+              { value: "day", label: "Dzień", icon: Clock },
+              { value: "list", label: "Lista", icon: List },
             ].map((item) => {
               const Icon = item.icon
               const active = view === item.value
@@ -360,7 +360,7 @@ export function EventManager({
               className="h-8"
             >
               <Calendar className="h-4 w-4" />
-              <span className="ml-1">Month</span>
+              <span className="ml-1">Miesiąc</span>
             </Button>
             <Button
               variant={view === "week" ? "secondary" : "ghost"}
@@ -369,7 +369,7 @@ export function EventManager({
               className="h-8"
             >
               <Grid3x3 className="h-4 w-4" />
-              <span className="ml-1">Week</span>
+              <span className="ml-1">Tydzień</span>
             </Button>
             <Button
               variant={view === "day" ? "secondary" : "ghost"}
@@ -378,7 +378,7 @@ export function EventManager({
               className="h-8"
             >
               <Clock className="h-4 w-4" />
-              <span className="ml-1">Day</span>
+              <span className="ml-1">Dzień</span>
             </Button>
             <Button
               variant={view === "list" ? "secondary" : "ghost"}
@@ -387,7 +387,7 @@ export function EventManager({
               className="h-8"
             >
               <List className="h-4 w-4" />
-              <span className="ml-1">List</span>
+              <span className="ml-1">Lista</span>
             </Button>
           </div>
 
@@ -399,7 +399,7 @@ export function EventManager({
             className="h-10 w-full rounded-xl sm:w-auto"
           >
             <Plus className="mr-2 h-4 w-4" />
-            New Event
+            Nowe wydarzenie
           </Button>
         </div>
       </div>
@@ -408,7 +408,7 @@ export function EventManager({
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search events..."
+            placeholder="Szukaj wydarzeń..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9"
@@ -442,7 +442,7 @@ export function EventManager({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-48 bg-white">
-                <DropdownMenuLabel>Filter by Color</DropdownMenuLabel>
+                <DropdownMenuLabel>Filtruj według koloru</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {colors.map((color) => (
                   <DropdownMenuCheckboxItem
@@ -477,7 +477,7 @@ export function EventManager({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-48 bg-white">
-                <DropdownMenuLabel>Filter by Tag</DropdownMenuLabel>
+                <DropdownMenuLabel>Filtruj według tagu</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {availableTags.map((tag) => (
                   <DropdownMenuCheckboxItem
@@ -507,7 +507,7 @@ export function EventManager({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-48 bg-white">
-                <DropdownMenuLabel>Filter by Category</DropdownMenuLabel>
+                <DropdownMenuLabel>Filtruj według kategorii</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {categories.map((category) => (
                   <DropdownMenuCheckboxItem
@@ -533,7 +533,7 @@ export function EventManager({
                 className="gap-2 whitespace-nowrap flex-shrink-0"
               >
                 <X className="h-4 w-4" />
-                Clear Filters
+                Wyczyść filtry
               </Button>
             )}
           </div>
@@ -555,7 +555,7 @@ export function EventManager({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48 bg-white">
-              <DropdownMenuLabel>Filter by Color</DropdownMenuLabel>
+              <DropdownMenuLabel>Filtruj według koloru</DropdownMenuLabel>
               <DropdownMenuSeparator />
               {colors.map((color) => (
                 <DropdownMenuCheckboxItem
@@ -590,7 +590,7 @@ export function EventManager({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48 bg-white">
-              <DropdownMenuLabel>Filter by Tag</DropdownMenuLabel>
+              <DropdownMenuLabel>Filtruj według tagu</DropdownMenuLabel>
               <DropdownMenuSeparator />
               {availableTags.map((tag) => (
                 <DropdownMenuCheckboxItem
@@ -620,7 +620,7 @@ export function EventManager({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48 bg-white">
-              <DropdownMenuLabel>Filter by Category</DropdownMenuLabel>
+              <DropdownMenuLabel>Filtruj według kategorii</DropdownMenuLabel>
               <DropdownMenuSeparator />
               {categories.map((category) => (
                 <DropdownMenuCheckboxItem
@@ -693,13 +693,13 @@ export function EventManager({
         </div>
       )}
 
-      {/* Calendar Views - Pass filteredEvents instead of events */}
+      {/* Calendar Views - Pass filteredEvents instead of wydarzeń */}
       {view === "month" && (
         <MonthView
           currentDate={currentDate}
-          events={filteredEvents}
-          onEventClick={(event) => {
-            setSelectedEvent(event)
+          wydarzeń={filteredEvents}
+          onEventClick={(wydarzenie) => {
+            setSelectedEvent(wydarzenie)
             setIsDialogOpen(true)
           }}
           onDragStart={handleDragStart}
@@ -712,9 +712,9 @@ export function EventManager({
       {view === "week" && (
         <WeekView
           currentDate={currentDate}
-          events={filteredEvents}
-          onEventClick={(event) => {
-            setSelectedEvent(event)
+          wydarzeń={filteredEvents}
+          onEventClick={(wydarzenie) => {
+            setSelectedEvent(wydarzenie)
             setIsDialogOpen(true)
           }}
           onDragStart={handleDragStart}
@@ -727,9 +727,9 @@ export function EventManager({
       {view === "day" && (
         <DayView
           currentDate={currentDate}
-          events={filteredEvents}
-          onEventClick={(event) => {
-            setSelectedEvent(event)
+          wydarzeń={filteredEvents}
+          onEventClick={(wydarzenie) => {
+            setSelectedEvent(wydarzenie)
             setIsDialogOpen(true)
           }}
           onDragStart={handleDragStart}
@@ -741,9 +741,9 @@ export function EventManager({
 
       {view === "list" && (
         <ListView
-          events={filteredEvents}
-          onEventClick={(event) => {
-            setSelectedEvent(event)
+          wydarzeń={filteredEvents}
+          onEventClick={(wydarzenie) => {
+            setSelectedEvent(wydarzenie)
             setIsDialogOpen(true)
           }}
           getColorClasses={getColorClasses}
@@ -754,15 +754,15 @@ export function EventManager({
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto bg-white">
           <DialogHeader>
-            <DialogTitle>{isCreating ? "Create Event" : "Event Details"}</DialogTitle>
+            <DialogTitle>{isCreating ? "Create Event" : "Szczegóły wydarzenia"}</DialogTitle>
             <DialogDescription>
-              {isCreating ? "Add a new event to your calendar" : "View and edit event details"}
+              {isCreating ? "Add a new wydarzenie to your calendar" : "Wyświetl i edytuj szczegóły wydarzenia"}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="title">Title</Label>
+              <Label htmlFor="title">Tytuł</Label>
               <Input
                 id="title"
                 value={isCreating ? newEvent.title : selectedEvent?.title || ""}
@@ -776,7 +776,7 @@ export function EventManager({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
+              <Label htmlFor="description">Opis</Label>
               <Textarea
                 id="description"
                 value={isCreating ? newEvent.description : selectedEvent?.description || ""}
@@ -795,7 +795,7 @@ export function EventManager({
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="startTime">Start Time</Label>
+                <Label htmlFor="startTime">Początek</Label>
                 <Input
                   id="startTime"
                   type="datetime-local"
@@ -825,7 +825,7 @@ export function EventManager({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="endTime">End Time</Label>
+                <Label htmlFor="endTime">Koniec</Label>
                 <Input
                   id="endTime"
                   type="datetime-local"
@@ -855,7 +855,7 @@ export function EventManager({
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="category">Category</Label>
+                <Label htmlFor="category">Kategoria</Label>
                 <Select
                   value={isCreating ? newEvent.category : selectedEvent?.category}
                   onValueChange={(value) =>
@@ -878,7 +878,7 @@ export function EventManager({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="color">Color</Label>
+                <Label htmlFor="color">Kolor</Label>
                 <Select
                   value={isCreating ? newEvent.color : selectedEvent?.color}
                   onValueChange={(value) =>
@@ -905,7 +905,7 @@ export function EventManager({
             </div>
 
             <div className="space-y-2">
-              <Label>Tags</Label>
+              <Label>Tagi</Label>
               <div className="flex flex-wrap gap-2">
                 {availableTags.map((tag) => {
                   const isSelected = isCreating ? newEvent.tags?.includes(tag) : selectedEvent?.tags?.includes(tag)
@@ -974,30 +974,30 @@ export function EventManager({
 
 // EventCard component with hover effect
 function EventCard({
-  event,
+  wydarzenie,
   onEventClick,
   onDragStart,
   onDragEnd,
   getColorClasses,
   variant = "default",
 }: {
-  event: Event
-  onEventClick: (event: Event) => void
-  onDragStart: (event: Event) => void
+  wydarzenie: Event
+  onEventClick: (wydarzenie: Event) => void
+  onDragStart: (wydarzenie: Event) => void
   onDragEnd: () => void
   getColorClasses: (color: string) => { bg: string; text: string }
   variant?: "default" | "compact" | "detailed"
 }) {
   const [isHovered, setIsHovered] = useState(false)
-  const colorClasses = getColorClasses(event.color)
+  const colorClasses = getColorClasses(wydarzenie.color)
 
   // A block with a priority renders the same Glyph + accent-tint left-rule
   // system Grid.tsx (the /time page) uses, instead of the generic named
   // `color` — one source of truth for what priority/kind look like,
-  // wherever a block is drawn. An event with no priority (a real, external,
+  // wherever a block is drawn. An wydarzenie with no priority (a real, external,
   // immovable meeting) keeps the plain `colorClasses` treatment.
-  const priority = event.priority
-  const moved = event.tags?.includes("Moved") ?? false
+  const priority = wydarzenie.priority
+  const moved = wydarzenie.tags?.includes("Moved") ?? false
   const ruleColor = priority ? RULE[priority] : undefined
   const priorityStyle: React.CSSProperties | undefined = priority
     ? { backgroundColor: FILL[priority], borderLeft: `3px ${moved ? "dashed" : "solid"} ${RULE[priority]}` }
@@ -1006,14 +1006,14 @@ function EventCard({
   const textClass = priority ? "text-fg" : "text-white"
 
   const formatTime = (date: Date) => {
-    return date.toLocaleTimeString("en-US", {
+    return date.toLocaleTimeString("pl-PL", {
       hour: "2-digit",
       minute: "2-digit",
     })
   }
 
   const getDuration = () => {
-    const diff = event.endTime.getTime() - event.startTime.getTime()
+    const diff = wydarzenie.endTime.getTime() - wydarzenie.startTime.getTime()
     const hours = Math.floor(diff / (1000 * 60 * 60))
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
     if (hours > 0) {
@@ -1030,9 +1030,9 @@ function EventCard({
   )
 
   const kindGlyph = (size: number) =>
-    event.kind && (
+    wydarzenie.kind && (
       <span className="shrink-0" style={{ color: ruleColor }} aria-hidden>
-        <Glyph kind={event.kind} size={size} />
+        <Glyph kind={wydarzenie.kind} size={size} />
       </span>
     )
 
@@ -1042,12 +1042,12 @@ function EventCard({
         draggable
         onDragStart={(nativeEvent) => {
           nativeEvent.dataTransfer.effectAllowed = "move"
-          nativeEvent.dataTransfer.setData("application/x-horolog-event", event.id)
-          nativeEvent.dataTransfer.setData("text/plain", event.id)
-          onDragStart(event)
+          nativeEvent.dataTransfer.setData("application/x-horolog-wydarzenie", wydarzenie.id)
+          nativeEvent.dataTransfer.setData("text/plain", wydarzenie.id)
+          onDragStart(wydarzenie)
         }}
         onDragEnd={onDragEnd}
-        onClick={() => onEventClick(event)}
+        onClick={() => onEventClick(wydarzenie)}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         className="relative cursor-pointer"
@@ -1060,15 +1060,15 @@ function EventCard({
             textClass,
             "animate-in fade-in slide-in-from-top-1",
             isHovered && "scale-105 shadow-lg z-10",
-            event.completed && "opacity-70",
+            wydarzenie.completed && "opacity-70",
           )}
         >
-          {event.completed && (
+          {wydarzenie.completed && (
             <span className="shrink-0 font-bold" aria-label="Completed">✓</span>
           )}
           {kindGlyph(10)}
-          <span className={cn("truncate", event.completed && "line-through opacity-60")}>
-            {event.title}
+          <span className={cn("truncate", wydarzenie.completed && "line-through opacity-60")}>
+            {wydarzenie.title}
           </span>
         </div>
         {isHovered && (
@@ -1078,27 +1078,27 @@ function EventCard({
                 <div className="flex items-start justify-between gap-2">
                   <h4 className={cn(
                     "font-semibold text-sm leading-tight text-fg",
-                    event.completed && "line-through opacity-60",
+                    wydarzenie.completed && "line-through opacity-60",
                   )}>
-                    {event.completed ? "✓ " : ""}{event.title}
+                    {wydarzenie.completed ? "✓ " : ""}{wydarzenie.title}
                   </h4>
                   {dot("h-3 w-3")}
                 </div>
-                {event.description && <p className="text-xs text-muted-foreground line-clamp-2">{event.description}</p>}
+                {wydarzenie.description && <p className="text-xs text-muted-foreground line-clamp-2">{wydarzenie.description}</p>}
                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Clock className="h-3 w-3" />
                   <span>
-                    {formatTime(event.startTime)} - {formatTime(event.endTime)}
+                    {formatTime(wydarzenie.startTime)} - {formatTime(wydarzenie.endTime)}
                   </span>
                   <span className="text-[10px]">({getDuration()})</span>
                 </div>
                 <div className="flex flex-wrap gap-1">
-                  {event.category && (
+                  {wydarzenie.category && (
                     <Badge variant="secondary" className="text-[10px] h-5">
-                      {event.category}
+                      {wydarzenie.category}
                     </Badge>
                   )}
-                  {event.tags?.map((tag) => (
+                  {wydarzenie.tags?.map((tag) => (
                     <Badge key={tag} variant="outline" className="text-[10px] h-5">
                       {tag}
                     </Badge>
@@ -1118,12 +1118,12 @@ function EventCard({
         draggable
         onDragStart={(nativeEvent) => {
           nativeEvent.dataTransfer.effectAllowed = "move"
-          nativeEvent.dataTransfer.setData("application/x-horolog-event", event.id)
-          nativeEvent.dataTransfer.setData("text/plain", event.id)
-          onDragStart(event)
+          nativeEvent.dataTransfer.setData("application/x-horolog-wydarzenie", wydarzenie.id)
+          nativeEvent.dataTransfer.setData("text/plain", wydarzenie.id)
+          onDragStart(wydarzenie)
         }}
         onDragEnd={onDragEnd}
-        onClick={() => onEventClick(event)}
+        onClick={() => onEventClick(wydarzenie)}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         style={priorityStyle}
@@ -1133,34 +1133,34 @@ function EventCard({
           textClass,
           "animate-in fade-in slide-in-from-left-2",
           isHovered && "scale-[1.03] shadow-2xl ring-2 ring-black/10",
-          event.completed && "opacity-70",
+          wydarzenie.completed && "opacity-70",
         )}
       >
         <div className={cn(
           "flex items-center gap-1.5 font-semibold",
-          event.completed && "line-through opacity-60",
+          wydarzenie.completed && "line-through opacity-60",
         )}>
-          {event.completed && <span className="font-bold">✓</span>}
+          {wydarzenie.completed && <span className="font-bold">✓</span>}
           {kindGlyph(14)}
-          {event.title}
+          {wydarzenie.title}
         </div>
-        {event.description && (
+        {wydarzenie.description && (
           <div className={cn("mt-1 text-sm line-clamp-2", priority ? "text-fg-muted" : "opacity-90")}>
-            {event.description}
+            {wydarzenie.description}
           </div>
         )}
         <div className={cn("mt-2 flex items-center gap-2 text-xs", priority ? "text-fg-muted" : "opacity-80")}>
           <Clock className="h-3 w-3" />
-          {formatTime(event.startTime)} - {formatTime(event.endTime)}
+          {formatTime(wydarzenie.startTime)} - {formatTime(wydarzenie.endTime)}
         </div>
         {isHovered && (
           <div className="mt-2 flex flex-wrap gap-1 animate-in fade-in slide-in-from-bottom-1 duration-200">
-            {event.category && (
+            {wydarzenie.category && (
               <Badge variant="secondary" className="text-xs">
-                {event.category}
+                {wydarzenie.category}
               </Badge>
             )}
-            {event.tags?.map((tag) => (
+            {wydarzenie.tags?.map((tag) => (
               <Badge key={tag} variant="outline" className="text-xs">
                 {tag}
               </Badge>
@@ -1174,9 +1174,9 @@ function EventCard({
   return (
     <div
       draggable
-      onDragStart={() => onDragStart(event)}
+      onDragStart={() => onDragStart(wydarzenie)}
       onDragEnd={onDragEnd}
-      onClick={() => onEventClick(event)}
+      onClick={() => onEventClick(wydarzenie)}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       className="relative"
@@ -1189,15 +1189,15 @@ function EventCard({
           textClass,
           "animate-in fade-in slide-in-from-left-1",
           isHovered && "scale-105 shadow-lg z-10",
-          event.completed && "opacity-70",
+          wydarzenie.completed && "opacity-70",
         )}
       >
-        {event.completed && (
+        {wydarzenie.completed && (
           <span className="shrink-0 font-bold" aria-label="Completed">✓</span>
         )}
         {kindGlyph(12)}
-        <div className={cn("truncate", event.completed && "line-through opacity-60")}>
-          {event.title}
+        <div className={cn("truncate", wydarzenie.completed && "line-through opacity-60")}>
+          {wydarzenie.title}
         </div>
       </div>
       {isHovered && (
@@ -1207,28 +1207,28 @@ function EventCard({
               <div className="flex items-start justify-between gap-2">
                 <h4 className={cn(
                   "font-semibold leading-tight text-fg",
-                  event.completed && "line-through opacity-60",
+                  wydarzenie.completed && "line-through opacity-60",
                 )}>
-                  {event.completed ? "✓ " : ""}{event.title}
+                  {wydarzenie.completed ? "✓ " : ""}{wydarzenie.title}
                 </h4>
                 {dot("h-4 w-4")}
               </div>
-              {event.description && <p className="text-sm text-muted-foreground">{event.description}</p>}
+              {wydarzenie.description && <p className="text-sm text-muted-foreground">{wydarzenie.description}</p>}
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Clock className="h-3.5 w-3.5" />
                   <span>
-                    {formatTime(event.startTime)} - {formatTime(event.endTime)}
+                    {formatTime(wydarzenie.startTime)} - {formatTime(wydarzenie.endTime)}
                   </span>
                   <span className="text-[10px]">({getDuration()})</span>
                 </div>
                 <div className="flex flex-wrap gap-1">
-                  {event.category && (
+                  {wydarzenie.category && (
                     <Badge variant="secondary" className="text-xs">
-                      {event.category}
+                      {wydarzenie.category}
                     </Badge>
                   )}
-                  {event.tags?.map((tag) => (
+                  {wydarzenie.tags?.map((tag) => (
                     <Badge key={tag} variant="outline" className="text-xs">
                       {tag}
                     </Badge>
@@ -1246,7 +1246,7 @@ function EventCard({
 // Month View Component
 function MonthView({
   currentDate,
-  events,
+  wydarzeń,
   onEventClick,
   onDragStart,
   onDragEnd,
@@ -1254,11 +1254,11 @@ function MonthView({
   getColorClasses,
 }: {
   currentDate: Date
-  events: Event[]
-  onEventClick: (event: Event) => void
-  onDragStart: (event: Event) => void
+  wydarzeń: Event[]
+  onEventClick: (wydarzenie: Event) => void
+  onDragStart: (wydarzenie: Event) => void
   onDragEnd: () => void
-  onDrop: (date: Date, hour?: number, eventId?: string) => void
+  onDrop: (date: Date, hour?: number, wydarzenieId?: string) => void
   getColorClasses: (color: string) => { bg: string; text: string }
 }) {
   const [selectedDay, setSelectedDay] = useState(new Date(currentDate))
@@ -1281,12 +1281,12 @@ function MonthView({
   }
 
   const getEventsForDay = (date: Date) => {
-    return events.filter((event) => {
-      const eventDate = new Date(event.startTime)
+    return wydarzeń.filter((wydarzenie) => {
+      const wydarzenieDate = new Date(wydarzenie.startTime)
       return (
-        eventDate.getDate() === date.getDate() &&
-        eventDate.getMonth() === date.getMonth() &&
-        eventDate.getFullYear() === date.getFullYear()
+        wydarzenieDate.getDate() === date.getDate() &&
+        wydarzenieDate.getMonth() === date.getMonth() &&
+        wydarzenieDate.getFullYear() === date.getFullYear()
       )
     })
   }
@@ -1339,13 +1339,13 @@ function MonthView({
                     {day.getDate()}
                   </span>
                   <span className="mt-1 flex h-2 items-center justify-center gap-0.5">
-                    {dayEvents.slice(0, 3).map((event) => (
+                    {dayEvents.slice(0, 3).map((wydarzenie) => (
                       <span
-                        key={event.id}
+                        key={wydarzenie.id}
                         className="h-1.5 w-1.5 rounded-full"
                         style={{
-                          background: event.priority
-                            ? RULE[event.priority]
+                          background: wydarzenie.priority
+                            ? RULE[wydarzenie.priority]
                             : undefined,
                         }}
                       />
@@ -1367,7 +1367,7 @@ function MonthView({
                 Selected day
               </p>
               <h3 className="text-sm font-semibold text-foreground">
-                {selectedDay.toLocaleDateString("en-US", {
+                {selectedDay.toLocaleDateString("pl-PL", {
                   weekday: "long",
                   month: "short",
                   day: "numeric",
@@ -1375,16 +1375,16 @@ function MonthView({
               </h3>
             </div>
             <span className="rounded-full bg-secondary px-2 py-1 text-[10px] font-semibold text-muted-foreground">
-              {selectedEvents.length} {selectedEvents.length === 1 ? "event" : "events"}
+              {selectedEvents.length} {selectedEvents.length === 1 ? "wydarzenie" : "wydarzeń"}
             </span>
           </div>
 
           {selectedEvents.length > 0 ? (
             <div className="space-y-2">
-              {selectedEvents.map((event) => (
+              {selectedEvents.map((wydarzenie) => (
                 <EventCard
-                  key={event.id}
-                  event={event}
+                  key={wydarzenie.id}
+                  wydarzenie={wydarzenie}
                   onEventClick={onEventClick}
                   onDragStart={onDragStart}
                   onDragEnd={onDragEnd}
@@ -1395,7 +1395,7 @@ function MonthView({
             </div>
           ) : (
             <div className="rounded-lg bg-muted/30 px-3 py-6 text-center text-xs text-muted-foreground">
-              Nothing scheduled for this day.
+              Brak zaplanowanych wydarzeń na ten dzień.
             </div>
           )}
         </div>
@@ -1425,12 +1425,12 @@ function MonthView({
                   "hover:bg-accent/50",
                 )}
                 onDragOver={(e) => {
-                  e.preventDefault()
+                  e.prwydarzenieDefault()
                   e.dataTransfer.dropEffect = "move"
                 }}
                 onDrop={(e) => {
-                  e.preventDefault()
-                  onDrop(day, undefined, e.dataTransfer.getData("application/x-horolog-event"))
+                  e.prwydarzenieDefault()
+                  onDrop(day, undefined, e.dataTransfer.getData("application/x-horolog-wydarzenie"))
                 }}
               >
                 <div
@@ -1442,10 +1442,10 @@ function MonthView({
                   {day.getDate()}
                 </div>
                 <div className="space-y-1">
-                  {dayEvents.slice(0, 3).map((event) => (
+                  {dayEvents.slice(0, 3).map((wydarzenie) => (
                     <EventCard
-                      key={event.id}
-                      event={event}
+                      key={wydarzenie.id}
+                      wydarzenie={wydarzenie}
                       onEventClick={onEventClick}
                       onDragStart={onDragStart}
                       onDragEnd={onDragEnd}
@@ -1469,7 +1469,7 @@ function MonthView({
 // Week View Component
 function WeekView({
   currentDate,
-  events,
+  wydarzeń,
   onEventClick,
   onDragStart,
   onDragEnd,
@@ -1477,11 +1477,11 @@ function WeekView({
   getColorClasses,
 }: {
   currentDate: Date
-  events: Event[]
-  onEventClick: (event: Event) => void
-  onDragStart: (event: Event) => void
+  wydarzeń: Event[]
+  onEventClick: (wydarzenie: Event) => void
+  onDragStart: (wydarzenie: Event) => void
   onDragEnd: () => void
-  onDrop: (date: Date, hour: number, eventId?: string) => void
+  onDrop: (date: Date, hour: number, wydarzenieId?: string) => void
   getColorClasses: (color: string) => { bg: string; text: string }
 }) {
   const startOfWeek = new Date(currentDate)
@@ -1497,26 +1497,26 @@ function WeekView({
   const hours = Array.from({ length: 24 }, (_, i) => i)
 
   const getEventsForDay = (date: Date) =>
-    events
-      .filter((event) => {
-        const eventDate = new Date(event.startTime)
+    wydarzeń
+      .filter((wydarzenie) => {
+        const wydarzenieDate = new Date(wydarzenie.startTime)
         return (
-          eventDate.getDate() === date.getDate() &&
-          eventDate.getMonth() === date.getMonth() &&
-          eventDate.getFullYear() === date.getFullYear()
+          wydarzenieDate.getDate() === date.getDate() &&
+          wydarzenieDate.getMonth() === date.getMonth() &&
+          wydarzenieDate.getFullYear() === date.getFullYear()
         )
       })
       .sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
 
   const getEventsForDayAndHour = (date: Date, hour: number) => {
-    return events.filter((event) => {
-      const eventDate = new Date(event.startTime)
-      const eventHour = eventDate.getHours()
+    return wydarzeń.filter((wydarzenie) => {
+      const wydarzenieDate = new Date(wydarzenie.startTime)
+      const wydarzenieHour = wydarzenieDate.getHours()
       return (
-        eventDate.getDate() === date.getDate() &&
-        eventDate.getMonth() === date.getMonth() &&
-        eventDate.getFullYear() === date.getFullYear() &&
-        eventHour === hour
+        wydarzenieDate.getDate() === date.getDate() &&
+        wydarzenieDate.getMonth() === date.getMonth() &&
+        wydarzenieDate.getFullYear() === date.getFullYear() &&
+        wydarzenieHour === hour
       )
     })
   }
@@ -1543,23 +1543,23 @@ function WeekView({
                   </span>
                   <div>
                     <h3 className="text-sm font-semibold">
-                      {day.toLocaleDateString("en-US", { weekday: "long" })}
+                      {day.toLocaleDateString("pl-PL", { weekday: "long" })}
                     </h3>
                     <p className="text-[10px] text-muted-foreground">
-                      {day.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      {day.toLocaleDateString("pl-PL", { month: "short", day: "numeric" })}
                     </p>
                   </div>
                 </div>
                 <span className="text-[10px] font-medium text-muted-foreground">
-                  {dayEvents.length || "No"} {dayEvents.length === 1 ? "event" : "events"}
+                  {dayEvents.length || "No"} {dayEvents.length === 1 ? "wydarzenie" : "wydarzeń"}
                 </span>
               </div>
               {dayEvents.length > 0 ? (
                 <div className="space-y-2">
-                  {dayEvents.map((event) => (
+                  {dayEvents.map((wydarzenie) => (
                     <EventCard
-                      key={event.id}
-                      event={event}
+                      key={wydarzenie.id}
+                      wydarzenie={wydarzenie}
                       onEventClick={onEventClick}
                       onDragStart={onDragStart}
                       onDragEnd={onDragEnd}
@@ -1586,9 +1586,9 @@ function WeekView({
               key={day.toISOString()}
               className="border-r p-2 text-center text-sm font-medium last:border-r-0"
             >
-              <div>{day.toLocaleDateString("en-US", { weekday: "short" })}</div>
+              <div>{day.toLocaleDateString("pl-PL", { weekday: "short" })}</div>
               <div className="text-xs text-muted-foreground">
-                {day.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                {day.toLocaleDateString("pl-PL", { month: "short", day: "numeric" })}
               </div>
             </div>
           ))}
@@ -1606,23 +1606,23 @@ function WeekView({
                     key={`${day.toISOString()}-${hour}`}
                     className="min-h-16 border-b border-r p-1 transition-colors hover:bg-accent/50 last:border-r-0"
                     onDragOver={(e) => {
-                      e.preventDefault()
+                      e.prwydarzenieDefault()
                       e.dataTransfer.dropEffect = "move"
                     }}
                     onDrop={(e) => {
-                      e.preventDefault()
+                      e.prwydarzenieDefault()
                       onDrop(
                         day,
                         hour,
-                        e.dataTransfer.getData("application/x-horolog-event"),
+                        e.dataTransfer.getData("application/x-horolog-wydarzenie"),
                       )
                     }}
                   >
                     <div className="space-y-1">
-                      {dayEvents.map((event) => (
+                      {dayEvents.map((wydarzenie) => (
                         <EventCard
-                          key={event.id}
-                          event={event}
+                          key={wydarzenie.id}
+                          wydarzenie={wydarzenie}
                           onEventClick={onEventClick}
                           onDragStart={onDragStart}
                           onDragEnd={onDragEnd}
@@ -1645,7 +1645,7 @@ function WeekView({
 // Day View Component
 function DayView({
   currentDate,
-  events,
+  wydarzeń,
   onEventClick,
   onDragStart,
   onDragEnd,
@@ -1653,24 +1653,24 @@ function DayView({
   getColorClasses,
 }: {
   currentDate: Date
-  events: Event[]
-  onEventClick: (event: Event) => void
-  onDragStart: (event: Event) => void
+  wydarzeń: Event[]
+  onEventClick: (wydarzenie: Event) => void
+  onDragStart: (wydarzenie: Event) => void
   onDragEnd: () => void
-  onDrop: (date: Date, hour: number, eventId?: string) => void
+  onDrop: (date: Date, hour: number, wydarzenieId?: string) => void
   getColorClasses: (color: string) => { bg: string; text: string }
 }) {
   const hours = Array.from({ length: 24 }, (_, i) => i)
 
   const getEventsForHour = (hour: number) => {
-    return events.filter((event) => {
-      const eventDate = new Date(event.startTime)
-      const eventHour = eventDate.getHours()
+    return wydarzeń.filter((wydarzenie) => {
+      const wydarzenieDate = new Date(wydarzenie.startTime)
+      const wydarzenieHour = wydarzenieDate.getHours()
       return (
-        eventDate.getDate() === currentDate.getDate() &&
-        eventDate.getMonth() === currentDate.getMonth() &&
-        eventDate.getFullYear() === currentDate.getFullYear() &&
-        eventHour === hour
+        wydarzenieDate.getDate() === currentDate.getDate() &&
+        wydarzenieDate.getMonth() === currentDate.getMonth() &&
+        wydarzenieDate.getFullYear() === currentDate.getFullYear() &&
+        wydarzenieHour === hour
       )
     })
   }
@@ -1685,15 +1685,15 @@ function DayView({
               key={hour}
               className="flex border-b last:border-b-0"
               onDragOver={(e) => {
-                e.preventDefault()
+                e.prwydarzenieDefault()
                 e.dataTransfer.dropEffect = "move"
               }}
               onDrop={(e) => {
-                e.preventDefault()
+                e.prwydarzenieDefault()
                 onDrop(
                   currentDate,
                   hour,
-                  e.dataTransfer.getData("application/x-horolog-event"),
+                  e.dataTransfer.getData("application/x-horolog-wydarzenie"),
                 )
               }}
             >
@@ -1702,10 +1702,10 @@ function DayView({
               </div>
               <div className="min-h-16 flex-1 p-1 transition-colors hover:bg-accent/50 sm:min-h-20 sm:p-2">
                 <div className="space-y-2">
-                  {hourEvents.map((event) => (
+                  {hourEvents.map((wydarzenie) => (
                     <EventCard
-                      key={event.id}
-                      event={event}
+                      key={wydarzenie.id}
+                      wydarzenie={wydarzenie}
                       onEventClick={onEventClick}
                       onDragStart={onDragStart}
                       onDragEnd={onDragEnd}
@@ -1725,19 +1725,19 @@ function DayView({
 
 // List View Component
 function ListView({
-  events,
+  wydarzeń,
   onEventClick,
   getColorClasses,
 }: {
-  events: Event[]
-  onEventClick: (event: Event) => void
+  wydarzeń: Event[]
+  onEventClick: (wydarzenie: Event) => void
   getColorClasses: (color: string) => { bg: string; text: string }
 }) {
-  const sortedEvents = [...events].sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
+  const sortedEvents = [...wydarzeń].sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
 
   const groupedEvents = sortedEvents.reduce(
-    (acc, event) => {
-      const dateKey = event.startTime.toLocaleDateString("en-US", {
+    (acc, wydarzenie) => {
+      const dateKey = wydarzenie.startTime.toLocaleDateString("pl-PL", {
         weekday: "long",
         year: "numeric",
         month: "long",
@@ -1746,7 +1746,7 @@ function ListView({
       if (!acc[dateKey]) {
         acc[dateKey] = []
       }
-      acc[dateKey].push(event)
+      acc[dateKey].push(wydarzenie)
       return acc
     },
     {} as Record<string, Event[]>,
@@ -1759,41 +1759,41 @@ function ListView({
           <div key={date} className="space-y-3">
             <h3 className="text-xs font-semibold text-muted-foreground sm:text-sm">{date}</h3>
             <div className="space-y-2">
-              {dateEvents.map((event) => {
-                const colorClasses = getColorClasses(event.color)
-                const ruleColor = event.priority ? RULE[event.priority] : undefined
+              {dateEvents.map((wydarzenie) => {
+                const colorClasses = getColorClasses(wydarzenie.color)
+                const ruleColor = wydarzenie.priority ? RULE[wydarzenie.priority] : undefined
                 return (
                   <div
-                    key={event.id}
-                    onClick={() => onEventClick(event)}
+                    key={wydarzenie.id}
+                    onClick={() => onEventClick(wydarzenie)}
                     className="group cursor-pointer rounded-lg border bg-card p-3 transition-all hover:shadow-md hover:scale-[1.01] animate-in fade-in slide-in-from-bottom-2 duration-300 sm:p-4"
                   >
                     <div className="flex items-start gap-2 sm:gap-3">
                       <div
-                        className={cn("mt-1 h-2.5 w-2.5 shrink-0 rounded-full sm:h-3 sm:w-3", !event.priority && colorClasses.bg)}
-                        style={event.priority ? { background: ruleColor } : undefined}
+                        className={cn("mt-1 h-2.5 w-2.5 shrink-0 rounded-full sm:h-3 sm:w-3", !wydarzenie.priority && colorClasses.bg)}
+                        style={wydarzenie.priority ? { background: ruleColor } : undefined}
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                           <div className="min-w-0">
                             <h4 className="flex items-center gap-1.5 font-semibold text-sm group-hover:text-primary transition-colors sm:text-base">
-                              {event.kind && (
+                              {wydarzenie.kind && (
                                 <span className="shrink-0" style={{ color: ruleColor }} aria-hidden>
-                                  <Glyph kind={event.kind} size={13} />
+                                  <Glyph kind={wydarzenie.kind} size={13} />
                                 </span>
                               )}
-                              <span className="truncate">{event.title}</span>
+                              <span className="truncate">{wydarzenie.title}</span>
                             </h4>
-                            {event.description && (
+                            {wydarzenie.description && (
                               <p className="mt-1 text-xs text-muted-foreground sm:text-sm line-clamp-2">
-                                {event.description}
+                                {wydarzenie.description}
                               </p>
                             )}
                           </div>
                           <div className="flex flex-wrap gap-1">
-                            {event.category && (
+                            {wydarzenie.category && (
                               <Badge variant="secondary" className="text-xs">
-                                {event.category}
+                                {wydarzenie.category}
                               </Badge>
                             )}
                           </div>
@@ -1801,19 +1801,19 @@ function ListView({
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground sm:gap-4 sm:text-xs">
                           <div className="flex items-center gap-1">
                             <Clock className="h-3 w-3" />
-                            {event.startTime.toLocaleTimeString("en-US", {
+                            {wydarzenie.startTime.toLocaleTimeString("pl-PL", {
                               hour: "2-digit",
                               minute: "2-digit",
                             })}{" "}
                             -{" "}
-                            {event.endTime.toLocaleTimeString("en-US", {
+                            {wydarzenie.endTime.toLocaleTimeString("pl-PL", {
                               hour: "2-digit",
                               minute: "2-digit",
                             })}
                           </div>
-                          {event.tags && event.tags.length > 0 && (
+                          {wydarzenie.tags && wydarzenie.tags.length > 0 && (
                             <div className="flex flex-wrap gap-1">
-                              {event.tags.map((tag) => (
+                              {wydarzenie.tags.map((tag) => (
                                 <Badge key={tag} variant="outline" className="text-[10px] h-4 sm:text-xs sm:h-5">
                                   {tag}
                                 </Badge>
@@ -1830,7 +1830,7 @@ function ListView({
           </div>
         ))}
         {sortedEvents.length === 0 && (
-          <div className="py-12 text-center text-sm text-muted-foreground sm:text-base">No events found</div>
+          <div className="py-12 text-center text-sm text-muted-foreground sm:text-base">No wydarzeń found</div>
         )}
       </div>
     </Card>
