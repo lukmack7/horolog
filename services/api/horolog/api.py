@@ -641,6 +641,20 @@ async def put_daily_review(date: str, body: DailyReviewIn, db: AsyncSession = De
     for field, value in body.model_dump().items():
         setattr(row, field, value)
     row.updated_at = datetime.now(UTC)
+
+    # The last reflection becomes useful only if it changes tomorrow. Seed the
+    # next day's "start here" field, but never overwrite a deliberate plan the
+    # user has already written there.
+    if body.first_step_morning.strip():
+        tomorrow = (_daily_date(date) + timedelta(days=1)).strftime("%Y-%m-%d")
+        next_plan = await db.get(DailyPlanRow, tomorrow)
+        if next_plan is None:
+            next_plan = DailyPlanRow(date=tomorrow, first_step=body.first_step_morning.strip())
+            db.add(next_plan)
+        elif not next_plan.first_step.strip():
+            next_plan.first_step = body.first_step_morning.strip()
+            next_plan.updated_at = datetime.now(UTC)
+
     await db.commit()
     return {"date": date, **body.model_dump()}
 
@@ -864,6 +878,16 @@ async def complete_intent(intent_id: str, db: AsyncSession = Depends(session)) -
         }
     )
     row.payload = intent.model_dump(mode="json")
+    daily_rows = (
+        await db.execute(
+            select(DailyPlanItemRow).where(
+                DailyPlanItemRow.intent_id == intent_id,
+                DailyPlanItemRow.completed_at.is_(None),
+            )
+        )
+    ).scalars().all()
+    for daily_row in daily_rows:
+        daily_row.completed_at = completed_at
     await db.commit()
     await _replan(db)
     return intent.model_dump(mode="json")
@@ -882,6 +906,11 @@ async def uncomplete_intent(intent_id: str, db: AsyncSession = Depends(session))
         }
     )
     row.payload = intent.model_dump(mode="json")
+    daily_rows = (
+        await db.execute(select(DailyPlanItemRow).where(DailyPlanItemRow.intent_id == intent_id))
+    ).scalars().all()
+    for daily_row in daily_rows:
+        daily_row.completed_at = None
     await db.commit()
     await _replan(db)
     return intent.model_dump(mode="json")
