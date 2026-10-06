@@ -6,7 +6,9 @@ import {
   api,
   formatDuration,
   type DailyData,
+  type DailyHistoryEntry,
   type DailyReview,
+  type DailyWeekly,
   type Priority,
 } from "@/app/lib/api";
 import {
@@ -22,9 +24,12 @@ import {
   Sunrise,
   Target,
   Trash2,
+  History,
+  CalendarRange,
+  Brain,
 } from "lucide-react";
 
-type DailyMode = "plan" | "review";
+type DailyMode = "plan" | "review" | "history";
 
 const QUADRANTS = [
   {
@@ -89,6 +94,8 @@ function dateKey(date: Date): string {
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 }
+
+const dateKeyFromDate = dateKey;
 
 export default function DailyPage() {
   const [date, setDate] = useState(() => {
@@ -201,7 +208,7 @@ export default function DailyPage() {
             )}
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-1 rounded-2xl border bg-white p-1 shadow-sm">
+          <div className="mt-4 grid grid-cols-3 gap-1 rounded-2xl border bg-white p-1 shadow-sm">
             <button
               type="button"
               onClick={() => setMode("plan")}
@@ -219,6 +226,15 @@ export default function DailyPage() {
               }`}
             >
               <Sparkles size={16} /> Koniec dnia
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("history")}
+              className={`flex h-11 items-center justify-center gap-2 rounded-xl text-[12.5px] font-semibold ${
+                mode === "history" ? "bg-primary text-white" : "text-fg-muted"
+              }`}
+            >
+              <History size={16} /> Historia
             </button>
           </div>
         </header>
@@ -253,6 +269,16 @@ export default function DailyPage() {
           <ReviewView
             data={data}
             saveReview={saveReview}
+          />
+        )}
+
+        {mode === "history" && (
+          <HistoryView
+            currentDate={date}
+            onOpenDay={(next) => {
+              setDate(next);
+              setMode("plan");
+            }}
           />
         )}
 
@@ -445,6 +471,38 @@ function QuadrantCard({
                     </span>
                   )}
                 </div>
+
+                {item.needs_decision && (
+                  <div className="mt-2.5 rounded-lg border border-amber-200 bg-amber-50/70 p-2.5">
+                    <div className="text-[10.5px] font-semibold text-amber-900">
+                      To zadanie wraca już {item.carry_days} dni.
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await api.keepDailyItem(item.id, dateKey);
+                          await reload();
+                        }}
+                        className="rounded-lg bg-white px-2.5 py-1.5 text-[10px] font-semibold text-amber-900 shadow-sm"
+                      >
+                        Nadal ważne
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const tomorrow = new Date(`${dateKey}T12:00:00`);
+                          tomorrow.setDate(tomorrow.getDate() + 1);
+                          await api.deferDailyItem(item.id, dateKeyFromDate(tomorrow));
+                          await reload();
+                        }}
+                        className="rounded-lg bg-white px-2.5 py-1.5 text-[10px] font-semibold text-amber-900 shadow-sm"
+                      >
+                        Przełóż świadomie
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
               <button
                 type="button"
@@ -600,6 +658,161 @@ function ReviewCard({
     </section>
   );
 }
+
+function HistoryView({
+  currentDate,
+  onOpenDay,
+}: {
+  currentDate: Date;
+  onOpenDay: (date: Date) => void;
+}) {
+  const [history, setHistory] = useState<DailyHistoryEntry[]>([]);
+  const [weekly, setWeekly] = useState<DailyWeekly | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    Promise.all([api.dailyHistory(), api.dailyWeekly(dateKey(currentDate))])
+      .then(([nextHistory, nextWeekly]) => {
+        if (!alive) return;
+        setHistory(nextHistory);
+        setWeekly(nextWeekly);
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [currentDate]);
+
+  if (loading) {
+    return <div className="h-80 animate-pulse rounded-2xl bg-sunk" />;
+  }
+
+  return (
+    <div className="space-y-5">
+      {weekly && (
+        <section className="rounded-2xl border bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <CalendarRange size={16} />
+                <h2 className="text-[15px] font-bold">Tydzień w skrócie</h2>
+              </div>
+              <p className="mt-1 text-[11px] text-fg-muted">
+                {new Date(`${weekly.start}T12:00:00`).toLocaleDateString("pl-PL", { day: "numeric", month: "short" })}
+                {" – "}
+                {new Date(`${weekly.end}T12:00:00`).toLocaleDateString("pl-PL", { day: "numeric", month: "short" })}
+              </p>
+            </div>
+            {weekly.stale_items > 0 && (
+              <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-700">
+                {weekly.stale_items} wymaga decyzji
+              </span>
+            )}
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <MiniFact label="Dni zaplanowane" value={`${weekly.planned_days}/7`} />
+            <MiniFact label="Dni z review" value={`${weekly.reviewed_days}/7`} />
+            <MiniFact label="Zadania wykonane" value={`${weekly.items_completed}/${weekly.items_created}`} />
+            <MiniFact label="Carry-over" value={String(weekly.carry_over)} />
+          </div>
+
+          <div className="mt-4 grid grid-cols-7 gap-1.5">
+            {weekly.days.map((day) => {
+              const active = day.planned || day.review_answers > 0 || day.items > 0;
+              return (
+                <button
+                  key={day.date}
+                  type="button"
+                  onClick={() => onOpenDay(new Date(`${day.date}T12:00:00`))}
+                  className={`rounded-xl border px-1 py-2 text-center ${
+                    active ? "bg-sunk/60" : "bg-white text-fg-subtle"
+                  }`}
+                >
+                  <div className="text-[9px] font-semibold uppercase text-fg-muted">
+                    {new Date(`${day.date}T12:00:00`).toLocaleDateString("pl-PL", { weekday: "short" })}
+                  </div>
+                  <div className="tabular mt-1 text-[12px] font-bold">
+                    {new Date(`${day.date}T12:00:00`).getDate()}
+                  </div>
+                  {day.review_answers > 0 && <div className="mx-auto mt-1 h-1.5 w-1.5 rounded-full bg-emerald-500" />}
+                </button>
+              );
+            })}
+          </div>
+
+          {weekly.reflection_highlights.length > 0 && (
+            <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/35 p-3">
+              <div className="flex items-center gap-2 text-[11px] font-bold text-indigo-900">
+                <Brain size={14} />
+                Wnioski z tygodnia
+              </div>
+              <div className="mt-2 space-y-2">
+                {weekly.reflection_highlights.slice(0, 4).map((item) => (
+                  <div key={`${item.date}-${item.kind}-${item.text}`} className="text-[11px] leading-relaxed text-indigo-950/80">
+                    <span className="mr-2 font-semibold">
+                      {item.kind === "learned" ? "Lekcja:" : "Jutro:"}
+                    </span>
+                    {item.text}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
+      <section className="rounded-2xl border bg-white p-4 shadow-sm">
+        <div className="mb-3 flex items-center gap-2">
+          <History size={16} />
+          <h2 className="text-[15px] font-bold">Historia Daily</h2>
+        </div>
+
+        {history.length === 0 ? (
+          <p className="rounded-xl bg-sunk/40 p-5 text-center text-[12px] text-fg-muted">
+            Historia zacznie się budować wraz z kolejnymi dniami.
+          </p>
+        ) : (
+          <div className="divide-y divide-black/[0.06] overflow-hidden rounded-xl border border-black/[0.06]">
+            {history.map((entry) => (
+              <button
+                key={entry.date}
+                type="button"
+                onClick={() => onOpenDay(new Date(`${entry.date}T12:00:00`))}
+                className="flex w-full items-center gap-3 bg-white px-3 py-3 text-left hover:bg-sunk/35"
+              >
+                <div className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-xl bg-sunk">
+                  <span className="text-[9px] font-semibold uppercase text-fg-muted">
+                    {new Date(`${entry.date}T12:00:00`).toLocaleDateString("pl-PL", { month: "short" })}
+                  </span>
+                  <span className="tabular text-[14px] font-bold">
+                    {new Date(`${entry.date}T12:00:00`).getDate()}
+                  </span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[12.5px] font-semibold">
+                    {entry.win_condition || entry.first_step || "Daily"}
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-2 text-[9.5px] text-fg-muted">
+                    <span>{entry.completed_items}/{entry.items} zadań</span>
+                    <span>·</span>
+                    <span>{entry.review_answers}/6 review</span>
+                  </div>
+                </div>
+                <ChevronRight size={15} className="shrink-0 text-fg-subtle" />
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
 
 function MiniFact({ label, value }: { label: string; value: string }) {
   return (
