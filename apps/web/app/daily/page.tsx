@@ -475,6 +475,12 @@ function QuadrantCard({
   const [minutes, setMinutes] = useState(30);
   const [smartAdding, setSmartAdding] = useState(false);
   const [smartResult, setSmartResult] = useState<string | null>(null);
+  const [meetingSuggestions, setMeetingSuggestions] = useState<Array<{
+    title: string;
+    date: string;
+    start_min: number | null;
+    minutes: number;
+  }>>([]);
 
   const submit = async () => {
     if (!title.trim()) return;
@@ -487,16 +493,19 @@ function QuadrantCard({
         default_minutes: minutes,
       });
 
-      const tasks = result.created.filter((item) => item.kind === "task").length;
-      const meetings = result.created.filter((item) => item.kind === "meeting").length;
-      const parts: string[] = [];
-      if (tasks) parts.push(`${tasks} ${tasks === 1 ? "zadanie" : "zadania"}`);
-      if (meetings) parts.push(`${meetings} ${meetings === 1 ? "spotkanie" : "spotkania"}`);
-      setSmartResult(parts.length ? `Dodano: ${parts.join(" + ")}` : "Dodano.");
+      const tasks = result.created.length;
+      setMeetingSuggestions(result.meeting_suggestions);
+      setSmartResult(
+        tasks
+          ? `Dodano: ${tasks} ${tasks === 1 ? "zadanie" : "zadania"}.`
+          : result.meeting_suggestions.length
+            ? "Nie utworzyłem zadania — wykryłem spotkanie do potwierdzenia."
+            : "Nie wykryłem działania do dodania.",
+      );
 
       setTitle("");
       setMinutes(30);
-      setAdding(false);
+      setAdding(result.meeting_suggestions.length > 0);
       await reload();
     } catch (caught) {
       setSmartResult(
@@ -683,6 +692,25 @@ function QuadrantCard({
           {smartResult && (
             <p className="mt-2 text-[10px] font-medium text-fg-muted">{smartResult}</p>
           )}
+
+          {meetingSuggestions.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {meetingSuggestions.map((suggestion, index) => (
+                <MeetingSuggestionCard
+                  key={`${suggestion.title}-${suggestion.date}-${index}`}
+                  suggestion={suggestion}
+                  onDismiss={() => {
+                    setMeetingSuggestions((current) => current.filter((_, i) => i !== index));
+                  }}
+                  onCreated={async () => {
+                    setMeetingSuggestions((current) => current.filter((_, i) => i !== index));
+                    setSmartResult("Spotkanie zostało dodane do Plannera.");
+                    await reload();
+                  }}
+                />
+              ))}
+            </div>
+          )}
         </div>
       ) : (
         <button
@@ -696,6 +724,135 @@ function QuadrantCard({
     </section>
   );
 }
+
+function MeetingSuggestionCard({
+  suggestion,
+  onDismiss,
+  onCreated,
+}: {
+  suggestion: {
+    title: string;
+    date: string;
+    start_min: number | null;
+    minutes: number;
+  };
+  onDismiss: () => void;
+  onCreated: () => Promise<void>;
+}) {
+  const initialHour =
+    suggestion.start_min == null
+      ? ""
+      : `${String(Math.floor(suggestion.start_min / 60)).padStart(2, "0")}:${String(
+          suggestion.start_min % 60,
+        ).padStart(2, "0")}`;
+
+  const [title, setTitle] = useState(suggestion.title);
+  const [date, setDate] = useState(suggestion.date);
+  const [time, setTime] = useState(initialHour);
+  const [minutes, setMinutes] = useState(suggestion.minutes || 30);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const confirm = async () => {
+    if (!time) {
+      setError("Ustaw godzinę spotkania.");
+      return;
+    }
+    const [hours, mins] = time.split(":").map(Number);
+    if (!Number.isFinite(hours) || !Number.isFinite(mins)) {
+      setError("Nieprawidłowa godzina.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      await api.confirmDailyMeeting({
+        title: title.trim(),
+        date,
+        start_min: hours * 60 + mins,
+        minutes,
+        priority: 2,
+      });
+      await onCreated();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Nie udało się dodać spotkania.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-violet-200 bg-violet-50/55 p-3">
+      <div className="flex items-start gap-2">
+        <span className="mt-0.5 text-base">📅</span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-violet-700">
+            Wykryłem spotkanie
+          </div>
+          <p className="mt-0.5 text-[11px] text-violet-950/80">
+            Chcesz dodać je do Plannera?
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_140px_105px_90px]">
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          aria-label="Nazwa spotkania"
+          className="h-9 min-w-0 rounded-lg border bg-white px-2.5 text-[11.5px] font-medium outline-none focus:ring-2 focus:ring-violet-200"
+        />
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          aria-label="Data spotkania"
+          className="h-9 rounded-lg border bg-white px-2 text-[11px] outline-none focus:ring-2 focus:ring-violet-200"
+        />
+        <input
+          type="time"
+          step={900}
+          value={time}
+          onChange={(e) => setTime(e.target.value)}
+          aria-label="Godzina spotkania"
+          className="h-9 rounded-lg border bg-white px-2 text-[11px] outline-none focus:ring-2 focus:ring-violet-200"
+        />
+        <select
+          value={minutes}
+          onChange={(e) => setMinutes(Number(e.target.value))}
+          aria-label="Czas spotkania"
+          className="h-9 rounded-lg border bg-white px-2 text-[11px] outline-none"
+        >
+          {[15, 30, 45, 60, 90, 120].map((value) => (
+            <option key={value} value={value}>{value} min</option>
+          ))}
+        </select>
+      </div>
+
+      {error && <p className="mt-2 text-[10px] font-medium text-red-700">{error}</p>}
+
+      <div className="mt-3 flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="rounded-lg px-3 py-1.5 text-[10.5px] font-semibold text-fg-muted"
+        >
+          Nie, pomiń
+        </button>
+        <button
+          type="button"
+          onClick={() => void confirm()}
+          disabled={saving || !title.trim()}
+          className="rounded-lg bg-violet-700 px-3 py-1.5 text-[10.5px] font-semibold text-white disabled:opacity-50"
+        >
+          {saving ? "Dodaję…" : "Tak, zaplanuj"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 
 function ReviewView({
   data,
