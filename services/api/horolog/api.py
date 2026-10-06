@@ -172,6 +172,7 @@ class IntentIn(BaseModel):
     window_end_min: int | None = None
     due: LocalDateTime | None = None
     earliest: LocalDateTime | None = None
+    latest: LocalDateTime | None = None
     preferred_start_min: int | None = None
 
     attendee_busy: list[AttendeeBusy] = Field(default_factory=list)
@@ -244,6 +245,7 @@ class IntentIn(BaseModel):
             daily_windows=[DailyWindow(start_min=start, end_min=end)],
             allowed_weekdays=self.allowed_weekdays,
             earliest_slot=to_slot(self.earliest, base) if self.earliest else None,
+            latest_slot=to_slot(self.latest, base) if self.latest else None,
             due_slot=to_slot(self.due, base) if self.due else None,
             preferred_start_min=self.preferred_start_min,
             blocked_slots=[
