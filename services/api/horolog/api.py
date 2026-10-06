@@ -1267,6 +1267,128 @@ class AssistantExecuteIn(BaseModel):
     actions: list[AssistantAction] = Field(min_length=1, max_length=8)
 
 
+async def _execute_assistant_action(
+    action: AssistantAction,
+    db: AsyncSession,
+) -> dict[str, Any]:
+    if action.action == "create_task":
+        if not action.title or not action.date or not action.minutes or not action.quadrant:
+            raise HTTPException(status_code=422, detail="create_task proposal is incomplete")
+        item = await create_daily_item(
+            action.date,
+            DailyItemIn(
+                title=action.title,
+                quadrant=action.quadrant,
+                minutes=action.minutes,
+                schedule_enabled=action.quadrant <= 2,
+            ),
+            db,
+        )
+        return {
+            "action": action.action,
+            "status": "done",
+            "title": action.title,
+            "date": action.date,
+            "item_id": item["id"],
+        }
+
+    if action.action == "create_meeting":
+        if not action.title or not action.date or action.start_min is None or not action.minutes:
+            raise HTTPException(status_code=422, detail="create_meeting proposal is incomplete")
+        meeting = await confirm_daily_meeting(
+            DailyMeetingConfirmIn(
+                title=action.title,
+                date=action.date,
+                start_min=action.start_min,
+                minutes=action.minutes,
+                priority=Priority.P2,
+            ),
+            db,
+        )
+        return {"action": action.action, "status": "done", **meeting}
+
+    if action.action == "complete_task":
+        if not action.intent_id:
+            raise HTTPException(status_code=422, detail="complete_task needs intent_id")
+        completed = await complete_intent(action.intent_id, db)
+        return {
+            "action": action.action,
+            "status": "done",
+            "intent_id": action.intent_id,
+            "title": completed["title"],
+        }
+
+    if action.action == "reschedule_task":
+        if not action.intent_id or not action.date:
+            raise HTTPException(status_code=422, detail="reschedule_task proposal is incomplete")
+        row = await db.get(IntentRow, action.intent_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail=f"no intent {action.intent_id!r}")
+        intent = Intent.model_validate(row.payload)
+        if intent.period_days is not None or intent.kind != IntentKind.TASK:
+            raise HTTPException(status_code=422, detail="only one-shot tasks can be rescheduled")
+        target = _daily_date(action.date)
+        start_min = (
+            action.start_min
+            if action.start_min is not None
+            else (
+                intent.preferred_start_min
+                if intent.preferred_start_min is not None
+                else settings().workday_start_min
+            )
+        )
+        start = target.replace(
+            hour=start_min // 60,
+            minute=start_min % 60,
+            second=0,
+            microsecond=0,
+        )
+        end = start + timedelta(minutes=intent.minutes_per_period)
+        moved = await move_intent(
+            action.intent_id,
+            MoveIntentIn(start=start, end=end),
+            db,
+        )
+        return {"action": action.action, "status": "done", **moved}
+
+    if action.action == "update_daily_plan":
+        if not action.date or (action.win_condition is None and action.first_step is None):
+            raise HTTPException(status_code=422, detail="update_daily_plan proposal is incomplete")
+        current = await db.get(DailyPlanRow, action.date)
+        saved = await put_daily(
+            action.date,
+            DailyPlanIn(
+                win_condition=(
+                    action.win_condition
+                    if action.win_condition is not None
+                    else (current.win_condition if current else "")
+                ),
+                first_step=(
+                    action.first_step
+                    if action.first_step is not None
+                    else (current.first_step if current else "")
+                ),
+            ),
+            db,
+        )
+        return {"action": action.action, "status": "done", **saved}
+
+    raise HTTPException(status_code=422, detail=f"unsupported assistant action {action.action!r}")
+
+
+@app.post("/api/assistant/execute")
+async def assistant_execute(
+    body: AssistantExecuteIn,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    results = []
+    for action in body.actions:
+        results.append(await _execute_assistant_action(action, db))
+    return {"count": len(results), "results": results}
+
+
+
+
 class CaptureIn(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
     model: str | None = None
