@@ -9,6 +9,36 @@ export type IntentKind = "task" | "habit" | "focus" | "buffer" | "meeting";
 export type Priority = 1 | 2 | 3 | 4;
 export type EnergyLevel = "high" | "medium" | "low";
 
+
+export type AssistantActionKind =
+  | "create_task"
+  | "create_meeting"
+  | "reschedule_task"
+  | "complete_task"
+  | "update_daily_plan";
+
+export interface AssistantMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface AssistantAction {
+  action: AssistantActionKind;
+  title?: string | null;
+  intent_id?: string | null;
+  date?: string | null;
+  minutes?: number | null;
+  quadrant?: 1 | 2 | 3 | 4 | null;
+  start_min?: number | null;
+  win_condition?: string | null;
+  first_step?: string | null;
+}
+
+export interface AssistantDecision {
+  reply: string;
+  actions: AssistantAction[];
+}
+
 export interface Block {
   intent_id: string;
   title: string;
@@ -256,6 +286,27 @@ export const api = {
     request<{ intent: Intent }>("/api/capture", {
       method: "POST",
       body: JSON.stringify({ text, provider, model, api_key: apiKey }),
+    }),
+  assistantChat: (
+    messages: AssistantMessage[],
+    pendingActions: AssistantAction[] = [],
+    contextPage?: string,
+  ) =>
+    request<AssistantDecision>("/api/assistant/chat", {
+      method: "POST",
+      body: JSON.stringify({
+        messages,
+        pending_actions: pendingActions,
+        context_page: contextPage,
+      }),
+    }),
+  assistantExecute: (actions: AssistantAction[]) =>
+    request<{
+      count: number;
+      results: Array<Record<string, unknown>>;
+    }>("/api/assistant/execute", {
+      method: "POST",
+      body: JSON.stringify({ actions }),
     }),
   setBusy: (events: Omit<Busy, "source">[]) =>
     request<{ events: number; blocks: number }>("/api/busy", {
