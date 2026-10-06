@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Shell } from "@/app/components/Shell";
 import {
   api,
@@ -9,7 +9,6 @@ import {
   type DailyHistoryEntry,
   type DailyReview,
   type DailyWeekly,
-  type Priority,
 } from "@/app/lib/api";
 import {
   CalendarDays,
@@ -39,7 +38,6 @@ const QUADRANTS = [
     helper: "Co mnie ugryzie, jeśli tego dziś nie zrobię?",
     tone: "border-red-200 bg-red-50/45",
     dot: "#dc2626",
-    priority: 1 as Priority,
     schedule: true,
   },
   {
@@ -49,7 +47,6 @@ const QUADRANTS = [
     helper: "Co warto zrobić, zanim stanie się pilne?",
     tone: "border-amber-200 bg-amber-50/45",
     dot: "#f59e0b",
-    priority: 2 as Priority,
     schedule: true,
   },
   {
@@ -59,7 +56,6 @@ const QUADRANTS = [
     helper: "Czy naprawdę muszę zrobić to osobiście i teraz?",
     tone: "border-blue-200 bg-blue-50/40",
     dot: "#2563eb",
-    priority: 3 as Priority,
     schedule: false,
   },
   {
@@ -69,7 +65,6 @@ const QUADRANTS = [
     helper: "Czy to zadanie zabiera czas ważniejszym rzeczom?",
     tone: "border-stone-200 bg-stone-50/70",
     dot: "#78716c",
-    priority: 4 as Priority,
     schedule: false,
   },
 ];
@@ -336,12 +331,11 @@ function PlanView({
                 key={item.intent_id}
                 type="button"
                 onClick={async () => {
-                  const quadrant = item.priority <= 2 ? item.priority : 2;
+                  const quadrant = item.priority;
                   await api.createDailyItem(dateKey, {
                     title: item.title,
-                    quadrant: quadrant as 1 | 2,
+                    quadrant: quadrant as 1 | 2 | 3 | 4,
                     minutes: Math.max(15, item.minutes),
-                    priority: item.priority,
                     schedule_enabled: true,
                     intent_id: item.intent_id,
                   });
@@ -425,7 +419,6 @@ function QuadrantCard({
       title: title.trim(),
       quadrant: quadrant.id,
       minutes,
-      priority: quadrant.priority,
       schedule_enabled: quadrant.schedule,
     });
     setTitle("");
