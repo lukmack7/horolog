@@ -9,7 +9,7 @@ import {
   PRIORITY_TINT,
   api,
   createIntent,
-  formatCzas trwania,
+  formatDuration,
   type EnergyLevel,
   type Intent,
   type IntentKind,
@@ -54,7 +54,7 @@ function toMinutes(value: string): number {
 /** Ultra-Luxury Nawyk Builder & Routine Manager.
  *  Alniskas configuring recurring routines in natural human terms.
  */
-export default function Nawyki() {
+export default function Habits() {
   const [intents, setIntents] = useState<Intent[]>([]);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -413,7 +413,7 @@ export default function Nawyki() {
             <div className="flex items-center gap-2 border-t border-red-200 bg-red-50/70 px-6 py-3 text-[12.5px] font-średnia text-danger">
               <AlertTriangle size={15} />
               <span>
-                Window ({formatCzas trwania(Math.max(0, to - from))}) is shorter than session duration ({formatCzas trwania(minutes)}).
+                Window ({formatDuration(Math.max(0, to - from))}) is shorter than session duration ({formatDuration(minutes)}).
               </span>
             </div>
           )}
@@ -450,8 +450,8 @@ export default function Nawyki() {
               const blocks = plan?.blocks.filter((b) => b.intent_id === habit.id) ?? [];
               const fixed = habit.min_chunk_minutes === habit.max_chunk_minutes;
               const cadence = fixed
-                ? `${Math.round(habit.minutes_per_period / habit.min_chunk_minutes)}× weekly · ${formatCzas trwania(habit.min_chunk_minutes)} each`
-                : `${formatCzas trwania(habit.minutes_per_period)} weekly · ${formatCzas trwania(habit.min_chunk_minutes)}–${formatCzas trwania(habit.max_chunk_minutes)} blocks`;
+                ? `${Math.round(habit.minutes_per_period / habit.min_chunk_minutes)}× weekly · ${formatDuration(habit.min_chunk_minutes)} each`
+                : `${formatDuration(habit.minutes_per_period)} weekly · ${formatDuration(habit.min_chunk_minutes)}–${formatDuration(habit.max_chunk_minutes)} blocks`;
 
               const weekdayLabel =
                 habit.alniskaed_weekdays && habit.alniskaed_weekdays.length > 0
