@@ -46,34 +46,17 @@ const PRIORITY_COLOR: Record<number, string> = {
  *  own and need to read as visually distinct rather than a fifth "normal"
  *  block. */
 const COLORS = [
-  { name: "Krytyczny", value: "p1", bg: "bg-red-600", text: "text-red-700" },
-  { name: "Wysoki", value: "p2", bg: "bg-amber-500", text: "text-amber-700" },
-  { name: "Normalny", value: "p3", bg: "bg-blue-600", text: "text-blue-700" },
-  { name: "Niski", value: "p4", bg: "bg-green-600", text: "text-green-700" },
-  { name: "Zewnętrzne", value: "slate", bg: "bg-slate-400", text: "text-slate-700" },
+  { name: "Critical", value: "p1", bg: "bg-red-600", text: "text-red-700" },
+  { name: "High", value: "p2", bg: "bg-amber-500", text: "text-amber-700" },
+  { name: "Normal", value: "p3", bg: "bg-blue-600", text: "text-blue-700" },
+  { name: "Low", value: "p4", bg: "bg-green-600", text: "text-green-700" },
+  { name: "External", value: "slate", bg: "bg-slate-400", text: "text-slate-700" },
 ];
 
 const EXTERNAL_PREFIX = "external-";
 
-const CATEGORY_LABEL: Record<string, string> = {
-  task: "Zadanie",
-  habit: "Nawyk",
-  focus: "Skupienie",
-  buffer: "Przerwa / bufor",
-  meeting: "Spotkanie",
-};
-
 function kindToCategory(kind: string): string {
-  return CATEGORY_LABEL[kind] ?? kind;
-}
-
-function categoryToKind(category?: string): IntentKind {
-  const normalized = (category ?? "").toLowerCase();
-  if (normalized === "nawyk") return "habit";
-  if (normalized === "skupienie") return "focus";
-  if (normalized === "przerwa / bufor" || normalized === "przerwa" || normalized === "bufor") return "buffer";
-  if (normalized === "spotkanie") return "meeting";
-  return "task";
+  return kind.charAt(0).toUpperCase() + kind.slice(1);
 }
 
 /** Convert backend Block[] to EventManager Event[] */
@@ -81,10 +64,10 @@ function blocksToEvents(blocks: Block[]): Event[] {
   return blocks.map((block) => {
     const tags: string[] = [PRIORITY_LABEL[block.priority]];
     if (block.moved_from !== null && block.moved_from !== block.start) {
-      tags.push("Przeniesione");
+      tags.push("Moved");
     }
     if (block.energy) {
-      tags.push(block.energy === "high" ? "Wysoka energia" : block.energy === "medium" ? "Średnia energia" : "Niska energia");
+      tags.push(block.energy.charAt(0).toUpperCase() + block.energy.slice(1) + " Energy");
     }
     return {
       // Multiple chunks of the same occurrence (a long focus session split
@@ -114,13 +97,13 @@ function blocksToEvents(blocks: Block[]): Event[] {
 function busyToEvents(busy: Busy[]): Event[] {
   return busy.map((event, index) => ({
     id: `${EXTERNAL_PREFIX}${index}`,
-    title: event.label || "Zajęte",
-    description: `Zewnętrzne · ${event.source}`,
+    title: event.label || "Busy",
+    description: `External · ${event.source}`,
     startTime: new Date(event.start),
     endTime: new Date(event.end),
     color: "slate",
-    category: "Zewnętrzne",
-    tags: ["Sztywne"],
+    category: "External",
+    tags: ["Locked"],
   }));
 }
 
@@ -133,7 +116,7 @@ export default function Planner() {
       setPlan(await api.plan());
       setError(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Nie udało się połączyć z planerem.");
+      setError(caught instanceof Error ? caught.message : "Could not reach the scheduler.");
     }
   }, []);
 
@@ -164,10 +147,17 @@ export default function Planner() {
         );
 
         if (durationMinutes <= 0) {
-          throw new Error("Godzina zakończenia musi być późniejsza niż rozpoczęcia.");
+          throw new Error("End time must be later than start time.");
         }
 
-        const kind = categoryToKind(event.category);
+        const category = event.category?.toLowerCase();
+        const kind: IntentKind =
+          category === "habit" ||
+          category === "focus" ||
+          category === "buffer" ||
+          category === "meeting"
+            ? category
+            : "task";
 
         const priorityByColor: Record<string, Priority> = {
           p1: 1,
@@ -200,7 +190,7 @@ export default function Planner() {
 
         await load();
       } catch (caught) {
-        setError(caught instanceof Error ? caught.message : "Nie udało się utworzyć wydarzenia.");
+        setError(caught instanceof Error ? caught.message : "Failed to create event.");
       }
     },
     [load],
@@ -235,7 +225,7 @@ export default function Planner() {
 
         await load();
       } catch (caught) {
-        setError(caught instanceof Error ? caught.message : "Nie udało się zmienić statusu wykonania.");
+        setError(caught instanceof Error ? caught.message : "Could not update completion.");
       }
     },
     [load],
@@ -244,7 +234,7 @@ export default function Planner() {
   const handleEventUpdate = useCallback(
     async (id: string, event: Partial<Event>) => {
       if (id.startsWith(EXTERNAL_PREFIX)) {
-        setError("Wydarzenia zewnętrznego kalendarza są tutaj tylko do odczytu — przenieś je w kalendarzu źródłowym.");
+        setError("Real calendar events are read-only here — move them in the source calendar.");
         await load();
         return;
       }
@@ -256,7 +246,7 @@ export default function Planner() {
       }
 
       if (source.recurring) {
-        setError("Powtarzalnych rutyn nie można jeszcze przenosić jako całych zadań.");
+        setError("Recurring routines are not draggable as whole tasks yet.");
         await load();
         return;
       }
