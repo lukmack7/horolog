@@ -8,19 +8,19 @@ import {
   PRIORITY_NAME,
   PRIORITY_TINT,
   api,
-  formatCzas trwania,
+  formatDuration,
   intentToEditPayload,
   minutesBetween,
   type Intent,
   type Plan,
-  type Priorytet,
+  type Priority,
 } from "@/app/lib/api";
 import { Trash2, AlertCircle, Clock, CheckCircle, Circle, Sparkles, Pencil } from "lucide-react";
 
 /** Ultra-Luxury Zadania View for Horolog.
  *  Displays all scheduling intents, their placed time progress bars, and unmet demand callouts.
  */
-export default function Zadania() {
+export default function Inbox() {
   const [intents, setIntents] = useState<Intent[]>([]);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +28,7 @@ export default function Zadania() {
   const [editing, setEditing] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editMinutes, setEditMinutes] = useState(60);
-  const [editPriorytet, setEditPriorytet] = useState<Priorytet>(3);
+  const [editPriority, setEditPriority] = useState<Priority>(3);
 
   const load = useCallback(async () => {
     try {
@@ -103,7 +103,7 @@ export default function Zadania() {
     setEditing(intent.id);
     setEditTitle(intent.title);
     setEditMinutes(intent.minutes_per_period);
-    setEditPriorytet(intent.priority);
+    setEditPriority(intent.priority);
   }
 
   async function saveEdit(intent: Intent) {
@@ -114,7 +114,7 @@ export default function Zadania() {
         ...intentToEditPayload(intent, plan.origin),
         title: editTitle.trim() || intent.title,
         minutes_per_period: editMinutes,
-        priority: editPriorytet,
+        priority: editPriority,
       });
       setEditing(null);
       await load();
@@ -135,7 +135,7 @@ export default function Zadania() {
               {plan ? (
                 <>
                   {rows.length} {rows.length === 1 ? "intent" : "intents"} ·{" "}
-                  {formatCzas trwania(rows.reduce((s, r) => s + r.scheduled, 0))} scheduled
+                  {formatDuration(rows.reduce((s, r) => s + r.scheduled, 0))} scheduled
                   {!plan.complete && (
                     <span className="font-semibold text-danger">
                       {" "}
@@ -239,8 +239,8 @@ export default function Zadania() {
                         className="tabular w-20 rounded-lg border border-black/10 bg-background px-2.5 py-1.5 text-[13px] text-fg outline-none focus:border-accent"
                       />
                       <select
-                        value={editPriorytet}
-                        onChange={(e) => setEditPriorytet(Number(e.target.value) as Priorytet)}
+                        value={editPriority}
+                        onChange={(e) => setEditPriority(Number(e.target.value) as Priorytet)}
                         aria-label="Priorytet"
                         className="rounded-lg border border-black/10 bg-background px-2 py-1.5 text-[13px] text-fg outline-none focus:border-accent"
                       >
@@ -299,7 +299,7 @@ export default function Zadania() {
                           <span>·</span>
                           <span>{blocks.length} {blocks.length === 1 ? "block" : "blocks"}</span>
                           <span>·</span>
-                          <span>{formatCzas trwania(scheduled)} of {formatCzas trwania(intent.minutes_per_period)}</span>
+                          <span>{formatDuration(scheduled)} of {formatDuration(intent.minutes_per_period)}</span>
                         </>
                       ) : (
                         <span className="font-semibold text-danger">Not placed</span>
@@ -322,7 +322,7 @@ export default function Zadania() {
                         {short > 0 && (
                           <div className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-red-50 px-2.5 py-1 text-[12px] font-medium text-danger">
                             <AlertCircle size={13} />
-                            {formatCzas trwania(short)} could not be placed - widen its window or lower priority.
+                            {formatDuration(short)} could not be placed - widen its window or lower priority.
                           </div>
                         )}
                       </>
