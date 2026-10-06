@@ -1,5 +1,6 @@
 "use client";
 
+import { useLanguage } from "@/app/components/LanguageProvider";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Glyph } from "@/app/components/Glyph";
 import { PriorityPicker } from "@/app/components/PriorityPicker";
@@ -55,6 +56,7 @@ function toMinutes(value: string): number {
  *  Allows configuring recurring routines in natural human terms.
  */
 export default function Habits() {
+  const { t, language } = useLanguage();
   const [intents, setIntents] = useState<Intent[]>([]);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
