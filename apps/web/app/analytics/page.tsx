@@ -10,7 +10,7 @@ import {
   minutesBetween,
   PRIORITY_NAME,
   PRIORITY_TINT,
-  type Analytics,
+  type Analizy,
   type Block,
   type IntentKind,
   type Plan,
@@ -31,13 +31,13 @@ import {
   Users,
 } from "lucide-react";
 
-type AnalyticsView = "overview" | "priorities" | "map" | "executive";
+type AnalizyView = "overview" | "priorities" | "map" | "executive";
 
-const VIEWS: { id: AnalyticsView; label: string; icon: typeof LayoutDashboard }[] = [
-  { id: "overview", label: "Overview", icon: LayoutDashboard },
-  { id: "priorities", label: "Priorities", icon: Flag },
-  { id: "map", label: "Week map", icon: CalendarDays },
-  { id: "executive", label: "Executive", icon: Sparkles },
+const VIEWS: { id: AnalizyView; label: string; icon: typeof LayoutDashboard }[] = [
+  { id: "overview", label: "Przegląd", icon: LayoutDashboard },
+  { id: "priorities", label: "Priorytety", icon: Flag },
+  { id: "map", label: "Mapa tygodnia", icon: CalendarDays },
+  { id: "executive", label: "Podsumowanie", icon: Sparkles },
 ];
 
 const KIND_COLOR: Record<IntentKind, string> = {
@@ -51,7 +51,7 @@ const KIND_COLOR: Record<IntentKind, string> = {
 const KIND_LABEL: Record<IntentKind, string> = {
   task: "Task",
   habit: "Habit",
-  focus: "Focus",
+  focus: "Skupienie",
   meeting: "Meeting",
   buffer: "Buffer",
 };
@@ -117,7 +117,7 @@ function buildDerived(plan: Plan): Derived {
   let totalBlockMinutes = 0;
   let completedBlocks = 0;
 
-  for (const block of plan.blocks) {
+  for (const block of plan.bloków) {
     const minutes = Math.max(0, minutesBetween(block.start, block.end));
     totalBlockMinutes += minutes;
     kindMinutes[block.kind] += minutes;
@@ -152,14 +152,14 @@ function buildDerived(plan: Plan): Derived {
     totalVisibleMinutes: totalBlockMinutes + externalMeetingMinutes,
     highPriorityShare: totalBlockMinutes > 0 ? highPriorityMinutes / totalBlockMinutes : 0,
     completedBlocks,
-    totalBlocks: plan.blocks.length,
+    totalBlocks: plan.bloków.length,
   };
 }
 
-export default function AnalyticsPage() {
-  const [data, setData] = useState<Analytics | null>(null);
+export default function AnalizyPage() {
+  const [data, setData] = useState<Analizy | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
-  const [view, setView] = useState<AnalyticsView>("overview");
+  const [view, setView] = useState<AnalizyView>("overview");
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -186,7 +186,7 @@ export default function AnalyticsPage() {
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h1 className="text-[30px] font-bold leading-tight text-fg sm:text-[28px]">
-                Productivity Analytics
+                Productivity Analizy
               </h1>
               <p className="mt-1 text-[13px] text-fg-muted sm:text-[13.5px]">
                 {data ? `Measured across your ${data.horizon_days}-day planning horizon` : "Reading the plan..."}
@@ -194,12 +194,12 @@ export default function AnalyticsPage() {
             </div>
             {plan && (
               <div className="hidden rounded-full bg-sunk px-3 py-1.5 text-[11px] font-semibold text-fg-muted sm:block">
-                {derived?.totalBlocks ?? 0} blocks · {formatDuration(derived?.totalVisibleMinutes ?? 0)}
+                {derived?.totalBlocks ?? 0} bloków · {formatDuration(derived?.totalVisibleMinutes ?? 0)}
               </div>
             )}
           </div>
 
-          <AnalyticsTabs view={view} onChange={setView} />
+          <AnalizyTabs view={view} onChange={setView} />
         </header>
 
         {error && (
@@ -208,14 +208,14 @@ export default function AnalyticsPage() {
           </div>
         )}
 
-        {(!data || !plan || !derived) && !error && <AnalyticsSkeleton />}
+        {(!data || !plan || !derived) && !error && <AnalizySkeleton />}
 
         {data && plan && derived && (
           <>
-            {view === "overview" && <OverviewView data={data} plan={plan} derived={derived} />}
-            {view === "priorities" && <PrioritiesView data={data} derived={derived} />}
+            {view === "overview" && <PrzeglądView data={data} plan={plan} derived={derived} />}
+            {view === "priorities" && <PriorytetyView data={data} derived={derived} />}
             {view === "map" && <WeekMapView data={data} plan={plan} derived={derived} />}
-            {view === "executive" && <ExecutiveView data={data} derived={derived} />}
+            {view === "executive" && <PodsumowanieView data={data} derived={derived} />}
           </>
         )}
       </main>
@@ -223,12 +223,12 @@ export default function AnalyticsPage() {
   );
 }
 
-function AnalyticsTabs({
+function AnalizyTabs({
   view,
   onChange,
 }: {
-  view: AnalyticsView;
-  onChange: (view: AnalyticsView) => void;
+  view: AnalizyView;
+  onChange: (view: AnalizyView) => void;
 }) {
   return (
     <div className="mt-5 grid grid-cols-4 gap-1 rounded-2xl border border-black/[0.08] bg-surface p-1 shadow-sm">
@@ -256,12 +256,12 @@ function AnalyticsTabs({
   );
 }
 
-function OverviewView({
+function PrzeglądView({
   data,
   plan,
   derived,
 }: {
-  data: Analytics;
+  data: Analizy;
   plan: Plan;
   derived: Derived;
 }) {
@@ -283,14 +283,14 @@ function OverviewView({
           },
           {
             value: `${Math.round(data.meeting_load * 100)}%`,
-            label: "Meeting load",
+            label: "Obciążenie spotkaniami",
             note: `${formatDuration(data.meeting_minutes)} across the horizon`,
             accent: "#f97316",
             warn: data.meeting_load > 0.4,
           },
           {
             value: `${Math.round(derived.highPriorityShare * 100)}%`,
-            label: "High priority",
+            label: "Wysoki priorytet",
             note: "P1 + P2 share of planned work",
             accent: "#dc2626",
           },
@@ -308,7 +308,7 @@ function OverviewView({
 
       <div className="grid gap-5 lg:grid-cols-2">
         <SectionCard>
-          <SectionHeading title="Time by type" subtitle="What your plan is made of." />
+          <SectionHeading title="Czas według typu" subtitle="What your plan is made of." />
           <DistributionRows
             rows={KIND_ORDER.map((kind) => ({
               label: KIND_LABEL[kind],
@@ -319,7 +319,7 @@ function OverviewView({
         </SectionCard>
 
         <SectionCard>
-          <SectionHeading title="Time by priority" subtitle="How much time your important work receives." />
+          <SectionHeading title="Czas według priorytetu" subtitle="How much time your important work receives." />
           <DistributionRows
             rows={PRIORITIES.map((priority) => ({
               label: `P${priority} · ${PRIORITY_NAME[priority]}`,
@@ -335,7 +335,7 @@ function OverviewView({
   );
 }
 
-function PrioritiesView({ data, derived }: { data: Analytics; derived: Derived }) {
+function PriorytetyView({ data, derived }: { data: Analizy; derived: Derived }) {
   const maxCell = Math.max(
     1,
     ...derived.dayPriority.flatMap((row) => PRIORITIES.map((priority) => row[priority])),
@@ -440,7 +440,7 @@ function WeekMapView({
   plan,
   derived,
 }: {
-  data: Analytics;
+  data: Analizy;
   plan: Plan;
   derived: Derived;
 }) {
@@ -452,7 +452,7 @@ function WeekMapView({
     hours.map((hour) => {
       const totals = blankKindRecord();
 
-      for (const block of plan.blocks) {
+      for (const block of plan.bloków) {
         const start = new Date(block.start);
         if (localDateKey(start) !== day.key || start.getHours() !== hour) continue;
         totals[block.kind] += minutesBetween(block.start, block.end);
@@ -484,19 +484,19 @@ function WeekMapView({
           },
           {
             value: formatDuration(data.focus_minutes),
-            label: "Deep work",
-            note: "Long uninterrupted blocks",
+            label: "Praca głęboka",
+            note: "Long uninterrupted bloków",
             accent: "#7c3aed",
           },
           {
             value: formatDuration(data.fragmentation),
             label: "Average block",
-            note: "Longer blocks mean less switching",
+            note: "Longer bloków mean less switching",
             accent: "#16a34a",
           },
           {
             value: String(derived.totalBlocks),
-            label: "Planned blocks",
+            label: "Planned bloków",
             note: "Across the planning horizon",
             accent: "#0c0a09",
           },
@@ -535,7 +535,7 @@ function WeekMapView({
                         ? `color-mix(in srgb, ${KIND_COLOR[cell.dominant]} ${Math.round(32 + intensity * 58)}%, white)`
                         : "#f5f5f4",
                     }}
-                    title={cell.dominant ? `${day.label} ${hour}:00 · ${KIND_LABEL[cell.dominant]} · ${formatDuration(cell.minutes)}` : `${day.label} ${hour}:00 · open`}
+                    title={cell.dominant ? `${day.label} ${hour}:00 · ${KIND_LABEL[cell.dominant]} · ${formatDuration(cell.minutes)}` : `${day.label} ${hour}:00 · wolne`}
                   />
                 );
               })}
@@ -546,7 +546,7 @@ function WeekMapView({
 
       <div className="grid gap-5 lg:grid-cols-2">
         <SectionCard>
-          <SectionHeading title="Time by type" subtitle="What fills the map." />
+          <SectionHeading title="Czas według typu" subtitle="Co wypełnia plan." />
           <DonutSummary
             rows={KIND_ORDER.map((kind) => ({
               label: KIND_LABEL[kind],
@@ -554,16 +554,16 @@ function WeekMapView({
               color: KIND_COLOR[kind],
             }))}
             center={formatDuration(derived.totalVisibleMinutes)}
-            caption="visible time"
+            caption="widoczny czas"
           />
         </SectionCard>
 
         <SectionCard>
-          <SectionHeading title="Fragmentation" subtitle="How chopped-up the plan feels." />
+          <SectionHeading title="Fragmentacja" subtitle="Jak bardzo plan jest podzielony na małe bloki." />
           <div className="mt-5 grid grid-cols-3 gap-2">
-            <MiniMetric value={String(derived.totalBlocks)} label="blocks" icon={<BarChart3 size={15} />} />
-            <MiniMetric value={formatDuration(data.fragmentation)} label="avg block" icon={<TimerReset size={15} />} />
-            <MiniMetric value={formatDuration(data.longest_focus_run_minutes)} label="best focus" icon={<Target size={15} />} />
+            <MiniMetric value={String(derived.totalBlocks)} label="bloków" icon={<BarChart3 size={15} />} />
+            <MiniMetric value={formatDuration(data.fragmentation)} label="śr. blok" icon={<TimerReset size={15} />} />
+            <MiniMetric value={formatDuration(data.longest_focus_run_minutes)} label="najdłuższe skupienie" icon={<Target size={15} />} />
           </div>
           <p className="mt-4 text-[12px] leading-relaxed text-fg-muted">
             The map is deliberately compact: color shows the dominant type in each hour, while stronger saturation means more of that hour is committed.
@@ -574,7 +574,7 @@ function WeekMapView({
   );
 }
 
-function ExecutiveView({ data, derived }: { data: Analytics; derived: Derived }) {
+function PodsumowanieView({ data, derived }: { data: Analizy; derived: Derived }) {
   const focusShare = data.scheduled_minutes > 0 ? data.focus_minutes / data.scheduled_minutes : 0;
   const meetingShare = derived.totalVisibleMinutes > 0 ? data.meeting_minutes / derived.totalVisibleMinutes : 0;
   const completionShare = derived.totalBlocks > 0 ? derived.completedBlocks / derived.totalBlocks : 0;
@@ -582,22 +582,22 @@ function ExecutiveView({ data, derived }: { data: Analytics; derived: Derived })
   const insights = [
     {
       positive: focusShare >= 0.25,
-      title: focusShare >= 0.25 ? "Strong focus allocation" : "Focus time is limited",
+      title: focusShare >= 0.25 ? "Dużo czasu na skupienie" : "Mało czasu na skupienie",
       text: `${Math.round(focusShare * 100)}% of scheduled work qualifies as deep work.`,
     },
     {
       positive: data.meeting_load <= 0.3,
-      title: data.meeting_load <= 0.3 ? "Meeting load is controlled" : "Meeting load is high",
-      text: `${Math.round(data.meeting_load * 100)}% of open hours are consumed by meetings.`,
+      title: data.meeting_load <= 0.3 ? "Obciążenie spotkaniami is controlled" : "Obciążenie spotkaniami is high",
+      text: `${Math.round(data.meeting_load * 100)}% of wolne hours are consumed by meetings.`,
     },
     {
       positive: derived.highPriorityShare >= 0.35,
-      title: derived.highPriorityShare >= 0.35 ? "Priority mix looks intentional" : "High-priority share could be higher",
+      title: derived.highPriorityShare >= 0.35 ? "Priorytety wyglądają dobrze" : "Za mało zadań o wysokim priorytecie",
       text: `P1 + P2 account for ${Math.round(derived.highPriorityShare * 100)}% of planned work.`,
     },
     {
       positive: data.unmet_minutes === 0,
-      title: data.unmet_minutes === 0 ? "All demand fits" : "The plan is oversubscribed",
+      title: data.unmet_minutes === 0 ? "Wszystko mieści się w planie" : "Plan jest przeciążony",
       text: data.unmet_minutes === 0
         ? "The solver placed all requested work."
         : `${formatDuration(data.unmet_minutes)} could not be placed.`,
@@ -606,7 +606,7 @@ function ExecutiveView({ data, derived }: { data: Analytics; derived: Derived })
 
   const recommendations: string[] = [];
   if (data.fragmentation > 0 && data.fragmentation < 45) {
-    recommendations.push("Consolidate small tasks into fewer, longer blocks to reduce context switching.");
+    recommendations.push("Consolidate small tasks into fewer, longer bloków to reduce context switching.");
   }
   if (focusShare < 0.25) {
     recommendations.push("Reserve at least one longer focus block on a lighter day.");
@@ -621,7 +621,7 @@ function ExecutiveView({ data, derived }: { data: Analytics; derived: Derived })
     recommendations.push("Widen work windows or reduce lower-priority demand until the unmet queue clears.");
   }
   if (recommendations.length === 0) {
-    recommendations.push("The plan is balanced. Keep the current mix and protect the longest focus blocks.");
+    recommendations.push("The plan is balanced. Keep the current mix and protect the longest focus bloków.");
     recommendations.push("Review priority allocation after the next major calendar change.");
   }
 
@@ -631,26 +631,26 @@ function ExecutiveView({ data, derived }: { data: Analytics; derived: Derived })
         items={[
           {
             value: formatDuration(data.focus_minutes),
-            label: "Deep work",
+            label: "Praca głęboka",
             note: `${Math.round(focusShare * 100)}% of scheduled work`,
             accent: "#7c3aed",
           },
           {
             value: `${Math.round(data.meeting_load * 100)}%`,
-            label: "Meeting load",
+            label: "Obciążenie spotkaniami",
             note: formatDuration(data.meeting_minutes),
             accent: "#f97316",
           },
           {
             value: `${Math.round(derived.highPriorityShare * 100)}%`,
-            label: "High priority",
+            label: "Wysoki priorytet",
             note: "P1 + P2",
             accent: "#dc2626",
           },
           {
             value: `${Math.round(completionShare * 100)}%`,
-            label: "Completed",
-            note: `${derived.completedBlocks} of ${derived.totalBlocks} blocks`,
+            label: "Wykonane",
+            note: `${derived.completedBlocks} of ${derived.totalBlocks} bloków`,
             accent: "#16a34a",
           },
         ]}
@@ -658,8 +658,8 @@ function ExecutiveView({ data, derived }: { data: Analytics; derived: Derived })
 
       <section className="rounded-card border border-amber-200/70 bg-amber-50/45 p-4 shadow-sm sm:p-5">
         <div className="mb-4">
-          <h2 className="text-[17px] font-bold text-fg">This plan at a glance</h2>
-          <p className="mt-0.5 text-[12.5px] text-fg-muted">Decision-oriented signals from the current planning horizon.</p>
+          <h2 className="text-[17px] font-bold text-fg">Plan w skrócie</h2>
+          <p className="mt-0.5 text-[12.5px] text-fg-muted">Najważniejsze sygnały z aktualnego horyzontu planowania.</p>
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
           {insights.map((item) => (
@@ -680,7 +680,7 @@ function ExecutiveView({ data, derived }: { data: Analytics; derived: Derived })
 
       <div className="grid gap-5 lg:grid-cols-[1.15fr_.85fr]">
         <SectionCard>
-          <SectionHeading title="Time distribution" subtitle="The current workload mix." />
+          <SectionHeading title="Rozkład czasu" subtitle="Aktualna struktura obciążenia." />
           <DonutSummary
             rows={KIND_ORDER.map((kind) => ({
               label: KIND_LABEL[kind],
@@ -688,21 +688,21 @@ function ExecutiveView({ data, derived }: { data: Analytics; derived: Derived })
               color: KIND_COLOR[kind],
             }))}
             center={formatDuration(derived.totalVisibleMinutes)}
-            caption="visible time"
+            caption="widoczny czas"
           />
         </SectionCard>
 
         <SectionCard>
-          <SectionHeading title="Focus vs meetings" subtitle="Protected work against calendar pressure." />
+          <SectionHeading title="Skupienie a spotkania" subtitle="Chroniony czas pracy na tle spotkań." />
           <div className="mt-7 flex h-40 items-end justify-center gap-10">
-            <MetricColumn label="Focus" minutes={data.focus_minutes} color="#7c3aed" max={Math.max(data.focus_minutes, data.meeting_minutes, 1)} />
-            <MetricColumn label="Meetings" minutes={data.meeting_minutes} color="#f97316" max={Math.max(data.focus_minutes, data.meeting_minutes, 1)} />
+            <MetricColumn label="Skupienie" minutes={data.focus_minutes} color="#7c3aed" max={Math.max(data.focus_minutes, data.meeting_minutes, 1)} />
+            <MetricColumn label="Spotkania" minutes={data.meeting_minutes} color="#f97316" max={Math.max(data.focus_minutes, data.meeting_minutes, 1)} />
           </div>
         </SectionCard>
       </div>
 
       <SectionCard>
-        <SectionHeading title="Recommendations" subtitle="What to change next, based only on the current plan." />
+        <SectionHeading title="Rekomendacje" subtitle="Co warto zmienić na podstawie aktualnego planu." />
         <div className="mt-4 divide-y divide-black/[0.06] overflow-hidden rounded-xl border border-black/[0.06]">
           {recommendations.slice(0, 4).map((recommendation, index) => (
             <div key={recommendation} className="flex items-start gap-3 bg-white px-3.5 py-3.5">
@@ -934,7 +934,7 @@ function DonutSummary({
   );
 }
 
-function InsightStrip({ data, derived, plan }: { data: Analytics; derived: Derived; plan: Plan }) {
+function InsightStrip({ data, derived, plan }: { data: Analizy; derived: Derived; plan: Plan }) {
   const busiestIndex = derived.dayKind
     .map((row) => KIND_ORDER.reduce((sum, kind) => sum + row[kind], 0))
     .reduce((best, value, index, values) => (value > values[best]! ? index : best), 0);
@@ -964,7 +964,7 @@ function InsightStrip({ data, derived, plan }: { data: Analytics; derived: Deriv
     <section className="rounded-card border border-indigo-100 bg-indigo-50/35 p-4 shadow-sm sm:p-5">
       <div className="mb-3 flex items-center gap-2">
         <Lightbulb size={16} className="text-indigo-600" />
-        <h2 className="text-[15px] font-bold text-fg">Key insights</h2>
+        <h2 className="text-[15px] font-bold text-fg">Najważniejsze wnioski</h2>
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
         {insights.map((insight) => (
@@ -1009,7 +1009,7 @@ function MetricColumn({
   );
 }
 
-function AnalyticsSkeleton() {
+function AnalizySkeleton() {
   return (
     <div aria-hidden className="space-y-5">
       <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
