@@ -203,26 +203,38 @@ export function EventManager({
   }, [])
 
   const handleDrop = useCallback(
-    (date: Date, hour?: number) => {
-      if (!draggedEvent) return
+    (date: Date, hour?: number, eventId?: string) => {
+      const source =
+        (eventId ? events.find((event) => event.id === eventId) : undefined) ??
+        draggedEvent
+      if (!source) return
 
-      const duration = draggedEvent.endTime.getTime() - draggedEvent.startTime.getTime()
+      const duration = source.endTime.getTime() - source.startTime.getTime()
       const newStartTime = new Date(date)
+
       if (hour !== undefined) {
         newStartTime.setHours(hour, 0, 0, 0)
+      } else {
+        // Month view changes the day only. Keep the task's existing clock
+        // time instead of dropping it at midnight.
+        newStartTime.setHours(
+          source.startTime.getHours(),
+          source.startTime.getMinutes(),
+          0,
+          0,
+        )
       }
+
       const newEndTime = new Date(newStartTime.getTime() + duration)
 
-      const updatedEvent = {
-        ...draggedEvent,
+      onEventUpdate?.(source.id, {
+        ...source,
         startTime: newStartTime,
         endTime: newEndTime,
-      }
-
-      onEventUpdate?.(draggedEvent.id, updatedEvent)
+      })
       setDraggedEvent(null)
     },
-    [draggedEvent, onEventUpdate],
+    [draggedEvent, events, onEventUpdate],
   )
 
   const navigateDate = useCallback(
@@ -1026,7 +1038,12 @@ function EventCard({
     return (
       <div
         draggable
-        onDragStart={() => onDragStart(event)}
+        onDragStart={(nativeEvent) => {
+          nativeEvent.dataTransfer.effectAllowed = "move"
+          nativeEvent.dataTransfer.setData("application/x-horolog-event", event.id)
+          nativeEvent.dataTransfer.setData("text/plain", event.id)
+          onDragStart(event)
+        }}
         onDragEnd={onDragEnd}
         onClick={() => onEventClick(event)}
         onMouseEnter={() => setIsHovered(true)}
@@ -1097,7 +1114,12 @@ function EventCard({
     return (
       <div
         draggable
-        onDragStart={() => onDragStart(event)}
+        onDragStart={(nativeEvent) => {
+          nativeEvent.dataTransfer.effectAllowed = "move"
+          nativeEvent.dataTransfer.setData("application/x-horolog-event", event.id)
+          nativeEvent.dataTransfer.setData("text/plain", event.id)
+          onDragStart(event)
+        }}
         onDragEnd={onDragEnd}
         onClick={() => onEventClick(event)}
         onMouseEnter={() => setIsHovered(true)}
@@ -1234,7 +1256,7 @@ function MonthView({
   onEventClick: (event: Event) => void
   onDragStart: (event: Event) => void
   onDragEnd: () => void
-  onDrop: (date: Date) => void
+  onDrop: (date: Date, hour?: number, eventId?: string) => void
   getColorClasses: (color: string) => { bg: string; text: string }
 }) {
   const [selectedDay, setSelectedDay] = useState(new Date(currentDate))
@@ -1400,8 +1422,14 @@ function MonthView({
                   !isCurrentMonth && "bg-muted/30",
                   "hover:bg-accent/50",
                 )}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={() => onDrop(day)}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = "move"
+                }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  onDrop(day, undefined, e.dataTransfer.getData("application/x-horolog-event"))
+                }}
               >
                 <div
                   className={cn(
@@ -1451,7 +1479,7 @@ function WeekView({
   onEventClick: (event: Event) => void
   onDragStart: (event: Event) => void
   onDragEnd: () => void
-  onDrop: (date: Date, hour: number) => void
+  onDrop: (date: Date, hour: number, eventId?: string) => void
   getColorClasses: (color: string) => { bg: string; text: string }
 }) {
   const startOfWeek = new Date(currentDate)
@@ -1575,8 +1603,18 @@ function WeekView({
                   <div
                     key={`${day.toISOString()}-${hour}`}
                     className="min-h-16 border-b border-r p-1 transition-colors hover:bg-accent/50 last:border-r-0"
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={() => onDrop(day, hour)}
+                    onDragOver={(e) => {
+                      e.preventDefault()
+                      e.dataTransfer.dropEffect = "move"
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      onDrop(
+                        day,
+                        hour,
+                        e.dataTransfer.getData("application/x-horolog-event"),
+                      )
+                    }}
                   >
                     <div className="space-y-1">
                       {dayEvents.map((event) => (
@@ -1617,7 +1655,7 @@ function DayView({
   onEventClick: (event: Event) => void
   onDragStart: (event: Event) => void
   onDragEnd: () => void
-  onDrop: (date: Date, hour: number) => void
+  onDrop: (date: Date, hour: number, eventId?: string) => void
   getColorClasses: (color: string) => { bg: string; text: string }
 }) {
   const hours = Array.from({ length: 24 }, (_, i) => i)
@@ -1644,8 +1682,18 @@ function DayView({
             <div
               key={hour}
               className="flex border-b last:border-b-0"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={() => onDrop(currentDate, hour)}
+              onDragOver={(e) => {
+                e.preventDefault()
+                e.dataTransfer.dropEffect = "move"
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                onDrop(
+                  currentDate,
+                  hour,
+                  e.dataTransfer.getData("application/x-horolog-event"),
+                )
+              }}
             >
               <div className="w-14 flex-shrink-0 border-r p-2 text-xs text-muted-foreground sm:w-20 sm:p-3 sm:text-sm">
                 {hour.toString().padStart(2, "0")}:00
