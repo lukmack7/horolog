@@ -69,13 +69,16 @@ export function Grid({ days, blocks, busy, selected, onSelect }: GridProps) {
   }, []);
   const nowTop = offsetPx(now.toISOString());
   const showNowLine = nowTop >= 0 && nowTop <= HEIGHT;
+  const singleDay = days.length === 1;
 
   return (
-    <div className="scroll-x scroll-mask-x rounded-card border border-black/[0.08] bg-surface shadow-sm transition-shadow hover:shadow-md">
-      <div className="min-w-[900px]">
+    <div
+      className={`${singleDay ? "overflow-hidden" : "scroll-x scroll-mask-x"} min-w-0 rounded-card border border-black/[0.08] bg-surface shadow-sm transition-shadow hover:shadow-md`}
+    >
+      <div className={singleDay ? "w-full min-w-0" : "min-w-[900px]"}>
         {/* Day Header Rail */}
         <div className="sticky top-0 z-20 flex border-b border-black/[0.06] bg-surface/90 backdrop-blur-xl">
-          <div className="w-14 shrink-0 border-r border-black/[0.06]" />
+          <div className={singleDay ? "w-12 shrink-0 border-r border-black/[0.06] sm:w-14" : "w-14 shrink-0 border-r border-black/[0.06]"} />
           {days.map((day) => {
             const isToday = day.toDateString() === todayStr;
             return (
@@ -105,7 +108,7 @@ export function Grid({ days, blocks, busy, selected, onSelect }: GridProps) {
         {/* Calendar Body */}
         <div className="flex">
           {/* Time Rail */}
-          <div className="w-14 shrink-0 border-r border-black/[0.06] bg-sunk/30">
+          <div className={singleDay ? "w-12 shrink-0 border-r border-black/[0.06] bg-sunk/30 sm:w-14" : "w-14 shrink-0 border-r border-black/[0.06] bg-sunk/30"}>
             {hours.map((hour) => (
               <div
                 key={hour}
