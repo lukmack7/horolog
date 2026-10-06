@@ -295,15 +295,34 @@ export const api = {
       source: string;
       count: number;
       created: Array<{
-        kind: "task" | "meeting";
+        kind: "task";
         date: string;
-        item?: DailyItem;
-        intent_id?: string;
-        title?: string;
-        minutes?: number;
-        start?: string;
+        item: DailyItem;
+      }>;
+      meeting_suggestions: Array<{
+        title: string;
+        date: string;
+        start_min: number | null;
+        minutes: number;
       }>;
     }>(`/api/daily/${date}/capture`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  confirmDailyMeeting: (body: {
+    title: string;
+    date: string;
+    start_min: number;
+    minutes: number;
+    priority?: Priority;
+  }) =>
+    request<{
+      intent_id: string;
+      title: string;
+      date: string;
+      start: string;
+      end: string;
+    }>("/api/daily/confirm-meeting", {
       method: "POST",
       body: JSON.stringify(body),
     }),
