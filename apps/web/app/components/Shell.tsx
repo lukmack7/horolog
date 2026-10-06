@@ -16,6 +16,8 @@ import {
   Command,
   Activity,
   Hexagon,
+  MoreHorizontal,
+  X,
 } from "lucide-react";
 import { CommandBar } from "@/app/components/CommandBar";
 
@@ -44,6 +46,7 @@ export function Shell({
   const [commandOpen, setCommandOpen] = useState(false);
   const [pulse, setPulse] = useState(false);
   const [live, setLive] = useState(true);
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -161,39 +164,107 @@ export function Shell({
         </div>
       </aside>
 
-      {/* Mobile-only capture button — the desktop sidebar has the ⌘K
-          trigger, but ⌘K itself doesn't exist on a phone, and this was the
-          one screen size with no way to open capture at all. */}
+      {/* Mobile-only capture button. Keep it above the bottom navigation and
+          away from the device safe area. */}
       <button
         type="button"
         onClick={() => setCommandOpen(true)}
         aria-label="Add time"
-        className="fixed bottom-20 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-accent text-on-accent shadow-pop transition-transform active:scale-95 lg:hidden"
+        className="fixed bottom-20 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-accent text-on-accent shadow-pop transition-transform active:scale-95 lg:hidden"
       >
-        <Sparkles size={22} />
+        <Sparkles size={20} />
       </button>
 
+      {/* Mobile secondary navigation. Seven equal-width items made every label
+          too small, so the four daily destinations stay visible and the less
+          frequent screens live behind More. */}
+      {mobileMoreOpen && (
+        <>
+          <button
+            type="button"
+            aria-label="Close more navigation"
+            onClick={() => setMobileMoreOpen(false)}
+            className="fixed inset-0 z-30 bg-black/10 lg:hidden"
+          />
+          <div
+            className="fixed left-3 right-3 z-40 rounded-2xl border border-border bg-background p-2 shadow-pop lg:hidden"
+            style={{ bottom: "calc(4.5rem + env(safe-area-inset-bottom))" }}
+          >
+            <div className="mb-1 flex items-center justify-between px-2 py-1">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                More
+              </span>
+              <button
+                type="button"
+                onClick={() => setMobileMoreOpen(false)}
+                aria-label="Close"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-1">
+              {NAV.slice(4).map((item) => {
+                const active = pathname === item.href;
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMobileMoreOpen(false)}
+                    className={`flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl px-2 text-center ${
+                      active
+                        ? "bg-secondary font-semibold text-foreground"
+                        : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+                    }`}
+                  >
+                    <Icon size={19} />
+                    <span className="text-[10.5px] leading-tight">{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Mobile Nav */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 flex h-16 items-center justify-around border-t border-border bg-background/80 px-4 backdrop-blur-md lg:hidden">
-        {NAV.map((item) => {
+      <div
+        className="fixed bottom-0 left-0 right-0 z-40 grid h-16 grid-cols-5 border-t border-border bg-background/95 px-1 backdrop-blur-md lg:hidden"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        {NAV.slice(0, 4).map((item) => {
           const active = pathname === item.href;
           const Icon = item.icon;
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`flex flex-col items-center gap-1 ${
-                active ? "text-foreground font-semibold" : "text-muted-foreground"
+              className={`flex min-w-0 flex-col items-center justify-center gap-0.5 px-1 ${
+                active ? "font-semibold text-foreground" : "text-muted-foreground"
               }`}
             >
-              <Icon size={20} className={active ? "text-foreground" : "text-muted-foreground"} />
-              <span className="text-[10px]">{item.label}</span>
+              <Icon size={19} className={active ? "text-foreground" : "text-muted-foreground"} />
+              <span className="max-w-full truncate text-[9.5px] leading-tight">{item.label}</span>
             </Link>
           );
         })}
+        <button
+          type="button"
+          onClick={() => setMobileMoreOpen((open) => !open)}
+          aria-expanded={mobileMoreOpen}
+          className={`flex min-w-0 flex-col items-center justify-center gap-0.5 px-1 ${
+            mobileMoreOpen || NAV.slice(4).some((item) => pathname === item.href)
+              ? "font-semibold text-foreground"
+              : "text-muted-foreground"
+          }`}
+        >
+          <MoreHorizontal size={20} />
+          <span className="text-[9.5px] leading-tight">More</span>
+        </button>
       </div>
 
-      <main id="main" className="flex-1 pb-20 lg:pb-0">{children}</main>
+      <main id="main" className="min-w-0 flex-1 overflow-x-hidden pb-24 lg:overflow-visible lg:pb-0">{children}</main>
       <CommandBar 
         open={commandOpen} 
         onClose={() => setCommandOpen(false)} 
