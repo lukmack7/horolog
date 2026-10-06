@@ -24,7 +24,7 @@ interface BusyRow {
 
 const EMPTY_ROW: BusyRow = { start: "", end: "", attendee: "" };
 
-/** Smart Spotkanie creation - the one intent kind whose scheduling engine
+/** Smart Meeting creation - the one intent kind whose scheduling engine
  *  (attendee free/busy intersection, `Intent.blocked_slots`) already exists
  *  and is tested server-side but had no way to reach it from the app. */
 export default function Meetings() {
@@ -49,7 +49,7 @@ export default function Meetings() {
       setIntents(await api.intents());
       setError(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Nie udało się reach the scheduler.");
+      setError(caught instanceof Error ? caught.message : "Could not reach the scheduler.");
     } finally {
       setLoaded(true);
     }
@@ -100,7 +100,7 @@ export default function Meetings() {
       setRows([{ ...EMPTY_ROW }]);
       await load();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Nie udało się save that meeting.");
+      setError(caught instanceof Error ? caught.message : "Could not save that meeting.");
     } finally {
       setSaving(false);
     }
@@ -114,7 +114,7 @@ export default function Meetings() {
     <Shell onPlanChange={load}>
       <main className="mx-auto max-w-[920px] px-6 py-8">
         <header className="mb-8">
-          <h1 className="text-[28px] font-bold text-fg">Smart Spotkania</h1>
+          <h1 className="text-[28px] font-bold text-fg">Smart Meetings</h1>
           <p className="mt-1 text-[13.5px] text-fg-muted">
             Placed only where every attendee is free - their busy time never touches your own calendar.
           </p>
@@ -133,7 +133,7 @@ export default function Meetings() {
           <div className="grid gap-5 border-b border-black/[0.06] px-6 py-4.5 sm:grid-cols-2 lg:grid-cols-4">
             <label className="block sm:col-span-2 lg:col-span-2">
               <span className="mb-1.5 block text-[12px] font-semibold tracking-wider uppercase text-fg-muted">
-                Spotkanie Tytuł
+                Meeting Title
               </span>
               <input
                 value={title}
@@ -144,7 +144,7 @@ export default function Meetings() {
             </label>
             <label className="block">
               <span className="mb-1.5 block text-[12px] font-semibold tracking-wider uppercase text-fg-muted">
-                Czas trwania
+                Duration
               </span>
               <select
                 value={minutes}
@@ -160,7 +160,7 @@ export default function Meetings() {
             </label>
             <label className="block">
               <span className="mb-1.5 block text-[12px] font-semibold tracking-wider uppercase text-fg-muted">
-                Spotkanie date
+                Meeting date
               </span>
               <input
                 type="date"
@@ -246,13 +246,13 @@ export default function Meetings() {
               className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-accent px-5 text-[13.5px] font-semibold text-on-accent shadow-sm transition-all duration-150 hover:bg-accent-hover hover:shadow-md disabled:opacity-40"
             >
               <Plus size={16} />
-              {saving ? "Scheduling..." : "Add Spotkanie"}
+              {saving ? "Scheduling..." : "Add Meeting"}
             </button>
           </div>
         </form>
 
         <h2 className="mb-3.5 text-[12px] font-semibold tracking-wider uppercase text-fg-muted">
-          Smart Spotkania {loaded ? `(${meetings.length})` : ""}
+          Smart Meetings {loaded ? `(${meetings.length})` : ""}
         </h2>
 
         {!loaded ? (
