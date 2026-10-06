@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import { LanguageProvider } from "@/app/components/LanguageProvider";
 
 // Vendored as real files under app/fonts/ rather than next/font/google:
 // google's loader still fetches these .woff2s from fonts.gstatic.com at
@@ -79,7 +80,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           Skip to main content
         </a>
-        {children}
+        <LanguageProvider>{children}</LanguageProvider>
       </body>
     </html>
   );
