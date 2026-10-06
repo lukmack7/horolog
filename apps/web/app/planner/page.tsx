@@ -1,5 +1,6 @@
 "use client";
 
+import { useLanguage } from "@/app/components/LanguageProvider";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Glyph, KIND_LABEL } from "@/app/components/Glyph";
 import { PRIORITY_LABEL, RULE } from "@/app/components/Grid";
@@ -108,6 +109,7 @@ function busyToEvents(busy: Busy[]): Event[] {
 }
 
 export default function Planner() {
+  const { t, language } = useLanguage();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
 
