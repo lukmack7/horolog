@@ -471,11 +471,6 @@ function QuadrantCard({
       onDrop={async (e) => {
         e.preventDefault();
         if (!draggingItemId) return;
-        const item = items.find((candidate) => candidate.id === draggingItemId);
-        if (!item || item.quadrant === quadrant.id) {
-          setDraggingItemId(null);
-          return;
-        }
         await api.moveDailyItem(draggingItemId, quadrant.id, dateKey);
         setDraggingItemId(null);
         await reload();
