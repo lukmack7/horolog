@@ -36,6 +36,7 @@ class AssistantAction(BaseModel):
     minutes: int | None = None
     quadrant: int | None = None
     start_min: int | None = None
+    start_mode: Literal["fixed", "preferred"] | None = None
     win_condition: str | None = None
     first_step: str | None = None
 
@@ -47,6 +48,8 @@ class AssistantAction(BaseModel):
             raise ValueError("quadrant must be 1..4")
         if self.start_min is not None and not 0 <= self.start_min < 24 * 60:
             raise ValueError("start_min must be 0..1439")
+        if self.start_mode is not None and self.start_min is None:
+            raise ValueError("start_mode requires start_min")
         if self.date is not None:
             try:
                 datetime.strptime(self.date, "%Y-%m-%d")
@@ -91,11 +94,27 @@ Core rules:
   Infer only when the wording supports it; otherwise use quadrant 2 as a calm
   default and mention that assumption.
 - create_task requires title, date, minutes, quadrant.
+  For an explicit task time, also set start_min and start_mode:
+    * start_mode="fixed" when the user says the task MUST start then, exactly
+      then, gives a strict range such as "8:30-9:30", or says not to move it.
+    * start_mode="preferred" for wording such as "najlepiej", "około",
+      "jeśli się da", or a mere preference.
+  If the user says "musi się zaczynać o 8:30, jeśli nie dasz rady napisz",
+  propose start_min=510 and start_mode="fixed". Never silently substitute 9:00.
 - create_meeting requires title, date, start_min, minutes.
 - reschedule_task requires an intent_id from FACTUAL CONTEXT and date; start_min
   is optional. Never guess an intent_id.
 - complete_task requires an intent_id from FACTUAL CONTEXT.
 - update_daily_plan requires date and at least win_condition or first_step.
+  Use update_daily_plan ONLY when the user explicitly asks to change Daily,
+  "Dzisiaj wygrywam", "Zaczynam od", or a first step. Do not use it as a
+  substitute for an ordinary task or meeting.
+- When a meeting is mentioned together with preparation, treat the meeting and
+  preparation as separate planning objects. Ask for missing details instead of
+  collapsing preparation into Daily.
+- Before confirmation, use future/proposal language ("proponuję", "dodam"),
+  never claim "zaplanowałem" or "zaktualizowałem" because nothing has been
+  executed yet.
 - When there are proposed actions, explain them in the reply in a compact,
   human-readable way so the user knows exactly what confirmation will do.
 - A correction to a pending proposal replaces the relevant pending action;
