@@ -303,6 +303,8 @@ function PlanView({
   savePlan: (patch: Partial<DailyData["plan"]>) => Promise<void>;
   reload: () => Promise<void>;
 }) {
+  const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
+
   return (
     <div className="space-y-5">
       {data.yesterday.improve && (
@@ -384,6 +386,8 @@ function PlanView({
             items={data.items.filter((item) => item.quadrant === quadrant.id && !item.completed_at)}
             dateKey={dateKey}
             reload={reload}
+            draggingItemId={draggingItemId}
+            setDraggingItemId={setDraggingItemId}
           />
         ))}
       </div>
@@ -427,11 +431,15 @@ function QuadrantCard({
   items,
   dateKey,
   reload,
+  draggingItemId,
+  setDraggingItemId,
 }: {
   quadrant: (typeof QUADRANTS)[number];
   items: DailyData["items"];
   dateKey: string;
   reload: () => Promise<void>;
+  draggingItemId: string | null;
+  setDraggingItemId: (id: string | null) => void;
 }) {
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
@@ -452,7 +460,27 @@ function QuadrantCard({
   };
 
   return (
-    <section className={`rounded-2xl border p-4 shadow-sm ${quadrant.tone}`}>
+    <section
+      className={`rounded-2xl border p-4 shadow-sm transition-all ${quadrant.tone} ${
+        draggingItemId ? "ring-1 ring-black/5" : ""
+      }`}
+      onDragOver={(e) => {
+        if (!draggingItemId) return;
+        e.preventDefault();
+      }}
+      onDrop={async (e) => {
+        e.preventDefault();
+        if (!draggingItemId) return;
+        const item = items.find((candidate) => candidate.id === draggingItemId);
+        if (!item || item.quadrant === quadrant.id) {
+          setDraggingItemId(null);
+          return;
+        }
+        await api.moveDailyItem(draggingItemId, quadrant.id, dateKey);
+        setDraggingItemId(null);
+        await reload();
+      }}
+    >
       <div className="mb-3">
         <div className="flex items-center gap-2">
           <span className="h-3 w-1 rounded-full" style={{ background: quadrant.dot }} />
@@ -464,7 +492,19 @@ function QuadrantCard({
 
       <div className="space-y-2">
         {items.map((item) => (
-          <div key={item.id} className="rounded-xl border border-black/[0.06] bg-white/90 p-3">
+          <div
+            key={item.id}
+            draggable
+            onDragStart={(e) => {
+              setDraggingItemId(item.id);
+              e.dataTransfer.effectAllowed = "move";
+              e.dataTransfer.setData("text/plain", item.id);
+            }}
+            onDragEnd={() => setDraggingItemId(null)}
+            className={`cursor-grab rounded-xl border border-black/[0.06] bg-white/90 p-3 transition-all active:cursor-grabbing ${
+              draggingItemId === item.id ? "scale-[0.99] opacity-55" : ""
+            }`}
+          >
             <div className="flex items-start gap-2">
               <button
                 type="button"
@@ -481,6 +521,7 @@ function QuadrantCard({
                 <div className="text-[12.5px] font-semibold leading-snug text-fg">{item.title}</div>
                 <div className="mt-1 flex flex-wrap gap-1.5 text-[9.5px] font-medium text-fg-muted">
                   <span className="rounded-full bg-sunk px-2 py-0.5">{formatDuration(item.minutes)}</span>
+                  <span className="hidden rounded-full bg-sunk px-2 py-0.5 text-fg-subtle sm:inline">przeciągnij</span>
                   {item.schedule_enabled && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">Planner</span>}
                   {item.carried && (
                     <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">
@@ -528,7 +569,7 @@ function QuadrantCard({
                   await reload();
                 }}
                 className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-fg-subtle hover:bg-red-50 hover:text-red-600"
-                aria-label="Usuń"
+                aria-label="Usuń z Daily"
               >
                 <Trash2 size={14} />
               </button>
