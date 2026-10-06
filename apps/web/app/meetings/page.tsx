@@ -9,7 +9,7 @@ import {
   PRIORITY_TINT,
   api,
   createIntent,
-  formatCzas trwania,
+  formatDuration,
   type AttendeeBusy,
   type Intent,
   type Priority,
@@ -27,16 +27,16 @@ const EMPTY_ROW: BusyRow = { start: "", end: "", attendee: "" };
 /** Smart Spotkanie creation - the one intent kind whose scheduling engine
  *  (attendee free/busy intersection, `Intent.blocked_slots`) already exists
  *  and is tested server-side but had no way to reach it from the app. */
-export default function Spotkania() {
+export default function Meetings() {
   const [intents, setIntents] = useState<Intent[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const [title, setTytuł] = useState("");
+  const [title, setTitle] = useState("");
   const [minutes, setMinutes] = useState(30);
   const [priority, setPriority] = useState<Priority>(2);
-  const [meetingDate, setSpotkanieDate] = useState(() => {
+  const [meetingDate, setMeetingDate] = useState(() => {
     const next = new Date();
     next.setDate(next.getDate() + 1);
     return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
@@ -95,7 +95,7 @@ export default function Spotkania() {
         preferred_start_min,
         attendee_busy,
       });
-      setTytuł("");
+      setTitle("");
       setPreferredTime("");
       setRows([{ ...EMPTY_ROW }]);
       await load();
@@ -137,7 +137,7 @@ export default function Spotkania() {
               </span>
               <input
                 value={title}
-                onChange={(e) => setTytuł(e.target.value)}
+                onChange={(e) => setTitle(e.target.value)}
                 placeholder="Weekly sync"
                 className="h-11 w-full rounded-xl border border-black/[0.08] bg-bg px-4 text-[15px] font-medium outline-none transition-colors focus:border-accent"
               />
@@ -165,7 +165,7 @@ export default function Spotkania() {
               <input
                 type="date"
                 value={meetingDate}
-                onChange={(e) => setSpotkanieDate(e.target.value)}
+                onChange={(e) => setMeetingDate(e.target.value)}
                 className="tabular h-11 w-full rounded-xl border border-black/[0.08] bg-bg px-3.5 text-[14px] font-semibold outline-none focus:border-accent"
               />
             </label>
@@ -296,7 +296,7 @@ export default function Spotkania() {
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[15px] font-semibold text-fg">{meeting.title}</div>
                     <div className="tabular mt-1 text-[12.5px] font-medium text-fg-muted">
-                      {formatCzas trwania(meeting.minutes_per_period)} ·{" "}
+                      {formatDuration(meeting.minutes_per_period)} ·{" "}
                       {ranges > 0 ? `${ranges} attendee range${ranges === 1 ? "" : "s"} avoided` : "no attendee ranges"}
                     </div>
                     {meeting.zoom_join_url && (
