@@ -56,7 +56,7 @@ function toMinutes(value: string): number {
  *  Allows configuring recurring routines in natural human terms.
  */
 export default function Habits() {
-  const { t, language } = useLanguage();
+  useLanguage();
   const [intents, setIntents] = useState<Intent[]>([]);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
