@@ -49,6 +49,55 @@ export interface Plan {
   horizon_days: number;
 }
 
+
+export interface DailyItem {
+  id: string;
+  plan_date: string;
+  title: string;
+  quadrant: 1 | 2 | 3 | 4;
+  minutes: number;
+  priority: Priority;
+  intent_id?: string | null;
+  schedule_enabled: boolean;
+  completed_at?: string | null;
+  cancelled_at?: string | null;
+  carried: boolean;
+  carry_days: number;
+}
+
+export interface DailySuggestion {
+  intent_id: string;
+  title: string;
+  priority: Priority;
+  minutes: number;
+}
+
+export interface DailyReview {
+  did_well: string;
+  grateful_for: string;
+  would_change: string;
+  learned: string;
+  improve_tomorrow: string;
+  first_step_morning: string;
+}
+
+export interface DailyData {
+  date: string;
+  plan: {
+    win_condition: string;
+    first_step: string;
+    closed_at?: string | null;
+  };
+  items: DailyItem[];
+  suggestions: DailySuggestion[];
+  review: DailyReview;
+  summary: {
+    completed_blocks: number;
+    total_blocks: number;
+    carry_over: number;
+  };
+}
+
 export interface DailyWindow {
   start_min: number;
   end_min: number;
@@ -163,6 +212,36 @@ export const api = {
     request<{ events: number; blocks: number }>("/api/busy", {
       method: "PUT",
       body: JSON.stringify(events),
+    }),
+  daily: (date: string) => request<DailyData>(`/api/daily/${date}`),
+  saveDailyPlan: (date: string, body: { win_condition: string; first_step: string }) =>
+    request<{ date: string; win_condition: string; first_step: string }>(`/api/daily/${date}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  createDailyItem: (
+    date: string,
+    body: {
+      title: string;
+      quadrant: 1 | 2 | 3 | 4;
+      minutes: number;
+      priority: Priority;
+      schedule_enabled: boolean;
+      intent_id?: string;
+    },
+  ) =>
+    request<DailyItem>(`/api/daily/${date}/items`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  completeDailyItem: (id: string) =>
+    request<DailyItem>(`/api/daily/items/${id}/complete`, { method: "POST" }),
+  cancelDailyItem: (id: string) =>
+    request<DailyItem>(`/api/daily/items/${id}/cancel`, { method: "POST" }),
+  saveDailyReview: (date: string, body: DailyReview) =>
+    request<{ date: string } & DailyReview>(`/api/daily/${date}/review`, {
+      method: "PUT",
+      body: JSON.stringify(body),
     }),
 };
 
