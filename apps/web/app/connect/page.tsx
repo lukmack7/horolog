@@ -90,7 +90,7 @@ const TRACKER_PROVIDERS: {
 ];
 
 export default function Connect() {
-  useLanguage();
+  const { t, language } = useLanguage();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [connected, setConnected] = useState<Record<string, boolean>>({});
   const [icsUrl, setIcsUrl] = useState("");
@@ -255,7 +255,7 @@ export default function Connect() {
     <Shell onPlanChange={load}>
       <main className="mx-auto max-w-[800px] space-y-6 px-6 py-8">
         <header className="mb-4">
-          <h1 className="text-[28px] font-bold text-fg">Calendars & Sync</h1>
+          <h1 className="text-[28px] font-bold text-fg">{t("Calendars & Sync")}</h1>
           <p className="mt-1 text-[13.5px] font-medium text-fg-muted">
             {mirrored} {mirrored === 1 ? "event" : "events"} mirrored across{" "}
             {Object.keys(bySource).length || 0} active sources.
@@ -295,7 +295,7 @@ export default function Connect() {
         {/* Calendars — OAuth, or paste an ICS/CalDAV address directly */}
         <section className="space-y-5 overflow-hidden rounded-card border border-black/[0.08] bg-surface p-6 shadow-sm">
           <div>
-            <h2 className="text-[15px] font-bold text-fg">Connect a calendar</h2>
+            <h2 className="text-[15px] font-bold text-fg">{t("Connect a calendar")}</h2>
             <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">
               OAuth needs your own app credentials — self-hosting means there is no shared client
               to hand out (see .env.example). The feed and server options below need none.
@@ -430,7 +430,7 @@ export default function Connect() {
         {/* Trackers — OAuth, or paste a personal key */}
         <section className="space-y-4 overflow-hidden rounded-card border border-black/[0.08] bg-surface p-6 shadow-sm">
           <div>
-            <h2 className="text-[15px] font-bold text-fg">Connect a tracker</h2>
+            <h2 className="text-[15px] font-bold text-fg">{t("Connect a tracker")}</h2>
             <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">
               Started issues and open tasks are scheduled as tasks, fluidly, around everything
               else. A personal API key needs no OAuth app.
@@ -470,7 +470,7 @@ export default function Connect() {
                       <Unplug size={15} />
                     </button>
                   )}
-                  {!p.keyOnly && <span className="text-fg-subtle">or</span>}
+                  {!p.keyOnly && <span className="text-fg-subtle">{t("or")}</span>}
                   {p.keyOnly && (
                     <span className="flex h-11 items-center gap-2 rounded-xl px-4 text-[13.5px] font-semibold text-fg-muted">
                       {p.label}
@@ -500,7 +500,7 @@ export default function Connect() {
         {/* Subscribable Plan Feed */}
         <section className="overflow-hidden rounded-card border border-black/[0.08] bg-surface p-6 shadow-sm">
           <div>
-            <h2 className="text-[15px] font-bold text-fg">Subscribe to your Horolog plan</h2>
+            <h2 className="text-[15px] font-bold text-fg">{t("Subscribe to your Horolog plan")}</h2>
             <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">
               Read-only from Apple Calendar, Google, or Outlook — see your auto-scheduled blocks
               alongside external events.
