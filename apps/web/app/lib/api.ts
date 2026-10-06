@@ -281,6 +281,30 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  captureDaily: (
+    date: string,
+    body: {
+      text: string;
+      quadrant: 1 | 2 | 3 | 4;
+      default_minutes: number;
+    },
+  ) =>
+    request<{
+      source: string;
+      count: number;
+      created: Array<{
+        kind: "task" | "meeting";
+        date: string;
+        item?: DailyItem;
+        intent_id?: string;
+        title?: string;
+        minutes?: number;
+        start?: string;
+      }>;
+    }>(`/api/daily/${date}/capture`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   completeDailyItem: (id: string) =>
     request<DailyItem>(`/api/daily/items/${id}/complete`, { method: "POST" }),
   cancelDailyItem: (id: string) =>
