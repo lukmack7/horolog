@@ -135,7 +135,7 @@ export function Shell({
         >
           <span className="flex items-center gap-2 font-medium">
             <Sparkles size={14} className="text-foreground transition-transform duration-200 group-hover:rotate-12" />
-            Add time
+            Ask Horolog
           </span>
           <kbd className="tabular inline-flex items-center gap-0.5 rounded-md border border-border bg-background px-1.5 py-0.5 text-[10.5px] font-mono text-muted-foreground">
             <Command size={10} />K
@@ -173,7 +173,7 @@ export function Shell({
         <button
           type="button"
           onClick={() => setCommandOpen(true)}
-          aria-label="Add time"
+          aria-label="Ask Horolog"
           className="fixed bottom-20 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-accent text-on-accent shadow-pop transition-transform active:scale-95 lg:hidden"
         >
           <Sparkles size={20} />
