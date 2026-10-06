@@ -109,7 +109,7 @@ function busyToEvents(busy: Busy[]): Event[] {
 }
 
 export default function Planner() {
-  const { t, language } = useLanguage();
+  useLanguage();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
 
