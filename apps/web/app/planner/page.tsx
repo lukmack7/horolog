@@ -231,6 +231,43 @@ export default function Planner() {
     [load],
   );
 
+  const handleEventUpdate = useCallback(
+    async (id: string, event: Partial<Event>) => {
+      if (id.startsWith(EXTERNAL_PREFIX)) {
+        setError("Real calendar events are read-only here — move them in the source calendar.");
+        await load();
+        return;
+      }
+
+      const source = calendarEvents.find((candidate) => candidate.id === id);
+      if (!source?.intentId || !event.startTime || !event.endTime) {
+        await load();
+        return;
+      }
+
+      if (source.recurring) {
+        setError("Recurring routines are not draggable as whole tasks yet.");
+        await load();
+        return;
+      }
+
+      try {
+        await api.moveIntent(
+          source.intentId,
+          event.startTime.toISOString(),
+          event.endTime.toISOString(),
+        );
+        await load();
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "Could not move that task.");
+        // EventManager updates its local drag state optimistically; reloading
+        // restores the server-authoritative placement after a rejected move.
+        await load();
+      }
+    },
+    [calendarEvents, load],
+  );
+
   const handleEventDelete = useCallback(
     async (id: string) => {
       if (id.startsWith(EXTERNAL_PREFIX)) {
@@ -333,6 +370,7 @@ export default function Planner() {
             <EventManager
               events={calendarEvents}
               onEventCreate={handleEventCreate}
+              onEventUpdate={handleEventUpdate}
               onEventDelete={handleEventDelete}
               onEventComplete={handleEventComplete}
               categories={["Task", "Habit", "Focus", "Buffer", "Meeting", "External"]}
