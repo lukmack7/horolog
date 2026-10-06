@@ -304,6 +304,25 @@ function PlanView({
   reload: () => Promise<void>;
 }) {
   const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
+  const [draggingSuggestionId, setDraggingSuggestionId] = useState<string | null>(null);
+
+  const attachSuggestion = async (
+    suggestionId: string,
+    quadrant: 1 | 2 | 3 | 4,
+  ) => {
+    const suggestion = data.suggestions.find((item) => item.intent_id === suggestionId);
+    if (!suggestion) return;
+
+    await api.createDailyItem(dateKey, {
+      title: suggestion.title,
+      quadrant,
+      minutes: Math.max(15, suggestion.minutes),
+      schedule_enabled: true,
+      intent_id: suggestion.intent_id,
+    });
+    setDraggingSuggestionId(null);
+    await reload();
+  };
 
   return (
     <div className="space-y-5">
@@ -344,25 +363,26 @@ function PlanView({
             <h2 className="text-[14px] font-bold">Już w Plannerze</h2>
           </div>
           <p className="mt-1 text-[11.5px] text-fg-muted">
-            Te zadania są już zaplanowane na ten dzień. Dodaj je do macierzy bez tworzenia duplikatu.
+            Te zadania są już zaplanowane na ten dzień. Przeciągnij je do wybranej ćwiartki albo kliknij, aby użyć obecnego priorytetu. Samo przypięcie nie zmienia terminu w Plannerze.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             {data.suggestions.map((item) => (
               <button
                 key={item.intent_id}
                 type="button"
-                onClick={async () => {
-                  const quadrant = item.priority;
-                  await api.createDailyItem(dateKey, {
-                    title: item.title,
-                    quadrant: quadrant as 1 | 2 | 3 | 4,
-                    minutes: Math.max(15, item.minutes),
-                    schedule_enabled: true,
-                    intent_id: item.intent_id,
-                  });
-                  await reload();
+                draggable
+                onDragStart={(event) => {
+                  setDraggingItemId(null);
+                  setDraggingSuggestionId(item.intent_id);
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData("text/plain", item.intent_id);
                 }}
-                className="flex max-w-full items-center gap-2 rounded-xl border bg-sunk/50 px-3 py-2 text-left text-[11.5px] font-medium hover:bg-sunk"
+                onDragEnd={() => setDraggingSuggestionId(null)}
+                onClick={() => void attachSuggestion(item.intent_id, item.priority)}
+                className={`flex max-w-full cursor-grab items-center gap-2 rounded-xl border bg-sunk/50 px-3 py-2 text-left text-[11.5px] font-medium transition-all hover:bg-sunk active:cursor-grabbing ${
+                  draggingSuggestionId === item.intent_id ? "scale-[0.99] opacity-55" : ""
+                }`}
+                title="Przeciągnij do wybranej ćwiartki albo kliknij, aby użyć obecnego priorytetu"
               >
                 <CirclePlus size={14} className="shrink-0" />
                 <span className="truncate">{item.title}</span>
@@ -388,6 +408,9 @@ function PlanView({
             reload={reload}
             draggingItemId={draggingItemId}
             setDraggingItemId={setDraggingItemId}
+            draggingSuggestionId={draggingSuggestionId}
+            setDraggingSuggestionId={setDraggingSuggestionId}
+            onSuggestionDrop={attachSuggestion}
           />
         ))}
       </div>
@@ -433,6 +456,9 @@ function QuadrantCard({
   reload,
   draggingItemId,
   setDraggingItemId,
+  draggingSuggestionId,
+  setDraggingSuggestionId,
+  onSuggestionDrop,
 }: {
   quadrant: (typeof QUADRANTS)[number];
   items: DailyData["items"];
@@ -440,6 +466,9 @@ function QuadrantCard({
   reload: () => Promise<void>;
   draggingItemId: string | null;
   setDraggingItemId: (id: string | null) => void;
+  draggingSuggestionId: string | null;
+  setDraggingSuggestionId: (id: string | null) => void;
+  onSuggestionDrop: (suggestionId: string, quadrant: 1 | 2 | 3 | 4) => Promise<void>;
 }) {
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
@@ -462,17 +491,29 @@ function QuadrantCard({
   return (
     <section
       className={`rounded-2xl border p-4 shadow-sm transition-all ${quadrant.tone} ${
-        draggingItemId ? "ring-1 ring-black/5" : ""
+        draggingItemId || draggingSuggestionId
+          ? "ring-2 ring-black/10 ring-offset-1"
+          : ""
       }`}
       onDragOver={(e) => {
-        if (!draggingItemId) return;
+        if (!draggingItemId && !draggingSuggestionId) return;
         e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
       }}
       onDrop={async (e) => {
         e.preventDefault();
+
+        if (draggingSuggestionId) {
+          const suggestionId = draggingSuggestionId;
+          setDraggingSuggestionId(null);
+          await onSuggestionDrop(suggestionId, quadrant.id);
+          return;
+        }
+
         if (!draggingItemId) return;
-        await api.moveDailyItem(draggingItemId, quadrant.id, dateKey);
+        const itemId = draggingItemId;
         setDraggingItemId(null);
+        await api.moveDailyItem(itemId, quadrant.id, dateKey);
         await reload();
       }}
     >
