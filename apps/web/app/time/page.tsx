@@ -5,11 +5,19 @@ import { Grid } from "@/app/components/Grid";
 import { Glyph, KIND_LABEL } from "@/app/components/Glyph";
 import { Shell } from "@/app/components/Shell";
 import { Skeleton } from "@/app/components/Skeleton";
-import { api, formatDuration, minutesBetween, type IntentKind, type Plan } from "@/app/lib/api";
-import { ArrowRight } from "lucide-react";
+import { api, formatDuration, minutesBetween, type DailyData, type IntentKind, type Plan } from "@/app/lib/api";
+import { ArrowRight, Sunrise, Target } from "lucide-react";
+import Link from "next/link";
 
 function dayKey(iso: string): string {
   return iso.slice(0, 10);
+}
+
+function localDateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 /** Live "today" view: a single-day timeline with a moving now-line, plus
@@ -17,13 +25,20 @@ function dayKey(iso: string): string {
  *  Analytics (aggregate stats) rather than duplicating either. */
 export default function TimePage() {
   const [plan, setPlan] = useState<Plan | null>(null);
+  const [daily, setDaily] = useState<DailyData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
 
   const load = useCallback(async () => {
     try {
-      setPlan(await api.plan());
+      const now = new Date();
+      const [nextPlan, nextDaily] = await Promise.all([
+        api.plan(),
+        api.daily(localDateKey(now)),
+      ]);
+      setPlan(nextPlan);
+      setDaily(nextDaily);
       setError(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not load the schedule.");
@@ -60,7 +75,7 @@ export default function TimePage() {
 
   return (
     <Shell onPlanChange={load}>
-      <main className="mx-auto max-w-[1440px] px-6 py-8">
+      <main className="mx-auto max-w-[1440px] overflow-x-hidden px-4 py-5 sm:px-6 sm:py-8">
         <header className="mb-7 flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="text-[28px] font-bold text-fg">Time</h1>
@@ -77,6 +92,41 @@ export default function TimePage() {
           <div className="mb-6 rounded-card border border-red-200 bg-red-50/70 p-4 text-[13.5px] text-danger shadow-xs">
             {error}
           </div>
+        )}
+
+        {daily && (daily.plan.first_step || daily.plan.win_condition) && (
+          <section className="mb-5 grid gap-3 lg:grid-cols-[1.2fr_.8fr]">
+            {daily.plan.first_step && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50/55 p-4 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-amber-700 shadow-sm">
+                    <Sunrise size={18} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-amber-700">Start here</div>
+                    <div className="mt-1 text-[14px] font-semibold leading-relaxed text-fg">{daily.plan.first_step}</div>
+                    <Link href="/daily" className="mt-2 inline-flex text-[10.5px] font-semibold text-amber-800 hover:underline">
+                      Otwórz Daily →
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {daily.plan.win_condition && (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/45 p-4 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-700 shadow-sm">
+                    <Target size={18} />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-emerald-700">Dzisiaj wygrywam, jeśli</div>
+                    <div className="mt-1 text-[13px] font-semibold leading-relaxed text-fg">{daily.plan.win_condition}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
         )}
 
         <div className="mb-7 grid gap-4 sm:grid-cols-2">
