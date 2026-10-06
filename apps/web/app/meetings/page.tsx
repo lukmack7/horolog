@@ -29,7 +29,7 @@ const EMPTY_ROW: BusyRow = { start: "", end: "", attendee: "" };
  *  (attendee free/busy intersection, `Intent.blocked_slots`) already exists
  *  and is tested server-side but had no way to reach it from the app. */
 export default function Meetings() {
-  useLanguage();
+  const { t, language } = useLanguage();
   const [intents, setIntents] = useState<Intent[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -116,7 +116,7 @@ export default function Meetings() {
     <Shell onPlanChange={load}>
       <main className="mx-auto max-w-[920px] px-6 py-8">
         <header className="mb-8">
-          <h1 className="text-[28px] font-bold text-fg">Smart Meetings</h1>
+          <h1 className="text-[28px] font-bold text-fg">{t("Smart Meetings")}</h1>
           <p className="mt-1 text-[13.5px] text-fg-muted">
             Placed only where every attendee is free - their busy time never touches your own calendar.
           </p>
@@ -275,7 +275,7 @@ export default function Meetings() {
           </ul>
         ) : meetings.length === 0 ? (
           <div className="rounded-card border border-black/[0.06] bg-surface p-10 text-center shadow-sm">
-            <p className="text-[14px] font-semibold text-fg">No smart meetings yet</p>
+            <p className="text-[14px] font-semibold text-fg">{t("No smart meetings yet")}</p>
             <p className="mt-1 text-[13px] text-fg-muted">Configure one above, with or without attendee ranges.</p>
           </div>
         ) : (
