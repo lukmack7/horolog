@@ -53,7 +53,7 @@ export interface Event {
 }
 
 export interface EventManagerProps {
-  wydarzeń?: Event[]
+  events?: Event[]
   onEventCreate?: (event: Omit<Event, "id">) => void
   onEventUpdate?: (id: string, event: Partial<Event>) => void
   onEventDelete?: (id: string) => void
