@@ -40,6 +40,7 @@ from horolog.db import (
     DailyReviewRow,
     IntentRow,
     SyncedBlockRow,
+    UserSettingsRow,
     init_db,
     load_intents,
     load_previous_plan,
@@ -110,6 +111,23 @@ def origin() -> datetime:
 
 def horizon_slots() -> int:
     return settings().horizon_days * SLOTS_PER_DAY
+
+
+USER_SETTINGS_ID = 1
+
+
+async def _preferred_workday(db: AsyncSession) -> tuple[int, int]:
+    """Return the editable single-user workday preference, falling back to env."""
+
+    row = await db.get(UserSettingsRow, USER_SETTINGS_ID)
+    cfg = settings()
+    if (
+        row is None
+        or row.preferred_workday_start_min is None
+        or row.preferred_workday_end_min is None
+    ):
+        return cfg.workday_start_min, cfg.workday_end_min
+    return row.preferred_workday_start_min, row.preferred_workday_end_min
 
 
 MAX_PUSH_OPS = 200
@@ -211,12 +229,21 @@ class IntentIn(BaseModel):
 
         return self
 
-    def to_domain(self, ident: str, base: datetime) -> Intent:
+    def to_domain(
+        self,
+        ident: str,
+        base: datetime,
+        default_workday: tuple[int, int] | None = None,
+    ) -> Intent:
         cfg = settings()
-        start = (
-            self.window_start_min if self.window_start_min is not None else cfg.workday_start_min
+        default_start, default_end = default_workday or (
+            cfg.workday_start_min,
+            cfg.workday_end_min,
         )
-        end = self.window_end_min if self.window_end_min is not None else cfg.workday_end_min
+        start = (
+            self.window_start_min if self.window_start_min is not None else default_start
+        )
+        end = self.window_end_min if self.window_end_min is not None else default_end
 
         # A specific preferred start outside the normal workday must still be
         # schedulable. Keep it soft: widen the default window rather than
