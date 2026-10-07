@@ -42,6 +42,7 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         NotificationChannels.create(this)
         requestNotificationPermission()
+        NotificationSyncWorker.schedule(this)
         setContentView(buildContent())
         configureWebView()
         configureBackNavigation()
@@ -199,6 +200,7 @@ class MainActivity : ComponentActivity() {
             return when (deepLink.host) {
                 "todo" -> "$baseUrl/todo"
                 "planner" -> "$baseUrl/planner"
+                "daily" -> "$baseUrl/daily"
                 else -> baseUrl
             }
         }
