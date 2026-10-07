@@ -2508,19 +2508,31 @@ async def assistant_execute(
     body: AssistantExecuteIn,
     db: AsyncSession = Depends(session),
 ) -> dict[str, Any]:
-    results = []
-    for action in body.actions:
-        try:
-            results.append(await _execute_assistant_action(action, db))
-        except HTTPException as exc:
-            results.append(
-                {
-                    "action": action.action,
-                    "status": "failed",
-                    "title": action.title,
-                    "detail": str(exc.detail),
-                }
-            )
+    """Execute one assistant proposal as a reversible all-or-nothing batch."""
+
+    before = await _planning_snapshot(db)
+    results: list[dict[str, Any]] = []
+
+    try:
+        for action in body.actions:
+            result = await _execute_assistant_action(action, db)
+            if result.get("status") == "failed":
+                raise HTTPException(
+                    status_code=409,
+                    detail=result.get("detail") or "Nie udało się wykonać jednej ze zmian.",
+                )
+            results.append(result)
+    except Exception as exc:
+        await _restore_planning_snapshot(db, before)
+        detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+        status = exc.status_code if isinstance(exc, HTTPException) else 409
+        raise HTTPException(
+            status_code=status,
+            detail=(
+                "Nie wykonano żadnej zmiany z tego pakietu. "
+                f"Horolog przywrócił poprzedni plan. Powód: {detail}"
+            ),
+        ) from exc
 
     # Report what actually landed in the authoritative plan, not merely what
     # the proposal requested. This makes the assistant's confirmation factual.
@@ -2542,13 +2554,99 @@ async def assistant_execute(
         if blocks:
             result["scheduled"] = blocks
 
+    after = await _planning_snapshot(db)
+    change = await _save_change_set(
+        db,
+        source="assistant",
+        title=(
+            f"Pakiet asystenta · {len(results)} "
+            + ("zmiana" if len(results) == 1 else "zmian")
+        ),
+        summary=results,
+        before=before,
+        after=after,
+    )
+
     return {
         "count": len(results),
-        "success_count": sum(1 for result in results if result.get("status") == "done"),
+        "success_count": len(results),
+        "atomic": True,
+        "change_set_id": change.id,
         "results": results,
     }
 
 
+
+
+@app.get("/api/history")
+async def change_history(
+    limit: int = 50,
+    db: AsyncSession = Depends(session),
+) -> list[dict[str, Any]]:
+    limit = max(1, min(limit, 200))
+    rows = (
+        await db.execute(
+            select(ChangeSetRow)
+            .order_by(ChangeSetRow.created_at.desc())
+            .limit(limit)
+        )
+    ).scalars().all()
+
+    latest_reversible = next((row for row in rows if row.undone_at is None), None)
+    return [
+        {
+            "id": row.id,
+            "source": row.source,
+            "title": row.title,
+            "summary": row.summary,
+            "created_at": row.created_at.isoformat(),
+            "undone_at": _iso_or_none(row.undone_at),
+            "can_undo": (
+                row.undone_at is None
+                and latest_reversible is not None
+                and row.id == latest_reversible.id
+            ),
+        }
+        for row in rows
+    ]
+
+
+@app.post("/api/history/{change_id}/undo")
+async def undo_change_set(
+    change_id: str,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    row = await db.get(ChangeSetRow, change_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Nie znaleziono tej zmiany.")
+    if row.undone_at is not None:
+        raise HTTPException(status_code=409, detail="Ta zmiana została już cofnięta.")
+
+    latest = (
+        await db.execute(
+            select(ChangeSetRow)
+            .where(ChangeSetRow.undone_at.is_(None))
+            .order_by(ChangeSetRow.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if latest is None or latest.id != row.id:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Można cofnąć tylko najnowszy niecofnięty pakiet. "
+                "Chroni to późniejsze zmiany przed przypadkowym nadpisaniem."
+            ),
+        )
+
+    await _restore_planning_snapshot(db, row.before_state)
+    row.undone_at = datetime.now(UTC)
+    await db.commit()
+    return {
+        "id": row.id,
+        "status": "undone",
+        "undone_at": row.undone_at.isoformat(),
+    }
 
 
 class CaptureIn(BaseModel):
