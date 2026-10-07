@@ -38,6 +38,15 @@ function actionLabel(action: AssistantAction): string {
           ).padStart(2, "0")}`;
     return `Dodaj spotkanie · ${action.date ?? "bez daty"} · ${hour} · ${action.minutes ?? "?"} min`;
   }
+  if (action.action === "create_break") {
+    const hour =
+      action.start_min == null
+        ? "bez godziny"
+        : `${String(Math.floor(action.start_min / 60)).padStart(2, "0")}:${String(
+            action.start_min % 60,
+          ).padStart(2, "0")}`;
+    return `Dodaj przerwę · ${action.date ?? "bez daty"} · ${hour} · ${action.minutes ?? "?"} min`;
+  }
   if (action.action === "reschedule_task") {
     return `Przełóż zadanie · ${action.date ?? "bez daty"}`;
   }
