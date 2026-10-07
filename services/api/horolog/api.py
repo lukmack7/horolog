@@ -1303,6 +1303,13 @@ async def create_daily_item(date: str, body: DailyItemIn, db: AsyncSession = Dep
     linked_existing = intent_id is not None
     matrix_priority = Priority(body.quadrant)
 
+    deadline_end = _deadline_end(body.deadline_date) if body.deadline_date else None
+    if body.schedule_enabled and deadline_end is not None and deadline_end <= day:
+        raise HTTPException(
+            status_code=422,
+            detail="Maksymalny deadline zadania musi przypadać w tym dniu lub później.",
+        )
+
     if intent_id is not None:
         if await db.get(IntentRow, intent_id) is None:
             raise HTTPException(status_code=404, detail=f"no intent {intent_id!r}")
@@ -1318,7 +1325,8 @@ async def create_daily_item(date: str, body: DailyItemIn, db: AsyncSession = Dep
             max_chunk_minutes=body.minutes,
             max_per_day=1,
             earliest=day,
-            due=day + timedelta(days=1) - timedelta(minutes=1),
+            due=deadline_end or (day + timedelta(days=1)),
+            deadline_date=body.deadline_date,
         )
         intent = wire.to_domain(intent_id, origin(), await _preferred_workday(db))
         db.add(IntentRow(id=intent_id, payload=intent.model_dump(mode="json")))
@@ -1335,6 +1343,10 @@ async def create_daily_item(date: str, body: DailyItemIn, db: AsyncSession = Dep
         schedule_enabled=body.schedule_enabled,
     )
     db.add(row)
+    meta = None
+    if body.deadline_date is not None:
+        meta = DailyItemMetaRow(item_id=item_id, deadline_date=body.deadline_date)
+        db.add(meta)
     await db.commit()
 
     # Linking a task that is already visible in Planner is classification only.
@@ -1348,7 +1360,7 @@ async def create_daily_item(date: str, body: DailyItemIn, db: AsyncSession = Dep
     if intent_id:
         intent_row = await db.get(IntentRow, intent_id)
         intent_payload = intent_row.payload if intent_row else None
-    return _daily_item_dict(row, date, intent_payload)
+    return _daily_item_dict(row, date, intent_payload, meta=meta)
 
 
 @app.post("/api/daily/items/{item_id}/complete")
