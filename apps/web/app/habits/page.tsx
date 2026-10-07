@@ -228,7 +228,7 @@ export default function Habits() {
               id="habit-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Gym, deep work, lunch..."
+              placeholder={t("Gym, deep work, lunch...")}
               className="h-11 w-full rounded-xl border border-black/[0.08] bg-bg px-4 text-[15px] font-medium outline-none transition-colors focus:border-accent"
             />
             {/* Quick Presets */}
@@ -444,7 +444,7 @@ export default function Habits() {
         ) : habits.length === 0 ? (
           <div className="rounded-card border border-black/[0.06] bg-surface p-10 text-center shadow-sm">
             <p className="text-[14px] font-semibold text-fg">{t("No active routines")}</p>
-            <p className="mt-1 text-[13px] text-fg-muted">Configure a habit above or use ⌘K to describe it.</p>
+            <p className="mt-1 text-[13px] text-fg-muted">{t("Configure a habit above or use ⌘K to describe it.")}</p>
           </div>
         ) : (
           <ul className="space-y-3">
@@ -486,7 +486,7 @@ export default function Habits() {
                       type="button"
                       onClick={() => editHabit(habit)}
                       aria-label={`Edit ${habit.title}`}
-                      title="Edit routine"
+                      title={t("Edit routine")}
                       className="flex h-8 w-8 items-center justify-center rounded-lg text-fg-subtle opacity-0 transition-all duration-150 hover:bg-secondary hover:text-accent focus-visible:opacity-100 group-hover:opacity-100"
                     >
                       <Pencil size={15} />
