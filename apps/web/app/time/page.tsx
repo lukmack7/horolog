@@ -122,7 +122,7 @@ export default function TimePage() {
                     <Target size={18} />
                   </span>
                   <div className="min-w-0">
-                    <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-emerald-700">Dzisiaj wygrywam, jeśli</div>
+                    <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-emerald-700">{t("Dzisiaj wygrywam, jeśli")}</div>
                     <div className="mt-1 text-[13px] font-semibold leading-relaxed text-fg">{daily.plan.win_condition}</div>
                   </div>
                 </div>
