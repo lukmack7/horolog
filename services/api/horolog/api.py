@@ -1829,12 +1829,13 @@ async def move_intent(
     body: MoveIntentIn,
     db: AsyncSession = Depends(session),
 ) -> dict[str, Any]:
-    """Move a one-shot task to a chosen Planner day/time.
+    """Move a one-shot task or meeting to a chosen Planner day/time.
 
-    Dragging is an explicit user decision, so it must not silently land on a
-    different day. The task is re-solved with the chosen start as the earliest
-    legal point and a same-day execution window. If the complete task cannot
-    fit on that day, the original intent is restored and the API returns 409.
+    Manual moves are explicit user decisions:
+    - tasks stay on the selected day,
+    - meetings stay at the exact selected start time,
+    - recurring routines remain unsupported,
+    - dates before today remain outside the active planning horizon.
     """
     row = await db.get(IntentRow, intent_id)
     if row is None:
@@ -1846,79 +1847,137 @@ async def move_intent(
             status_code=422,
             detail="Recurring routines are not draggable as whole tasks yet.",
         )
-    if intent.kind != IntentKind.TASK:
+    if intent.kind not in (IntentKind.TASK, IntentKind.MEETING):
         raise HTTPException(
             status_code=422,
-            detail="Only one-shot tasks can be moved by drag and drop.",
+            detail="Only one-shot tasks and meetings can be moved in Planner.",
         )
     if intent.completed_at is not None:
-        raise HTTPException(status_code=422, detail="Completed tasks cannot be moved.")
+        raise HTTPException(status_code=422, detail="Completed items cannot be moved.")
     if body.end <= body.start:
         raise HTTPException(status_code=422, detail="Move end must be after start.")
 
     start = body.start.astimezone(settings().zone)
     end = body.end.astimezone(settings().zone)
     if start.date() < origin().date():
-        raise HTTPException(status_code=422, detail="A task cannot be moved into the past.")
+        raise HTTPException(
+            status_code=422,
+            detail="An item cannot be moved to a day before today.",
+        )
 
     original_payload = dict(row.payload)
     base = origin()
     target_day_start = start.replace(hour=0, minute=0, second=0, microsecond=0)
     target_day_end = target_day_start + timedelta(days=1)
-
     start_min = start.hour * 60 + start.minute
-    dragged_minutes = max(SLOT_MINUTES, int((end - start).total_seconds() // 60))
-    required_window = max(
-        dragged_minutes,
-        intent.minutes_per_period,
-        intent.max_chunk_minutes,
-    )
-    window_end = min(24 * 60, start_min + required_window)
-    if window_end - start_min < intent.min_chunk_minutes:
-        raise HTTPException(
-            status_code=409,
-            detail="There is not enough time left on that day for this task.",
+
+    if intent.kind == IntentKind.MEETING:
+        meeting_minutes = intent.minutes_per_period
+        meeting_end = start + timedelta(minutes=meeting_minutes)
+        if meeting_end.date() != start.date():
+            raise HTTPException(
+                status_code=409,
+                detail="The meeting would extend beyond the selected day.",
+            )
+
+        moved = intent.model_copy(
+            update={
+                "earliest_slot": to_slot(start, base),
+                "latest_slot": to_slot(meeting_end, base),
+                "due_slot": to_slot(meeting_end, base),
+                "preferred_start_min": start_min,
+                "daily_windows": [
+                    DailyWindow(
+                        start_min=start_min,
+                        end_min=start_min + meeting_minutes,
+                    )
+                ],
+                "allowed_weekdays": [],
+            }
+        )
+    else:
+        dragged_minutes = max(
+            SLOT_MINUTES,
+            int((end - start).total_seconds() // 60),
+        )
+        required_window = max(
+            dragged_minutes,
+            intent.minutes_per_period,
+            intent.max_chunk_minutes,
+        )
+        window_end = min(24 * 60, start_min + required_window)
+        if window_end - start_min < intent.min_chunk_minutes:
+            raise HTTPException(
+                status_code=409,
+                detail="There is not enough time left on that day for this task.",
+            )
+
+        moved = intent.model_copy(
+            update={
+                "earliest_slot": to_slot(start, base),
+                # Refresh the hard upper bound on every explicit move. Without
+                # this, a stale latest_slot can keep an item pinned to its old day.
+                "latest_slot": to_slot(target_day_end, base),
+                "due_slot": to_slot(target_day_end, base) - 1,
+                "preferred_start_min": start_min,
+                "daily_windows": [
+                    DailyWindow(start_min=start_min, end_min=window_end)
+                ],
+                "allowed_weekdays": [],
+            }
         )
 
-    moved = intent.model_copy(
-        update={
-            "earliest_slot": to_slot(start, base),
-            # Keep the deadline marker on the selected day for scoring/reporting.
-            "due_slot": to_slot(target_day_end, base) - 1,
-            "preferred_start_min": start_min,
-            "daily_windows": [
-                DailyWindow(start_min=start_min, end_min=window_end)
-            ],
-            "allowed_weekdays": [],
-        }
-    )
     row.payload = moved.model_dump(mode="json")
     await db.commit()
 
     new_plan = await _replan(db)
     target_blocks = [block for block in new_plan.blocks if block.intent_id == intent_id]
     target_date = start.date()
-    all_on_target_day = bool(target_blocks) and all(
-        from_slot(block.start_slot, base).astimezone(settings().zone).date() == target_date
-        for block in target_blocks
-    )
-    placed_slots = sum(
-        block.end_slot - block.start_slot for block in target_blocks
-    )
-    required_slots = minutes_to_slots(intent.minutes_per_period)
 
-    if not all_on_target_day or placed_slots < required_slots:
-        row.payload = original_payload
-        await db.commit()
-        await _replan(db)
-        raise HTTPException(
-            status_code=409,
-            detail="This task does not fully fit on the selected day. Choose another day or free more time.",
+    if intent.kind == IntentKind.MEETING:
+        expected_start_slot = to_slot(start, base)
+        expected_end_slot = expected_start_slot + minutes_to_slots(
+            intent.minutes_per_period
         )
+        correctly_placed = (
+            len(target_blocks) == 1
+            and target_blocks[0].start_slot == expected_start_slot
+            and target_blocks[0].end_slot == expected_end_slot
+        )
+        if not correctly_placed:
+            row.payload = original_payload
+            await db.commit()
+            await _replan(db)
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "This meeting cannot be placed at the selected time. "
+                    "Choose another time or free that slot."
+                ),
+            )
+    else:
+        all_on_target_day = bool(target_blocks) and all(
+            from_slot(block.start_slot, base).astimezone(settings().zone).date()
+            == target_date
+            for block in target_blocks
+        )
+        placed_slots = sum(
+            block.end_slot - block.start_slot for block in target_blocks
+        )
+        required_slots = minutes_to_slots(intent.minutes_per_period)
 
-    # Daily is a lens over the same task. If it was already classified there,
-    # move that classification with the task rather than leaving stale history
-    # on the old planning date.
+        if not all_on_target_day or placed_slots < required_slots:
+            row.payload = original_payload
+            await db.commit()
+            await _replan(db)
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "This task does not fully fit on the selected day. "
+                    "Choose another day or free more time."
+                ),
+            )
+
     linked_daily = (
         await db.execute(
             select(DailyPlanItemRow).where(
