@@ -113,6 +113,21 @@ export default function Inbox() {
     setEditCategory(intent.category ?? "");
   }
 
+  async function updateCategory(intent: Intent, category: WorkCategory | "") {
+    setBusy(intent.id);
+    setEditCategory(category);
+    try {
+      await api.patchIntent(intent.id, {
+        category: category || null,
+      });
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not update category.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function saveEdit(intent: Intent) {
     if (!plan) return;
     setBusy(intent.id);
@@ -260,9 +275,12 @@ export default function Inbox() {
                       </select>
                       <select
                         value={editCategory}
-                        onChange={(e) => setEditCategory(e.target.value as WorkCategory | "")}
+                        onChange={(e) =>
+                          void updateCategory(intent, e.target.value as WorkCategory | "")
+                        }
+                        disabled={busy === intent.id}
                         aria-label={t("Category")}
-                        className="rounded-lg border border-black/10 bg-background px-2 py-1.5 text-[13px] text-fg outline-none focus:border-accent"
+                        className="rounded-lg border border-black/10 bg-background px-2 py-1.5 text-[13px] text-fg outline-none focus:border-accent disabled:opacity-50"
                       >
                         <option value="">{t("No category")}</option>
                         {WORK_CATEGORIES.map((value) => (
@@ -350,6 +368,25 @@ export default function Inbox() {
                       </>
                     )}
                   </div>
+                )}
+
+                {editing !== intent.id && (
+                  <select
+                    value={intent.category ?? ""}
+                    onChange={(e) =>
+                      void updateCategory(intent, e.target.value as WorkCategory | "")
+                    }
+                    disabled={busy === intent.id}
+                    aria-label={`${t("Category")}: ${intent.title}`}
+                    className="mt-0.5 h-8 shrink-0 rounded-lg border border-black/[0.08] bg-background px-2 text-[11px] font-semibold text-fg-muted outline-none hover:border-black/20 focus:border-accent disabled:opacity-50"
+                  >
+                    <option value="">{t("No category")}</option>
+                    {WORK_CATEGORIES.map((value) => (
+                      <option key={value} value={value}>
+                        {WORK_CATEGORY_LABEL[value]}
+                      </option>
+                    ))}
+                  </select>
                 )}
 
                 {editing !== intent.id && intent.kind !== "meeting" && (
