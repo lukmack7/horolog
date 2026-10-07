@@ -315,10 +315,10 @@ export default function Connect() {
                     {p.icon}
                     <span>
                       {pending === p.id
-                        ? "Working…"
+                        ? t("Working…")
                         : isConnected
-                          ? `Re-sync ${p.label}`
-                          : `Connect ${p.label}`}
+                          ? `${t("Re-sync")} ${p.label}`
+                          : `${t("Connect")} ${p.label}`}
                     </span>
                     {isConnected && <CheckCircle2 size={15} className="text-emerald-600" />}
                   </button>
@@ -327,7 +327,7 @@ export default function Connect() {
                       type="button"
                       onClick={() => pushCalendar(p.id as "google" | "outlook")}
                       disabled={pending !== null}
-                      aria-label={`Push the plan to ${p.label}`}
+                      aria-label={`${t("Push the plan to")} ${p.label}`}
                       title={`Push scheduled blocks onto a dedicated "Horolog" calendar on ${p.label} — needs HOROLOG_CALENDAR_WRITEBACK_ENABLED=true`}
                       className="flex h-11 w-11 items-center justify-center rounded-xl border border-black/[0.08] bg-white text-fg-muted transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
                     >
@@ -343,8 +343,8 @@ export default function Connect() {
                       type="button"
                       onClick={() => disconnect(p.id)}
                       disabled={pending !== null}
-                      aria-label={`Disconnect ${p.label}`}
-                      title={`Disconnect ${p.label}`}
+                      aria-label={`${t("Disconnect")} ${p.label}`}
+                      title={`${t("Disconnect")} ${p.label}`}
                       className="flex h-11 w-11 items-center justify-center rounded-xl border border-black/[0.08] bg-white text-fg-muted transition-colors hover:border-red-200 hover:text-danger disabled:opacity-50"
                     >
                       <Unplug size={15} />
@@ -447,10 +447,10 @@ export default function Connect() {
                     >
                       <span>
                         {pending === p.id
-                          ? "Working…"
+                          ? t("Working…")
                           : isConnected
-                            ? `Re-sync ${p.label}`
-                            : `Connect ${p.label}`}
+                            ? `${t("Re-sync")} ${p.label}`
+                            : `${t("Connect")} ${p.label}`}
                       </span>
                       {isConnected && <CheckCircle2 size={15} />}
                     </button>
