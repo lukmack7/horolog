@@ -29,6 +29,7 @@ from horolog.db import (
     DailyPlanItemRow,
     DailyPlanRow,
     DailyReviewRow,
+    NotificationSettingsRow,
     TodoInboxRow,
     UserSettingsRow,
     init_db,
@@ -62,6 +63,7 @@ async def client() -> AsyncIterator[AsyncClient]:
         await db.execute(delete(TodoInboxRow))
         await db.execute(delete(DailyPlanRow))
         await db.execute(delete(DailyReviewRow))
+        await db.execute(delete(NotificationSettingsRow))
         await db.execute(delete(UserSettingsRow))
         await db.commit()
         await gen.aclose()
@@ -71,6 +73,37 @@ async def client() -> AsyncIterator[AsyncClient]:
 @pytest.mark.asyncio
 async def test_health(client: AsyncClient) -> None:
     assert (await client.get("/api/health")).json() == {"status": "ok"}
+
+
+@pytest.mark.asyncio
+async def test_notification_preferences_round_trip(client: AsyncClient) -> None:
+    defaults = (await client.get("/api/settings/notifications")).json()
+    assert defaults == {
+        "task_enabled": True,
+        "task_minutes_before": 15,
+        "task_at_start": True,
+        "meeting_enabled": True,
+        "meeting_minutes_before": 15,
+        "meeting_at_start": True,
+        "deadline_enabled": True,
+        "deadline_days_before": 1,
+        "deadline_time_min": 9 * 60,
+        "end_of_day_enabled": True,
+        "end_of_day_time_min": 20 * 60 + 30,
+    }
+
+    changed = {
+        **defaults,
+        "task_minutes_before": 30,
+        "meeting_at_start": False,
+        "deadline_days_before": 2,
+        "deadline_time_min": 10 * 60 + 15,
+        "end_of_day_time_min": 21 * 60,
+    }
+    saved = await client.put("/api/settings/notifications", json=changed)
+    assert saved.status_code == 200
+    assert saved.json() == changed
+    assert (await client.get("/api/settings/notifications")).json() == changed
 
 
 @pytest.mark.asyncio
