@@ -129,6 +129,16 @@ export interface Plan {
 }
 
 
+export interface TodoInboxItem {
+  id: string;
+  title: string;
+  minutes: number;
+  category?: WorkCategory | null;
+  deadline_date?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface DailyItem {
   id: string;
   plan_date: string;
@@ -137,6 +147,7 @@ export interface DailyItem {
   minutes: number;
   priority: Priority;
   category?: WorkCategory | null;
+  deadline_date?: string | null;
   intent_id?: string | null;
   schedule_enabled: boolean;
   completed_at?: string | null;
@@ -244,6 +255,7 @@ export interface Intent {
   earliest_slot?: number | null;
   latest_slot?: number | null;
   due_slot?: number | null;
+  deadline_date?: string | null;
   preferred_start_min?: number | null;
   /** Set once, on a one-shot task only - see `complete`/`uncomplete` below. */
   completed_at?: string | null;
@@ -284,6 +296,7 @@ export function intentToEditPayload(intent: Intent, origin: string): Record<stri
     window_start_min: window?.start_min,
     window_end_min: window?.end_min,
     due: intent.due_slot != null ? slotToISO(intent.due_slot, origin) : undefined,
+    deadline_date: intent.deadline_date ?? undefined,
     earliest: intent.earliest_slot != null ? slotToISO(intent.earliest_slot, origin) : undefined,
     latest: intent.latest_slot != null ? slotToISO(intent.latest_slot, origin) : undefined,
     preferred_start_min: intent.preferred_start_min ?? undefined,
@@ -323,7 +336,15 @@ export const api = {
   remove: (id: string) => request<void>(`/api/intents/${id}`, { method: "DELETE" }),
   update: (id: string, body: Record<string, unknown>) =>
     request<Intent>(`/api/intents/${id}`, { method: "PUT", body: JSON.stringify(body) }),
-  patchIntent: (id: string, body: { title?: string; priority?: Priority; category?: WorkCategory | null }) =>
+  patchIntent: (
+    id: string,
+    body: {
+      title?: string;
+      priority?: Priority;
+      category?: WorkCategory | null;
+      deadline_date?: string | null;
+    },
+  ) =>
     request<Intent>(`/api/intents/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   complete: (id: string) => request<Intent>(`/api/intents/${id}/complete`, { method: "POST" }),
   uncomplete: (id: string) =>
@@ -377,6 +398,37 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(events),
     }),
+  todos: () => request<TodoInboxItem[]>("/api/todos"),
+  createTodo: (body: {
+    title: string;
+    minutes: number;
+    category?: WorkCategory | null;
+    deadline_date?: string | null;
+  }) =>
+    request<TodoInboxItem>("/api/todos", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  patchTodo: (
+    id: string,
+    body: {
+      title?: string;
+      minutes?: number;
+      category?: WorkCategory | null;
+      deadline_date?: string | null;
+    },
+  ) =>
+    request<TodoInboxItem>(`/api/todos/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  deleteTodo: (id: string) =>
+    request<void>(`/api/todos/${id}`, { method: "DELETE" }),
+  assignTodo: (id: string, body: { date: string; quadrant: 1 | 2 | 3 | 4 }) =>
+    request<DailyItem>(`/api/todos/${id}/assign`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   daily: (date: string) => request<DailyData>(`/api/daily/${date}`),
   saveDailyPlan: (date: string, body: { win_condition: string; first_step: string }) =>
     request<{ date: string; win_condition: string; first_step: string }>(`/api/daily/${date}`, {
@@ -391,6 +443,7 @@ export const api = {
       minutes: number;
       priority?: Priority;
       category?: WorkCategory;
+      deadline_date?: string | null;
       schedule_enabled: boolean;
       intent_id?: string;
     },
