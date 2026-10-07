@@ -10,7 +10,7 @@ import {
   PRIORITY_TINT,
   api,
   createIntent,
-  formatDuration,
+  format{t("Duration")},
   type AttendeeBusy,
   type Intent,
   type Priority,
@@ -118,7 +118,7 @@ export default function Meetings() {
         <header className="mb-8">
           <h1 className="text-[28px] font-bold text-fg">{t("Smart Meetings")}</h1>
           <p className="mt-1 text-[13.5px] text-fg-muted">
-            Placed only where every attendee is free - their busy time never touches your own calendar.
+            {t("Placed only where every attendee is free - their busy time never touches your own calendar.")}
           </p>
         </header>
 
@@ -135,7 +135,7 @@ export default function Meetings() {
           <div className="grid gap-5 border-b border-black/[0.06] px-6 py-4.5 sm:grid-cols-2 lg:grid-cols-4">
             <label className="block sm:col-span-2 lg:col-span-2">
               <span className="mb-1.5 block text-[12px] font-semibold tracking-wider uppercase text-fg-muted">
-                Meeting Title
+                {t("Meeting Title")}
               </span>
               <input
                 value={title}
@@ -146,7 +146,7 @@ export default function Meetings() {
             </label>
             <label className="block">
               <span className="mb-1.5 block text-[12px] font-semibold tracking-wider uppercase text-fg-muted">
-                Duration
+                {t("Duration")}
               </span>
               <select
                 value={minutes}
@@ -162,7 +162,7 @@ export default function Meetings() {
             </label>
             <label className="block">
               <span className="mb-1.5 block text-[12px] font-semibold tracking-wider uppercase text-fg-muted">
-                Meeting date
+                {t("Meeting date")}
               </span>
               <input
                 type="date"
@@ -173,7 +173,7 @@ export default function Meetings() {
             </label>
             <label className="block">
               <span className="mb-1.5 block text-[12px] font-semibold tracking-wider uppercase text-fg-muted">
-                Preferred time
+                {t("Preferred time")}
               </span>
               <input
                 type="time"
@@ -188,7 +188,7 @@ export default function Meetings() {
           <div className="border-b border-black/[0.06] px-6 py-4.5">
             <div className="mb-3 flex items-center justify-between">
               <span className="text-[12px] font-semibold tracking-wider uppercase text-fg-muted">
-                Attendee busy times
+                {t("Attendee busy times")}
               </span>
               <button
                 type="button"
@@ -196,7 +196,7 @@ export default function Meetings() {
                 className="inline-flex items-center gap-1 text-[12px] font-semibold text-accent hover:text-accent-hover"
               >
                 <Plus size={13} />
-                Add range
+                {t("Add range")}
               </button>
             </div>
             <div className="space-y-2.5">
@@ -235,7 +235,7 @@ export default function Meetings() {
             {rows.every((r) => !r.start || !r.end) && (
               <div className="mt-3 flex items-center gap-2 text-[12.5px] font-medium text-fg-muted">
                 <AlertTriangle size={14} />
-                No busy ranges yet - the meeting will schedule against your own calendar only.
+                {t("No busy ranges yet - the meeting will schedule against your own calendar only.")}
               </div>
             )}
           </div>
@@ -248,13 +248,13 @@ export default function Meetings() {
               className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-accent px-5 text-[13.5px] font-semibold text-on-accent shadow-sm transition-all duration-150 hover:bg-accent-hover hover:shadow-md disabled:opacity-40"
             >
               <Plus size={16} />
-              {saving ? "Scheduling..." : "Add Meeting"}
+              {saving ? t("Scheduling...") : t("Add Meeting")}
             </button>
           </div>
         </form>
 
         <h2 className="mb-3.5 text-[12px] font-semibold tracking-wider uppercase text-fg-muted">
-          Smart Meetings {loaded ? `(${meetings.length})` : ""}
+          {t("Smart Meetings")} {loaded ? `(${meetings.length})` : ""}
         </h2>
 
         {!loaded ? (
@@ -298,7 +298,7 @@ export default function Meetings() {
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[15px] font-semibold text-fg">{meeting.title}</div>
                     <div className="tabular mt-1 text-[12.5px] font-medium text-fg-muted">
-                      {formatDuration(meeting.minutes_per_period)} ·{" "}
+                      {format{t("Duration")}(meeting.minutes_per_period)} ·{" "}
                       {ranges > 0 ? `${ranges} attendee range${ranges === 1 ? "" : "s"} avoided` : "no attendee ranges"}
                     </div>
                     {meeting.zoom_join_url && (
