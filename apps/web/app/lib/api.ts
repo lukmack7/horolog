@@ -459,6 +459,7 @@ export const api = {
       quadrant: 1 | 2 | 3 | 4;
       default_minutes: number;
       category?: WorkCategory;
+      deadline_date?: string | null;
     },
   ) =>
     request<{
