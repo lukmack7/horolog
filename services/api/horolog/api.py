@@ -51,10 +51,10 @@ from horolog.domain.events import BusyInterval
 from horolog.domain.intent import (
     CompletedBlock,
     DailyWindow,
-    EnergyLevel,
     Intent,
     IntentKind,
     Priority,
+    WorkCategory,
 )
 from horolog.domain.plan import Plan
 from horolog.domain.time import (
@@ -180,7 +180,7 @@ class IntentIn(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     kind: IntentKind = IntentKind.TASK
     priority: Priority = Priority.P3
-    energy: EnergyLevel | None = None
+    category: WorkCategory | None = None
     minutes_per_period: int = Field(gt=0)
     period_days: int | None = Field(default=None, gt=0)
     min_chunk_minutes: int = Field(default=30, gt=0)
@@ -264,7 +264,7 @@ class IntentIn(BaseModel):
             kind=self.kind,
             title=self.title,
             priority=self.priority,
-            energy=self.energy,
+            category=self.category,
             minutes_per_period=self.minutes_per_period,
             period_days=self.period_days,
             min_chunk_minutes=self.min_chunk_minutes,
@@ -331,6 +331,7 @@ class IntentPatchIn(BaseModel):
 
     title: str | None = Field(default=None, min_length=1, max_length=200)
     priority: Priority | None = None
+    category: WorkCategory | None = None
 
 
 class BusyIn(BaseModel):
@@ -395,7 +396,7 @@ class BlockOut(BaseModel):
     title: str
     kind: IntentKind
     priority: Priority
-    energy: EnergyLevel | None = None
+    category: WorkCategory | None = None
     occurrence: int
     chunk: int
     start: datetime
@@ -589,7 +590,7 @@ async def _roll_daily_intent(
         title=intent.title,
         kind=intent.kind,
         priority=intent.priority,
-        energy=intent.energy,
+        category=intent.category,
         minutes_per_period=intent.minutes_per_period,
         period_days=None,
         min_chunk_minutes=intent.min_chunk_minutes,
@@ -1366,6 +1367,7 @@ async def _assistant_context(db: AsyncSession, context_page: str | None) -> dict
             "title": intent.title,
             "kind": intent.kind.value,
             "priority": int(intent.priority),
+            "category": intent.category.value if intent.category is not None else None,
             "minutes": intent.minutes_per_period,
             "scheduled": scheduled.get(intent.id, []),
         })
@@ -2472,6 +2474,8 @@ async def patch_intent(
         updates["title"] = body.title.strip()
     if body.priority is not None:
         updates["priority"] = body.priority
+    if body.category is not None:
+        updates["category"] = body.category
 
     if not updates:
         return intent.model_dump(mode="json")
@@ -3446,7 +3450,7 @@ async def _render(db: AsyncSession, plan: Plan) -> PlanOut:
             title=titles[b.intent_id].title if b.intent_id in titles else b.intent_id,
             kind=titles[b.intent_id].kind if b.intent_id in titles else IntentKind.TASK,
             priority=b.priority,
-            energy=titles[b.intent_id].energy if b.intent_id in titles else None,
+            category=titles[b.intent_id].category if b.intent_id in titles else None,
             occurrence=b.occurrence,
             chunk=b.chunk,
             start=from_slot(b.start_slot, base),
@@ -3470,7 +3474,7 @@ async def _render(db: AsyncSession, plan: Plan) -> PlanOut:
                     title=intent.title,
                     kind=intent.kind,
                     priority=intent.priority,
-                    energy=intent.energy,
+                    category=intent.category,
                     occurrence=-(index + 1),
                     chunk=0,
                     start=completed.start,
