@@ -842,16 +842,16 @@ export default function SettingsPage() {
             </div>
             <div className="flex flex-wrap gap-1 rounded-xl bg-sunk/50 p-1">
               {[
-                ["all", "Wszystkie"],
-                ["assistant", "Assistant"],
-                ["timer", "Timer"],
-                ["daily", "Daily"],
-                ["manual", "Ręczne"],
-              ].map(([value, label]) => (
+                { value: "all" as const, label: "Wszystkie" },
+                { value: "assistant" as const, label: "Assistant" },
+                { value: "timer" as const, label: "Timer" },
+                { value: "daily" as const, label: "Daily" },
+                { value: "manual" as const, label: "Ręczne" },
+              ].map(({ value, label }) => (
                 <button
                   key={value}
                   type="button"
-                  onClick={() => setHistoryFilter(value as typeof historyFilter)}
+                  onClick={() => setHistoryFilter(value)}
                   className={`rounded-lg px-2.5 py-1.5 text-[10.5px] font-semibold ${
                     historyFilter === value
                       ? "bg-white text-fg shadow-sm"
