@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { Glyph, KIND_LABEL } from "@/app/components/Glyph";
+import { WorkCategoryMedal } from "@/app/components/WorkCategoryMedal";
 import type { Block, Busy, Priority } from "@/app/lib/api";
 import {
   PRIORITY_NAME,
   PRIORITY_TINT,
-  WORK_CATEGORY_LABEL,
   formatDuration,
   minutesBetween,
 } from "@/app/lib/api";
@@ -257,11 +257,12 @@ export function Grid({ days, blocks, busy, selected, onSelect }: GridProps) {
                             <span style={{ color: RULE[block.priority] }}>
                               <Glyph kind={block.kind} size={13} />
                             </span>
+                            <WorkCategoryMedal category={block.category} size="xs" />
                             <span className="truncate text-[12px] font-semibold text-fg leading-tight">
                               {block.title}
                             </span>
                           </div>
-                          {(isLinear || isGithub || isTodoist || block.category) && (
+                          {(isLinear || isGithub || isTodoist) && (
                             <div className="flex items-center gap-1 shrink-0">
                               {isLinear && (
                                 <span className="rounded bg-indigo-500/10 px-1 py-0.2 text-[9px] font-bold text-indigo-600">
@@ -276,14 +277,6 @@ export function Grid({ days, blocks, busy, selected, onSelect }: GridProps) {
                               {isTodoist && (
                                 <span className="rounded bg-red-500/10 px-1 py-0.2 text-[9px] font-bold text-red-600">
                                   Todoist
-                                </span>
-                              )}
-                              {block.category && (
-                                <span
-                                  className="rounded bg-slate-500/10 px-1 py-0.2 text-[9px] font-bold text-slate-700"
-                                  title={WORK_CATEGORY_LABEL[block.category]}
-                                >
-                                  {WORK_CATEGORY_LABEL[block.category]}
                                 </span>
                               )}
                             </div>
