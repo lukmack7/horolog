@@ -57,6 +57,17 @@ export default function TodoPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const prefill = params.get("prefill")?.trim();
+    if (!prefill) return;
+
+    setDraft((current) =>
+      current.title ? current : { ...current, title: prefill },
+    );
+    window.history.replaceState({}, "", window.location.pathname);
+  }, []);
+
   async function createItem() {
     if (!draft.title.trim()) return;
     setBusy("new");
