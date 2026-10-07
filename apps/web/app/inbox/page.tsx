@@ -8,6 +8,8 @@ import { Skeleton } from "@/app/components/Skeleton";
 import {
   PRIORITY_NAME,
   PRIORITY_TINT,
+  WORK_CATEGORIES,
+  WORK_CATEGORY_LABEL,
   api,
   formatDuration,
   intentToEditPayload,
@@ -15,6 +17,7 @@ import {
   type Intent,
   type Plan,
   type Priority,
+  type WorkCategory,
 } from "@/app/lib/api";
 import { Trash2, AlertCircle, Clock, CheckCircle, Circle, Sparkles, Pencil } from "lucide-react";
 
@@ -31,6 +34,7 @@ export default function Inbox() {
   const [editTitle, setEditTitle] = useState("");
   const [editMinutes, setEditMinutes] = useState(60);
   const [editPriority, setEditPriority] = useState<Priority>(3);
+  const [editCategory, setEditCategory] = useState<WorkCategory | "">("");
 
   const load = useCallback(async () => {
     try {
@@ -106,6 +110,7 @@ export default function Inbox() {
     setEditTitle(intent.title);
     setEditMinutes(intent.minutes_per_period);
     setEditPriority(intent.priority);
+    setEditCategory(intent.category ?? "");
   }
 
   async function saveEdit(intent: Intent) {
@@ -117,6 +122,7 @@ export default function Inbox() {
         title: editTitle.trim() || intent.title,
         minutes_per_period: editMinutes,
         priority: editPriority,
+        category: editCategory || undefined,
       });
       setEditing(null);
       await load();
@@ -252,6 +258,19 @@ export default function Inbox() {
                           </option>
                         ))}
                       </select>
+                      <select
+                        value={editCategory}
+                        onChange={(e) => setEditCategory(e.target.value as WorkCategory | "")}
+                        aria-label={t("Category")}
+                        className="rounded-lg border border-black/10 bg-background px-2 py-1.5 text-[13px] text-fg outline-none focus:border-accent"
+                      >
+                        <option value="">{t("No category")}</option>
+                        {WORK_CATEGORIES.map((value) => (
+                          <option key={value} value={value}>
+                            {WORK_CATEGORY_LABEL[value]}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div className="mt-2 flex gap-2">
                       <button
@@ -281,6 +300,7 @@ export default function Inbox() {
                       </span>
                       <span className="tabular text-[12px] font-medium text-fg-muted">
                         {KIND_LABEL[intent.kind]} · {PRIORITY_NAME[intent.priority as Priority]}
+                        {intent.category ? ` · ${WORK_CATEGORY_LABEL[intent.category]}` : ""}
                         {intent.period_days ? ` · every ${intent.period_days}d` : ""}
                       </span>
                     </div>
