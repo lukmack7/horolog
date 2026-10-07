@@ -94,7 +94,7 @@ function dateKey(date: Date): string {
 const dateKeyFromDate = dateKey;
 
 export default function DailyPage() {
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const [date, setDate] = useState(() => {
     const now = new Date();
     now.setDate(now.getDate() + 1);
@@ -349,7 +349,7 @@ function PlanView({
           <div className="flex items-start gap-3">
             <RotateCcw size={17} className="mt-0.5 shrink-0 text-amber-700" />
             <div>
-              <h2 className="text-[13px] font-bold text-amber-900">Przeniesione z wcześniejszych dni</h2>
+              <h2 className="text-[13px] font-bold text-amber-900">{t("Przeniesione z wcześniejszych dni")}</h2>
               <p className="mt-0.5 text-[11.5px] leading-relaxed text-amber-800">
                 Nic nie znika. Niewykonane zadania pozostają aktywne aż je wykonasz albo świadomie usuniesz.
               </p>
@@ -362,7 +362,7 @@ function PlanView({
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
           <div className="flex items-center gap-2">
             <CalendarDays size={16} className="text-fg-muted" />
-            <h2 className="text-[14px] font-bold">Już w Plannerze</h2>
+            <h2 className="text-[14px] font-bold">{t("Już w Plannerze")}</h2>
           </div>
           <p className="mt-1 text-[11.5px] text-fg-muted">
             Te zadania są już zaplanowane na ten dzień. Przeciągnij je do wybranej ćwiartki albo kliknij, aby użyć obecnego priorytetu. Samo przypięcie nie zmienia terminu w Plannerze.
@@ -397,7 +397,7 @@ function PlanView({
 
       <div className="flex items-center gap-2 px-1 text-[10.5px] text-fg-muted">
         <Target size={13} />
-        <span>Macierz ustala priorytet zadania automatycznie — bez osobnego P1/P2/P3/P4 w Daily.</span>
+        <span>{t("Macierz ustala priorytet zadania automatycznie — bez osobnego P1/P2/P3/P4 w Daily.")}</span>
       </div>
 
       <div className="grid gap-3 lg:grid-cols-2">
@@ -421,7 +421,7 @@ function PlanView({
         <div className="rounded-2xl border bg-white p-4 shadow-sm">
           <div className="mb-2 flex items-center gap-2">
             <Target size={16} />
-            <h2 className="text-[13px] font-bold">Dzisiaj wygrywam, jeśli…</h2>
+            <h2 className="text-[13px] font-bold">{t("Dzisiaj wygrywam, jeśli…")}</h2>
           </div>
           <textarea
             value={data.plan.win_condition}
@@ -435,7 +435,7 @@ function PlanView({
         <div className="rounded-2xl border bg-white p-4 shadow-sm">
           <div className="mb-2 flex items-center gap-2">
             <Sunrise size={16} />
-            <h2 className="text-[13px] font-bold">Zaczynam od…</h2>
+            <h2 className="text-[13px] font-bold">{t("Zaczynam od…")}</h2>
           </div>
           <textarea
             value={data.plan.first_step}
@@ -589,7 +589,7 @@ function QuadrantCard({
                 <div className="text-[12.5px] font-semibold leading-snug text-fg">{item.title}</div>
                 <div className="mt-1 flex flex-wrap gap-1.5 text-[9.5px] font-medium text-fg-muted">
                   <span className="rounded-full bg-sunk px-2 py-0.5">{formatDuration(item.minutes)}</span>
-                  <span className="hidden rounded-full bg-sunk px-2 py-0.5 text-fg-subtle sm:inline">przeciągnij</span>
+                  <span className="hidden rounded-full bg-sunk px-2 py-0.5 text-fg-subtle sm:inline">{t("przeciągnij")}</span>
                   {item.schedule_enabled && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">Planner</span>}
                   {item.carried && (
                     <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">
@@ -673,7 +673,7 @@ function QuadrantCard({
               </select>
             </label>
             <div className="flex gap-2">
-              <button type="button" onClick={() => setAdding(false)} className="rounded-lg px-2.5 py-1.5 text-[10.5px] font-semibold text-fg-muted">Anuluj</button>
+              <button type="button" onClick={() => setAdding(false)} className="rounded-lg px-2.5 py-1.5 text-[10.5px] font-semibold text-fg-muted">{t("Anuluj")}</button>
               <button
                 type="button"
                 onClick={() => void submit()}
@@ -876,8 +876,8 @@ function ReviewView({
       <section className="rounded-2xl border bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-fg-muted">🌙 Koniec dnia</div>
-            <h2 className="mt-1 font-serif text-[22px] font-bold">Zamknij dzień, nie oceniaj siebie.</h2>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-fg-muted">{t("🌙 Koniec dnia")}</div>
+            <h2 className="mt-1 font-serif text-[22px] font-bold">{t("Zamknij dzień, nie oceniaj siebie.")}</h2>
           </div>
           <span className="rounded-full bg-sunk px-3 py-1.5 text-[10.5px] font-semibold text-fg-muted">
             {filled}/6 odpowiedzi
@@ -991,7 +991,7 @@ function HistoryView({
             <div>
               <div className="flex items-center gap-2">
                 <CalendarRange size={16} />
-                <h2 className="text-[15px] font-bold">Tydzień w skrócie</h2>
+                <h2 className="text-[15px] font-bold">{t("Tydzień w skrócie")}</h2>
               </div>
               <p className="mt-1 text-[11px] text-fg-muted">
                 {new Date(`${weekly.start}T12:00:00`).toLocaleDateString("pl-PL", { day: "numeric", month: "short" })}
@@ -1061,7 +1061,7 @@ function HistoryView({
       <section className="rounded-2xl border bg-white p-4 shadow-sm">
         <div className="mb-3 flex items-center gap-2">
           <History size={16} />
-          <h2 className="text-[15px] font-bold">Historia Daily</h2>
+          <h2 className="text-[15px] font-bold">{t("Historia Daily")}</h2>
         </div>
 
         {history.length === 0 ? (
