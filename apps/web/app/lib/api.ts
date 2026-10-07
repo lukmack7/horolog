@@ -207,6 +207,12 @@ export interface DailyData {
   };
 }
 
+export interface UserPreferences {
+  preferred_workday_start_min: number;
+  preferred_workday_end_min: number;
+}
+
+
 export interface DailyWindow {
   start_min: number;
   end_min: number;
@@ -296,6 +302,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   plan: () => request<Plan>("/api/plan"),
+  settings: () => request<UserPreferences>("/api/settings"),
+  saveSettings: (body: UserPreferences) =>
+    request<UserPreferences>("/api/settings", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
   resolve: () => request<Plan>("/api/plan/solve", { method: "POST" }),
   intents: () => request<Intent[]>("/api/intents"),
   remove: (id: string) => request<void>(`/api/intents/${id}`, { method: "DELETE" }),
