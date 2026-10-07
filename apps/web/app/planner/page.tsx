@@ -113,11 +113,17 @@ function busyToEvents(busy: Busy[]): Event[] {
 export default function Planner() {
   const { t, language } = useLanguage();
   const [plan, setPlan] = useState<Plan | null>(null);
+  const [timeTracking, setTimeTracking] = useState<TimeTrackingEntry | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      setPlan(await api.plan());
+      const [nextPlan, activeTimer] = await Promise.all([
+        api.plan(),
+        api.activeTimeTracking(),
+      ]);
+      setPlan(nextPlan);
+      setTimeTracking(activeTimer);
       setError(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not reach the scheduler.");
@@ -309,6 +315,59 @@ export default function Planner() {
     [calendarEvents, load],
   );
 
+  const handleTimerStart = useCallback(
+    async (event: Event) => {
+      if (!event.intentId) return;
+      try {
+        setTimeTracking(await api.startTimeTracking(event.intentId));
+        setError(null);
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "Nie udało się uruchomić timera.");
+      }
+    },
+    [],
+  );
+
+  const handleTimerPause = useCallback(
+    async (event: Event) => {
+      if (!event.intentId) return;
+      try {
+        setTimeTracking(await api.pauseTimeTracking(event.intentId));
+        setError(null);
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "Nie udało się wstrzymać timera.");
+      }
+    },
+    [],
+  );
+
+  const handleTimerResume = useCallback(
+    async (event: Event) => {
+      if (!event.intentId) return;
+      try {
+        setTimeTracking(await api.resumeTimeTracking(event.intentId));
+        setError(null);
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "Nie udało się wznowić timera.");
+      }
+    },
+    [],
+  );
+
+  const handleTimerStop = useCallback(
+    async (event: Event) => {
+      if (!event.intentId) return;
+      try {
+        await api.stopTimeTracking(event.intentId);
+        setTimeTracking(null);
+        setError(null);
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "Nie udało się zakończyć pomiaru.");
+      }
+    },
+    [],
+  );
+
   const handleEventDelete = useCallback(
     async (id: string) => {
       if (id.startsWith(EXTERNAL_PREFIX)) {
@@ -406,6 +465,11 @@ export default function Planner() {
               onEventUpdate={handleEventUpdate}
               onEventDelete={handleEventDelete}
               onEventComplete={handleEventComplete}
+              timeTracking={timeTracking}
+              onTimeTrackingStart={handleTimerStart}
+              onTimeTrackingPause={handleTimerPause}
+              onTimeTrackingResume={handleTimerResume}
+              onTimeTrackingStop={handleTimerStop}
               categories={["Task", "Habit", "Focus", "Buffer", "Meeting", "External"]}
               availableTags={["Critical", "High", "Normal", "Low", "Moved", "Locked", "CMR", "Macheta Data", "Prywatne"]}
               colors={COLORS}
