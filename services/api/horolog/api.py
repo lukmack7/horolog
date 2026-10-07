@@ -1630,7 +1630,10 @@ async def daily_item_to_todo(
     if item is None or item.cancelled_at is not None:
         raise HTTPException(status_code=404, detail="daily item not found")
     if item.completed_at is not None:
-        raise HTTPException(status_code=422, detail="Wykonanego zadania nie przenosi się do Do zrobienia.")
+        raise HTTPException(
+            status_code=422,
+            detail="Wykonanego zadania nie przenosi się do Do zrobienia.",
+        )
 
     meta = await db.get(DailyItemMetaRow, item_id)
     deadline_date = meta.deadline_date if meta is not None else None
@@ -2124,18 +2127,44 @@ async def _find_available_slots(
     found: list[dict[str, Any]] = []
     for offset in range(search_days):
         day = base_day + timedelta(days=offset)
-        start_min = action.window_start_min if action.window_start_min is not None else preferred_start
-        end_min = action.window_end_min if action.window_end_min is not None else preferred_end
-        day_start = day.replace(hour=start_min // 60, minute=start_min % 60, second=0, microsecond=0)
+        start_min = (
+            action.window_start_min
+            if action.window_start_min is not None
+            else preferred_start
+        )
+        end_min = (
+            action.window_end_min
+            if action.window_end_min is not None
+            else preferred_end
+        )
+        day_start = day.replace(
+            hour=start_min // 60,
+            minute=start_min % 60,
+            second=0,
+            microsecond=0,
+        )
         if end_min >= 24 * 60:
-            day_end = day.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+            day_end = (
+                day.replace(hour=0, minute=0, second=0, microsecond=0)
+                + timedelta(days=1)
+            )
         else:
-            day_end = day.replace(hour=end_min // 60, minute=end_min % 60, second=0, microsecond=0)
+            day_end = day.replace(
+                hour=end_min // 60,
+                minute=end_min % 60,
+                second=0,
+                microsecond=0,
+            )
         if day.date() == now.date() and day_start < now:
             rounded = _round_up_slot_minute(now.hour * 60 + now.minute)
             if rounded >= 24 * 60:
                 continue
-            day_start = day.replace(hour=rounded // 60, minute=rounded % 60, second=0, microsecond=0)
+            day_start = day.replace(
+                hour=rounded // 60,
+                minute=rounded % 60,
+                second=0,
+                microsecond=0,
+            )
         if day_end <= day_start:
             continue
         intervals = sorted(
@@ -2160,7 +2189,12 @@ async def _find_available_slots(
             gaps.append((cursor, day_end))
         for gap_start, gap_end in gaps:
             rounded_min = _round_up_slot_minute(gap_start.hour * 60 + gap_start.minute)
-            candidate = gap_start.replace(hour=rounded_min // 60, minute=rounded_min % 60, second=0, microsecond=0)
+            candidate = gap_start.replace(
+                hour=rounded_min // 60,
+                minute=rounded_min % 60,
+                second=0,
+                microsecond=0,
+            )
             while candidate + timedelta(minutes=duration) <= gap_end:
                 found.append({
                     "date": candidate.date().isoformat(),
@@ -2182,7 +2216,11 @@ def _format_available_slots(action: AssistantAction, slots: list[dict[str, Any]]
     for index, slot in enumerate(slots, start=1):
         start = datetime.fromisoformat(slot["start"])
         end = datetime.fromisoformat(slot["end"])
-        lines.append(f"{index}. {start.strftime('%Y-%m-%d')} {start.strftime('%H:%M')}–{end.strftime('%H:%M')} — bez przesuwania obecnego planu")
+        lines.append(
+            f"{index}. {start.strftime('%Y-%m-%d')} "
+            f"{start.strftime('%H:%M')}–{end.strftime('%H:%M')} "
+            "— bez przesuwania obecnego planu"
+        )
     return "\n".join(lines)
 
 
@@ -3089,7 +3127,10 @@ async def start_time_tracking(
         raise HTTPException(status_code=404, detail=f"no intent {intent_id!r}")
     intent = Intent.model_validate(intent_row.payload)
     if intent.completed_at is not None:
-        raise HTTPException(status_code=422, detail="Nie można uruchomić timera dla zakończonego zadania.")
+        raise HTTPException(
+            status_code=422,
+            detail="Nie można uruchomić timera dla zakończonego zadania.",
+        )
 
     active = (
         await db.execute(
