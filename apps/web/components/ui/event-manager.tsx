@@ -877,7 +877,7 @@ export function EventManager({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="color">{t("Color")}</Label>
+                <Label htmlFor="color">{t("Priority")}</Label>
                 <Select
                   value={isCreating ? newEvent.color : selectedEvent?.color}
                   onValueChange={(value) =>
@@ -887,7 +887,7 @@ export function EventManager({
                   }
                 >
                   <SelectTrigger id="color" className="bg-white">
-                    <SelectValue placeholder={t("Select color")} />
+                    <SelectValue placeholder={t("Select priority")} />
                   </SelectTrigger>
                   <SelectContent className="bg-white z-[999]">
                     {colors.map((color) => (
