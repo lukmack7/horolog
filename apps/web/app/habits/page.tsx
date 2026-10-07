@@ -183,7 +183,7 @@ export default function Habits() {
         <header className="mb-8">
           <h1 className="text-[28px] font-bold text-fg">{t("Habits & Focus Time")}</h1>
           <p className="mt-1 text-[13.5px] text-fg-muted">
-            Recurring commitments placed around real calendar events and moved automatically when meetings land.
+            {t("Recurring commitments placed around real calendar events and moved automatically when meetings land.")}
           </p>
         </header>
 
@@ -201,12 +201,12 @@ export default function Habits() {
           <div className="border-b border-black/[0.06] px-6 py-4.5">
             <div className="mb-2 flex items-center justify-between gap-3">
               <label htmlFor="habit-title" className="block text-[12px] font-semibold tracking-wider uppercase text-fg-muted">
-                Routine Title
+                {t("Routine Title")}
               </label>
               <div className="flex items-center gap-1 rounded-lg bg-sunk/60 p-0.5">
                 {(["habit", "focus"] as const).map((k) => (
                   <button
-                    key={k}
+                    key={t(k === "habit" ? "Habit" : "Focus")}
                     type="button"
                     aria-pressed={kind === k}
                     onClick={() => {
@@ -235,7 +235,7 @@ export default function Habits() {
             <div className="mt-3 flex flex-wrap gap-2">
               {PRESETS.map((preset) => (
                 <button
-                  key={preset.title}
+                  key={t(preset.title)}
                   type="button"
                   onClick={() => {
                     setTitle(preset.title);
@@ -259,7 +259,7 @@ export default function Habits() {
           <div className="border-b border-black/[0.06] px-6 py-4">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-[12px] font-semibold text-fg-muted">
-                Days <span className="font-normal text-fg-subtle">· optional fixed days</span>
+                {t("Days")} <span className="font-normal text-fg-subtle">· {t("optional fixed days")}</span>
               </span>
               {selectedDays.length > 0 && (
                 <button
@@ -296,7 +296,7 @@ export default function Habits() {
                         : "border-black/[0.08] bg-bg text-fg-muted hover:border-accent hover:text-accent"
                     }`}
                   >
-                    {day.label}
+                    {t(day.label)}
                   </button>
                 );
               })}
@@ -367,11 +367,11 @@ export default function Habits() {
               <span className="mx-1 h-4 w-px bg-black/[0.08]" aria-hidden />
               {(["high", "medium", "low"] as const).map((level) => (
                 <button
-                  key={level}
+                  key={t(`${level.charAt(0).toUpperCase()}${level.slice(1)} energy`)}
                   type="button"
                   onClick={() => setEnergy(energy === level ? "" : level)}
                   aria-pressed={energy === level}
-                  title={`${level} energy`}
+                  title={t(`${level.charAt(0).toUpperCase()}${level.slice(1)} energy`)}
                   className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[12px] font-semibold capitalize transition-all duration-150 ${
                     energy === level ? "bg-surface shadow-sm border border-black/[0.08] text-fg" : "text-fg-muted hover:bg-surface/60"
                   }`}
@@ -402,11 +402,11 @@ export default function Habits() {
                 {editingId ? <Pencil size={15} /> : <Plus size={16} />}
                 {saving
                   ? editingId
-                    ? "Saving..."
-                    : "Scheduling..."
+                    ? t("Saving...")
+                    : t("Scheduling...")
                   : editingId
-                    ? "Save Changes"
-                    : "Add Routine"}
+                    ? t("Save Changes")
+                    : t("Add Routine")}
               </button>
             </div>
           </div>
@@ -422,7 +422,7 @@ export default function Habits() {
         </form>
 
         <h2 className="mb-3.5 text-[12px] font-semibold tracking-wider uppercase text-fg-muted">
-          Active Routines {plan ? `(${habits.length})` : ""}
+          {t("Active Routines")} {plan ? `(${habits.length})` : ""}
         </h2>
 
         {!plan ? (
