@@ -1621,6 +1621,99 @@ async def defer_daily_item(
     return {"item_id": item_id, "until": body.until, "status": "deferred"}
 
 
+@app.post("/api/daily/items/{item_id}/to-todo")
+async def daily_item_to_todo(
+    item_id: str,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    item = await db.get(DailyPlanItemRow, item_id)
+    if item is None or item.cancelled_at is not None:
+        raise HTTPException(status_code=404, detail="daily item not found")
+    if item.completed_at is not None:
+        raise HTTPException(status_code=422, detail="Wykonanego zadania nie przenosi się do Do zrobienia.")
+
+    meta = await db.get(DailyItemMetaRow, item_id)
+    deadline_date = meta.deadline_date if meta is not None else None
+    if deadline_date is None and item.intent_id:
+        intent_row = await db.get(IntentRow, item.intent_id)
+        if intent_row is not None:
+            deadline_date = Intent.model_validate(intent_row.payload).deadline_date
+
+    todo = TodoInboxRow(
+        id=uuid.uuid4().hex[:16],
+        title=item.title,
+        minutes=item.minutes,
+        category=item.category,
+        deadline_date=deadline_date,
+    )
+    db.add(todo)
+    item.cancelled_at = datetime.now(UTC)
+
+    if item.intent_id:
+        intent_row = await db.get(IntentRow, item.intent_id)
+        if intent_row is not None:
+            intent = Intent.model_validate(intent_row.payload)
+            if intent.period_days is None and intent.kind == IntentKind.TASK:
+                await db.delete(intent_row)
+
+    await db.commit()
+    await _replan(db)
+    return {
+        "item_id": item_id,
+        "todo_id": todo.id,
+        "status": "moved_to_todo",
+    }
+
+
+@app.post("/api/daily/{date}/close")
+async def close_daily(
+    date: str,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    _daily_date(date)
+    before = await _planning_snapshot(db)
+    row = await db.get(DailyPlanRow, date)
+    if row is None:
+        row = DailyPlanRow(date=date)
+        db.add(row)
+    if row.closed_at is not None:
+        return {"date": date, "closed_at": row.closed_at.isoformat(), "already_closed": True}
+
+    row.closed_at = datetime.now(UTC)
+    row.updated_at = datetime.now(UTC)
+    await db.commit()
+    after = await _planning_snapshot(db)
+
+    active_items = (
+        await db.execute(
+            select(DailyPlanItemRow).where(
+                DailyPlanItemRow.plan_date == date,
+                DailyPlanItemRow.cancelled_at.is_(None),
+            )
+        )
+    ).scalars().all()
+    completed = sum(1 for item in active_items if item.completed_at is not None)
+    change = await _save_change_set(
+        db,
+        source="daily",
+        title=f"Zamknięcie dnia · {date}",
+        summary=[{
+            "action": "close_daily",
+            "date": date,
+            "items": len(active_items),
+            "completed": completed,
+        }],
+        before=before,
+        after=after,
+    )
+    return {
+        "date": date,
+        "closed_at": row.closed_at.isoformat(),
+        "change_set_id": change.id,
+        "already_closed": False,
+    }
+
+
 @app.put("/api/daily/{date}/review")
 async def put_daily_review(date: str, body: DailyReviewIn, db: AsyncSession = Depends(session)) -> dict[str, Any]:
     _daily_date(date)
