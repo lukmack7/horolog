@@ -9,6 +9,7 @@ import {
   calendarPush,
   connections,
   sync,
+  type ChangeHistoryEntry,
   type NotificationPreferences,
   type Plan,
   type Provider,
@@ -22,7 +23,10 @@ import {
   CheckCircle2,
   Copy,
   Download,
+  History,
   LogIn,
+  RotateCcw,
+  Timer,
   Server,
   Unplug,
   UploadCloud,
@@ -157,6 +161,9 @@ export default function SettingsPage() {
   });
   const [notificationsPending, setNotificationsPending] = useState(false);
   const [notificationsMessage, setNotificationsMessage] = useState<string | null>(null);
+  const [history, setHistory] = useState<ChangeHistoryEntry[]>([]);
+  const [historyFilter, setHistoryFilter] = useState<"all" | "assistant" | "timer" | "daily" | "manual">("all");
+  const [historyPending, setHistoryPending] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     // Two independent calls, so one failing doesn't have to take down a page
@@ -185,6 +192,11 @@ export default function SettingsPage() {
       setNotifications(await api.notificationSettings());
     } catch (caught) {
       failure ??= caught instanceof Error ? caught.message : "Could not load notification settings.";
+    }
+    try {
+      setHistory(await api.history(80));
+    } catch (caught) {
+      failure ??= caught instanceof Error ? caught.message : "Could not load history.";
     }
     setLoadError(failure);
   }, []);
@@ -257,6 +269,20 @@ export default function SettingsPage() {
       );
     } finally {
       setNotificationsPending(false);
+    }
+  }
+
+  async function undoHistoryEntry(id: string) {
+    setHistoryPending(id);
+    try {
+      await api.undoHistory(id);
+      await load();
+    } catch (caught) {
+      setLoadError(
+        caught instanceof Error ? caught.message : "Nie udało się cofnąć zmiany.",
+      );
+    } finally {
+      setHistoryPending(null);
     }
   }
 
@@ -797,6 +823,119 @@ export default function SettingsPage() {
             </button>
             {notificationsMessage && (
               <span className="text-[12px] font-medium text-fg-muted">{notificationsMessage}</span>
+            )}
+          </div>
+        </section>
+
+        <section className="space-y-4 overflow-hidden rounded-card border border-black/[0.08] bg-surface p-6 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sunk text-fg">
+                <History size={18} />
+              </span>
+              <div>
+                <h2 className="text-[15px] font-bold text-fg">Historia zmian</h2>
+                <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">
+                  Pakiety asystenta, timer i pozostałe ważne działania. Cofnięcie dotyczy całego najnowszego pakietu.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-1 rounded-xl bg-sunk/50 p-1">
+              {[
+                ["all", "Wszystkie"],
+                ["assistant", "Assistant"],
+                ["timer", "Timer"],
+                ["daily", "Daily"],
+                ["manual", "Ręczne"],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setHistoryFilter(value as typeof historyFilter)}
+                  className={`rounded-lg px-2.5 py-1.5 text-[10.5px] font-semibold ${
+                    historyFilter === value
+                      ? "bg-white text-fg shadow-sm"
+                      : "text-fg-muted"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {history
+              .filter((entry) => historyFilter === "all" || entry.source === historyFilter)
+              .slice(0, 30)
+              .map((entry) => (
+                <div
+                  key={entry.id}
+                  className="rounded-xl border border-black/[0.07] bg-bg p-3.5"
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sunk text-fg-muted">
+                      {entry.source === "timer" ? <Timer size={14} /> : <History size={14} />}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="text-[12.5px] font-semibold text-fg">{entry.title}</span>
+                        <span className="rounded-full bg-sunk px-2 py-0.5 text-[9.5px] font-semibold uppercase text-fg-muted">
+                          {entry.source}
+                        </span>
+                        {entry.undone_at && (
+                          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[9.5px] font-semibold text-amber-700">
+                            cofnięto
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1 text-[10.5px] text-fg-subtle">
+                        {new Date(entry.created_at).toLocaleString("pl-PL", {
+                          day: "2-digit",
+                          month: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </div>
+                      {entry.summary.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          {entry.summary.slice(0, 6).map((item, index) => {
+                            const title =
+                              typeof item.title === "string"
+                                ? item.title
+                                : typeof item.action === "string"
+                                  ? item.action
+                                  : "Zmiana";
+                            const detail =
+                              typeof item.detail === "string" ? item.detail : "";
+                            return (
+                              <div key={index} className="text-[11px] leading-relaxed text-fg-muted">
+                                • {title}{detail ? ` — ${detail}` : ""}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    {entry.can_undo && (
+                      <button
+                        type="button"
+                        onClick={() => void undoHistoryEntry(entry.id)}
+                        disabled={historyPending === entry.id}
+                        className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-black/[0.08] bg-white px-3 text-[10.5px] font-semibold text-fg hover:bg-sunk disabled:opacity-50"
+                      >
+                        <RotateCcw size={13} />
+                        {historyPending === entry.id ? "Cofam…" : "Cofnij"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+            {history.filter((entry) => historyFilter === "all" || entry.source === historyFilter).length === 0 && (
+              <div className="rounded-xl border border-dashed border-black/[0.1] p-6 text-center text-[12px] text-fg-muted">
+                Brak wpisów w tej kategorii.
+              </div>
             )}
           </div>
         </section>
