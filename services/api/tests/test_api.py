@@ -131,6 +131,53 @@ async def test_create_intent_schedules_it(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_existing_scheduled_task_category_patches_without_moving_it(
+    client: AsyncClient,
+) -> None:
+    created = await client.post(
+        "/api/intents",
+        json={
+            "title": "Existing calendar task",
+            "minutes_per_period": 60,
+            "min_chunk_minutes": 60,
+            "max_chunk_minutes": 60,
+        },
+    )
+    assert created.status_code == 201
+    ident = created.json()["id"]
+
+    before_plan = (await client.get("/api/plan")).json()
+    before_blocks = [
+        (block["start"], block["end"])
+        for block in before_plan["blocks"]
+        if block["intent_id"] == ident
+    ]
+    assert before_blocks
+
+    patched = await client.patch(
+        f"/api/intents/{ident}",
+        json={"category": "cmr"},
+    )
+    assert patched.status_code == 200
+    assert patched.json()["category"] == "cmr"
+
+    after_plan = (await client.get("/api/plan")).json()
+    after_blocks = [
+        (block["start"], block["end"])
+        for block in after_plan["blocks"]
+        if block["intent_id"] == ident
+    ]
+    assert after_blocks == before_blocks
+
+    cleared = await client.patch(
+        f"/api/intents/{ident}",
+        json={"category": None},
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["category"] is None
+
+
+@pytest.mark.asyncio
 async def test_focus_intent_round_trips(client: AsyncClient) -> None:
     """The habits page used to mislabel every intent it created as a habit,
     even the ones its own presets called 'focus' - this pins the fix."""
