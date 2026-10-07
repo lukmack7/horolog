@@ -27,12 +27,14 @@ class AssistantAction(BaseModel):
         "create_task",
         "create_meeting",
         "create_break",
+        "swap_tasks",
         "reschedule_task",
         "complete_task",
         "update_daily_plan",
     ]
     title: str | None = None
     intent_id: str | None = None
+    second_intent_id: str | None = None
     date: str | None = None
     minutes: int | None = None
     quadrant: int | None = None
@@ -108,6 +110,11 @@ Core rules:
   If the user asks for a break between two known fixed blocks, calculate its
   start and duration from those blocks. If the boundaries are not known, ask.
   Never say a break was/will be added unless create_break is present in actions.
+- swap_tasks is for an explicit request to exchange the current calendar
+  positions of two existing one-shot tasks. It requires intent_id and
+  second_intent_id, both copied from FACTUAL CONTEXT. Never emulate a swap with
+  two reschedule_task actions: the first move can collide with the second task.
+  Never guess either id.
 - reschedule_task requires an intent_id from FACTUAL CONTEXT and date; start_min
   is optional. Never guess an intent_id.
 - complete_task requires an intent_id from FACTUAL CONTEXT.
