@@ -29,6 +29,7 @@ class AssistantAction(BaseModel):
         "create_break",
         "swap_tasks",
         "reschedule_task",
+        "reschedule_break",
         "complete_task",
         "update_daily_plan",
     ]
@@ -54,13 +55,13 @@ class AssistantAction(BaseModel):
         if self.start_mode is not None and self.start_min is None:
             raise ValueError("start_mode requires start_min")
         if (
-            self.action == "reschedule_task"
+            self.action in ("reschedule_task", "reschedule_break")
             and self.date is None
             and self.start_min is None
             and self.minutes is None
         ):
             raise ValueError(
-                "reschedule_task requires at least one of date, start_min or minutes"
+                f"{self.action} requires at least one of date, start_min or minutes"
             )
         if self.date is not None:
             try:
@@ -129,6 +130,11 @@ Core rules:
   minutes. Use it for "move", "change the time", "make it 45 minutes",
   "shorten/extend", or any combination of those. Omitted fields mean "keep the
   task's current value". Never guess an intent_id.
+- reschedule_break does the same for an existing protected break/buffer. Use it
+  whenever the user asks to move, shorten, extend or otherwise change an
+  existing break. It requires the break's intent_id from FACTUAL CONTEXT and at
+  least one of date, start_min or minutes. Never replace an existing break with
+  create_break unless the user explicitly asked for an additional new break.
 - complete_task requires an intent_id from FACTUAL CONTEXT.
 - update_daily_plan requires date and at least win_condition or first_step.
   Use update_daily_plan ONLY when the user explicitly asks to change Daily,
