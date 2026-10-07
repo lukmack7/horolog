@@ -663,7 +663,7 @@ export default function SettingsPage() {
                   {t("At")}
                   <input
                     type="time"
-                    step={900}
+                    step={60}
                     value={minutesToTime(notifications.deadline_time_min)}
                     disabled={!notifications.deadline_enabled}
                     onChange={(e) =>
@@ -711,7 +711,7 @@ export default function SettingsPage() {
                   {t("Reminder time")}
                   <input
                     type="time"
-                    step={900}
+                    step={60}
                     value={minutesToTime(notifications.end_of_day_time_min)}
                     disabled={!notifications.end_of_day_enabled}
                     onChange={(e) =>
