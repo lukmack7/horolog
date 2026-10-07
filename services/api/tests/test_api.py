@@ -111,6 +111,41 @@ async def test_assistant_execute_is_reversible_change_set(client: AsyncClient) -
 
 
 @pytest.mark.asyncio
+async def test_assistant_execute_rolls_back_whole_batch_on_conflict(
+    client: AsyncClient,
+) -> None:
+    tomorrow = (origin() + timedelta(days=1)).date().isoformat()
+    actions = [
+        {
+            "action": "create_task",
+            "title": "Atomic first",
+            "date": tomorrow,
+            "minutes": 30,
+            "quadrant": 2,
+            "start_min": 9 * 60,
+            "start_mode": "fixed",
+        },
+        {
+            "action": "create_task",
+            "title": "Atomic conflicting second",
+            "date": tomorrow,
+            "minutes": 30,
+            "quadrant": 2,
+            "start_min": 9 * 60,
+            "start_mode": "fixed",
+        },
+    ]
+
+    response = await client.post("/api/assistant/execute", json={"actions": actions})
+    assert response.status_code == 409
+
+    intents = (await client.get("/api/intents")).json()
+    titles = {item["title"] for item in intents}
+    assert "Atomic first" not in titles
+    assert "Atomic conflicting second" not in titles
+
+
+@pytest.mark.asyncio
 async def test_time_tracking_start_pause_resume_stop(client: AsyncClient) -> None:
     tomorrow = (origin() + timedelta(days=1)).replace(hour=10, minute=0, second=0, microsecond=0)
     created = await client.post(
