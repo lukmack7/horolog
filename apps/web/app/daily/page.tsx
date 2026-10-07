@@ -1,5 +1,6 @@
 "use client";
 
+import { useLanguage } from "@/app/components/LanguageProvider";
 import { useCallback, useEffect, useState } from "react";
 import { Shell } from "@/app/components/Shell";
 import {
@@ -93,6 +94,7 @@ function dateKey(date: Date): string {
 const dateKeyFromDate = dateKey;
 
 export default function DailyPage() {
+  const { language } = useLanguage();
   const [date, setDate] = useState(() => {
     const now = new Date();
     now.setDate(now.getDate() + 1);
@@ -158,7 +160,7 @@ export default function DailyPage() {
         <header className="mb-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h1 className="text-[30px] font-bold leading-tight text-fg">Daily</h1>
+              <h1 className="text-[30px] font-bold leading-tight text-fg">{language === "pl" ? "Dziennik" : "Daily"}</h1>
               <p className="mt-1 text-[13px] text-fg-muted">
                 Plan dnia, wykonanie i refleksja w jednym miejscu.
               </p>
