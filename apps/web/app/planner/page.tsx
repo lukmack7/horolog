@@ -254,9 +254,9 @@ export default function Planner() {
       }
 
       try {
-        // Editing the event dialog may change both scheduling and safe
-        // metadata. Move first so a rejected time change does not leave a
-        // partially-applied title/priority edit behind.
+        // Editing the event dialog is an explicit user decision. If only
+        // the start changes, preserve the existing duration. If the end changes,
+        // keep the start fixed so the user can deliberately resize the task.
         let start = event.startTime;
         let end = event.endTime;
         const originalDuration = source.endTime.getTime() - source.startTime.getTime();
@@ -265,8 +265,6 @@ export default function Planner() {
 
         if (startChanged && !endChanged) {
           end = new Date(start.getTime() + originalDuration);
-        } else if (!startChanged && endChanged) {
-          start = new Date(end.getTime() - originalDuration);
         }
 
         if (startChanged || endChanged) {
