@@ -1991,6 +1991,95 @@ async def _assistant_context(
     }
 
 
+def _round_up_slot_minute(value: int) -> int:
+    return ((value + SLOT_MINUTES - 1) // SLOT_MINUTES) * SLOT_MINUTES
+
+
+async def _find_available_slots(
+    db: AsyncSession,
+    action: AssistantAction,
+) -> list[dict[str, Any]]:
+    if not action.date or not action.minutes:
+        return []
+
+    rendered = await get_plan(db)
+    preferred_start, preferred_end = await _preferred_workday(db)
+    duration = max(SLOT_MINUTES, minutes_to_slots(action.minutes) * SLOT_MINUTES)
+    search_days = action.search_days or 1
+    wanted = action.count or 3
+    base_day = _daily_date(action.date)
+    now = datetime.now(settings().zone)
+    occupied: list[tuple[datetime, datetime]] = []
+    for block in rendered.blocks:
+        if not block.completed:
+            occupied.append((block.start, block.end))
+    for busy in rendered.busy:
+        occupied.append((busy.start, busy.end))
+    found: list[dict[str, Any]] = []
+    for offset in range(search_days):
+        day = base_day + timedelta(days=offset)
+        start_min = action.window_start_min if action.window_start_min is not None else preferred_start
+        end_min = action.window_end_min if action.window_end_min is not None else preferred_end
+        day_start = day.replace(hour=start_min // 60, minute=start_min % 60, second=0, microsecond=0)
+        if end_min >= 24 * 60:
+            day_end = day.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        else:
+            day_end = day.replace(hour=end_min // 60, minute=end_min % 60, second=0, microsecond=0)
+        if day.date() == now.date() and day_start < now:
+            rounded = _round_up_slot_minute(now.hour * 60 + now.minute)
+            if rounded >= 24 * 60:
+                continue
+            day_start = day.replace(hour=rounded // 60, minute=rounded % 60, second=0, microsecond=0)
+        if day_end <= day_start:
+            continue
+        intervals = sorted(
+            (max(start, day_start), min(end, day_end))
+            for start, end in occupied
+            if end > day_start and start < day_end
+        )
+        merged: list[tuple[datetime, datetime]] = []
+        for start, end in intervals:
+            if not merged or start > merged[-1][1]:
+                merged.append((start, end))
+            else:
+                old_start, old_end = merged[-1]
+                merged[-1] = (old_start, max(old_end, end))
+        cursor = day_start
+        gaps: list[tuple[datetime, datetime]] = []
+        for start, end in merged:
+            if start > cursor:
+                gaps.append((cursor, start))
+            cursor = max(cursor, end)
+        if cursor < day_end:
+            gaps.append((cursor, day_end))
+        for gap_start, gap_end in gaps:
+            rounded_min = _round_up_slot_minute(gap_start.hour * 60 + gap_start.minute)
+            candidate = gap_start.replace(hour=rounded_min // 60, minute=rounded_min % 60, second=0, microsecond=0)
+            while candidate + timedelta(minutes=duration) <= gap_end:
+                found.append({
+                    "date": candidate.date().isoformat(),
+                    "start": candidate.isoformat(),
+                    "end": (candidate + timedelta(minutes=duration)).isoformat(),
+                    "minutes": duration,
+                })
+                if len(found) >= wanted:
+                    return found
+                candidate += timedelta(minutes=max(duration, SLOT_MINUTES))
+    return found
+
+
+def _format_available_slots(action: AssistantAction, slots: list[dict[str, Any]]) -> str:
+    label = action.title or f"{action.minutes} min"
+    if not slots:
+        return f"Nie znalazłem wolnego miejsca na „{label}” w podanym zakresie."
+    lines = [f"Wolne miejsca na „{label}”:"]
+    for index, slot in enumerate(slots, start=1):
+        start = datetime.fromisoformat(slot["start"])
+        end = datetime.fromisoformat(slot["end"])
+        lines.append(f"{index}. {start.strftime('%Y-%m-%d')} {start.strftime('%H:%M')}–{end.strftime('%H:%M')} — bez przesuwania obecnego planu")
+    return "\n".join(lines)
+
+
 @app.post("/api/assistant/chat")
 async def assistant_chat(
     body: AssistantChatIn,
@@ -2006,6 +2095,22 @@ async def assistant_chat(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except (ProviderError, httpx.HTTPError, RuntimeError) as exc:
         raise HTTPException(status_code=503, detail=f"language model unreachable: {exc}") from exc
+    find_actions = [action for action in decision.actions if action.action == "find_time"]
+    if find_actions:
+        sections: list[str] = []
+        for action in find_actions:
+            sections.append(
+                _format_available_slots(action, await _find_available_slots(db, action))
+            )
+        decision = decision.model_copy(
+            update={
+                "reply": decision.reply.rstrip() + "\n\n" + "\n\n".join(sections),
+                "actions": [
+                    action for action in decision.actions if action.action != "find_time"
+                ],
+            }
+        )
+
     return decision.model_dump(mode="json")
 
 
