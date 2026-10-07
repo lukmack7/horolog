@@ -47,6 +47,9 @@ function actionLabel(action: AssistantAction): string {
           ).padStart(2, "0")}`;
     return `Dodaj przerwę · ${action.date ?? "bez daty"} · ${hour} · ${action.minutes ?? "?"} min`;
   }
+  if (action.action === "swap_tasks") {
+    return "Zamień miejscami dwa zaplanowane zadania";
+  }
   if (action.action === "reschedule_task") {
     return `Przełóż zadanie · ${action.date ?? "bez daty"}`;
   }
@@ -97,6 +100,30 @@ function executionSummary(results: Array<Record<string, unknown>>): string {
       }
     }
 
+    if (action === "swap_tasks") {
+      const otherTitle =
+        typeof result.other_title === "string" ? result.other_title : "drugie zadanie";
+      const scheduledItems = Array.isArray(result.scheduled) ? result.scheduled : [];
+      const describe = (item: unknown) => {
+        if (!item || typeof item !== "object") return "";
+        const record = item as Record<string, unknown>;
+        const itemTitle = typeof record.title === "string" ? record.title : "Zadanie";
+        const start = typeof record.start === "string" ? new Date(record.start) : null;
+        const end = typeof record.end === "string" ? new Date(record.end) : null;
+        if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+          return itemTitle;
+        }
+        return `${itemTitle} → ${start.toLocaleTimeString("pl-PL", {
+          hour: "2-digit",
+          minute: "2-digit",
+        })}–${end.toLocaleTimeString("pl-PL", {
+          hour: "2-digit",
+          minute: "2-digit",
+        })}`;
+      };
+      const details = scheduledItems.map(describe).filter(Boolean).join("; ");
+      return `✓ Zamieniono miejscami: ${title} ↔ ${otherTitle}${details ? ` — ${details}` : ""}`;
+    }
     if (action === "complete_task") return `✓ Wykonane: ${title}`;
     if (action === "update_daily_plan") return "✓ Daily zaktualizowane";
     if (action === "reschedule_task") return `✓ Przełożone: ${title}${when}`;
