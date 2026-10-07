@@ -2831,12 +2831,11 @@ async def _order_atomic_assistant_actions(
             # without silently inventing a different operation.
             ordered_indices.extend(sorted(remaining))
             break
-        ready.sort(
-            key=lambda index: (
-                targets[index][0] if targets[index] is not None else origin()
-            ),
-            reverse=True,
-        )
+        def _target_sort_key(index: int) -> datetime:
+            target = targets.get(index)
+            return target[0] if target is not None else origin()
+
+        ready.sort(key=_target_sort_key, reverse=True)
         for index in ready:
             ordered_indices.append(index)
             remaining.remove(index)
