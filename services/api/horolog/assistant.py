@@ -13,6 +13,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from horolog.domain.intent import WorkCategory
 from horolog.llm import Provider, extract
 from horolog.settings import settings
 
@@ -42,6 +43,7 @@ class AssistantAction(BaseModel):
     quadrant: int | None = None
     start_min: int | None = None
     start_mode: Literal["fixed", "preferred"] | None = None
+    category: WorkCategory | None = None
     win_condition: str | None = None
     first_step: str | None = None
 
@@ -107,6 +109,12 @@ Core rules:
     4 = not important + not urgent ("Usuń/odłóż")
   Infer only when the wording supports it; otherwise use quadrant 2 as a calm
   default and mention that assumption.
+- Categories describe the area of life/work and NEVER affect scheduling priority:
+    * category="cmr" for CMR,
+    * category="macheta_data" for Macheta Data,
+    * category="private" for personal matters.
+  Set category only when the user's wording or FACTUAL CONTEXT supports it.
+  Do not guess a category from urgency or priority.
 - create_task requires title, date, minutes, quadrant.
   For an explicit task time, also set start_min and start_mode:
     * start_mode="fixed" when the user says the task MUST start then, exactly
