@@ -420,6 +420,7 @@ export const api = {
         date: string;
         start_min: number | null;
         minutes: number;
+        category?: WorkCategory | null;
       }>;
     }>(`/api/daily/${date}/capture`, {
       method: "POST",
@@ -431,6 +432,7 @@ export const api = {
     start_min: number;
     minutes: number;
     priority?: Priority;
+    category?: WorkCategory;
   }) =>
     request<{
       intent_id: string;
