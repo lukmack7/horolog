@@ -27,7 +27,8 @@ export type AssistantActionKind =
   | "reschedule_break"
   | "reschedule_meeting"
   | "complete_task"
-  | "update_daily_plan";
+  | "update_daily_plan"
+  | "find_time";
 
 export interface AssistantReference {
   kind: "intent" | "category";
@@ -55,6 +56,10 @@ export interface AssistantAction {
   category?: WorkCategory | null;
   win_condition?: string | null;
   first_step?: string | null;
+  search_days?: number | null;
+  count?: number | null;
+  window_start_min?: number | null;
+  window_end_min?: number | null;
 }
 
 export interface AssistantDecision {
@@ -136,6 +141,14 @@ export interface Plan {
   horizon_days: number;
 }
 
+
+export interface TodoAISuggestion {
+  minutes: number;
+  quadrant: 1 | 2 | 3 | 4;
+  category?: WorkCategory | null;
+  deadline_date?: string | null;
+  rationale: string;
+}
 
 export interface TodoInboxItem {
   id: string;
@@ -522,6 +535,10 @@ export const api = {
     request<TodoInboxItem>("/api/todos", {
       method: "POST",
       body: JSON.stringify(body),
+    }),
+  suggestTodo: (id: string) =>
+    request<TodoAISuggestion>(`/api/todos/${id}/suggest`, {
+      method: "POST",
     }),
   patchTodo: (
     id: string,
