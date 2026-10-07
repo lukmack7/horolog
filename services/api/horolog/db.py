@@ -397,6 +397,7 @@ def _shift_intent_payload_slots(
 def _shift_snapshot_slots(
     snapshot: dict[str, Any],
     offset: int,
+    intent_offsets: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     shifted = json.loads(json.dumps(snapshot))
     intents = shifted.get("intents")
@@ -405,8 +406,10 @@ def _shift_snapshot_slots(
             if not isinstance(item, dict):
                 continue
             payload = item.get("payload")
+            intent_id = item.get("id")
+            item_offset = (intent_offsets or {}).get(intent_id, offset)
             if isinstance(payload, dict):
-                item["payload"] = _shift_intent_payload_slots(payload, offset)
+                item["payload"] = _shift_intent_payload_slots(payload, item_offset)
     return shifted
 
 
@@ -418,6 +421,7 @@ async def rebase_slot_origin(
 
     target = datetime.strptime(target_date, "%Y-%m-%d").date()
     meta = await db.get(SlotOriginRow, LATEST_PLAN_ID)
+    per_intent_days: dict[str, int] = {}
 
     if meta is None:
         plan_row = await db.get(PlanRow, LATEST_PLAN_ID)
@@ -486,6 +490,33 @@ async def rebase_slot_origin(
                 )
                 if best_score > 0:
                     inferred = best_candidate
+
+                # A few items may already have been manually corrected after
+                # midnight while untouched items still use yesterday as slot
+                # zero. Recover those origins per intent so migration cannot
+                # move an already-corrected task backwards.
+                candidate_counts: dict[str, dict[Any, int]] = {}
+                for block in plan_payload.get("blocks", []):
+                    if not isinstance(block, dict):
+                        continue
+                    intent_id = block.get("intent_id")
+                    start_slot = block.get("start_slot")
+                    dates = expected.get(intent_id)
+                    if not dates or not isinstance(start_slot, int):
+                        continue
+                    day_index = start_slot // SLOTS_PER_DAY
+                    counts = candidate_counts.setdefault(intent_id, {})
+                    for expected_date in dates:
+                        intended = datetime.strptime(expected_date, "%Y-%m-%d").date()
+                        candidate = intended - timedelta(days=day_index)
+                        counts[candidate] = counts.get(candidate, 0) + 1
+
+                for intent_id, counts in candidate_counts.items():
+                    candidate = max(
+                        counts,
+                        key=lambda item: (counts[item], item == saved_candidate),
+                    )
+                    per_intent_days[intent_id] = max(0, (target - candidate).days)
             except (TypeError, ValueError, json.JSONDecodeError):
                 inferred = saved_candidate
         else:
@@ -500,15 +531,22 @@ async def rebase_slot_origin(
         await db.commit()
 
     stored = datetime.strptime(meta.origin_date, "%Y-%m-%d").date()
-    days = (target - stored).days
-    if days <= 0:
+    days = max(0, (target - stored).days)
+    if days == 0 and not any(value > 0 for value in per_intent_days.values()):
         return 0
 
     offset = days * SLOTS_PER_DAY
+    intent_offsets = {
+        intent_id: item_days * SLOTS_PER_DAY
+        for intent_id, item_days in per_intent_days.items()
+    }
 
     intent_rows = (await db.execute(select(IntentRow))).scalars().all()
     for row in intent_rows:
-        row.payload = _shift_intent_payload_slots(row.payload, offset)
+        row.payload = _shift_intent_payload_slots(
+            row.payload,
+            intent_offsets.get(row.id, offset),
+        )
 
     busy_rows = (await db.execute(select(BusyRow))).scalars().all()
     for row in busy_rows:
@@ -528,15 +566,16 @@ async def rebase_slot_origin(
             if not isinstance(raw, dict):
                 continue
             block = dict(raw)
-            end = int(block.get("end_slot", 0)) - offset
+            block_offset = intent_offsets.get(block.get("intent_id"), offset)
+            end = int(block.get("end_slot", 0)) - block_offset
             if end <= 0:
                 continue
-            start = int(block.get("start_slot", 0)) - offset
+            start = int(block.get("start_slot", 0)) - block_offset
             block["start_slot"] = max(0, start)
             block["end_slot"] = end
             moved_from = block.get("moved_from")
             if isinstance(moved_from, int):
-                moved = moved_from - offset
+                moved = moved_from - block_offset
                 block["moved_from"] = moved if moved >= 0 else None
             blocks.append(block)
         payload["blocks"] = blocks
@@ -544,8 +583,9 @@ async def rebase_slot_origin(
 
     synced_rows = (await db.execute(select(SyncedBlockRow))).scalars().all()
     for row in synced_rows:
-        start = row.start_slot - offset
-        end = row.end_slot - offset
+        row_offset = intent_offsets.get(row.intent_id, offset)
+        start = row.start_slot - row_offset
+        end = row.end_slot - row_offset
         if end <= 0:
             await db.delete(row)
             continue
@@ -555,14 +595,14 @@ async def rebase_slot_origin(
     change_rows = (await db.execute(select(ChangeSetRow))).scalars().all()
     for row in change_rows:
         if row.before_state:
-            row.before_state = _shift_snapshot_slots(row.before_state, offset)
+            row.before_state = _shift_snapshot_slots(row.before_state, offset, intent_offsets)
         if row.after_state:
-            row.after_state = _shift_snapshot_slots(row.after_state, offset)
+            row.after_state = _shift_snapshot_slots(row.after_state, offset, intent_offsets)
 
     meta.origin_date = target.isoformat()
     meta.updated_at = datetime.now(UTC)
     await db.commit()
-    return days
+    return max([days, *per_intent_days.values()], default=days)
 
 
 async def ensure_slot_origin(db: AsyncSession) -> int:
