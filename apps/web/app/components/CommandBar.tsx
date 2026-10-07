@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { usePathname } from "next/navigation";
+import { useLanguage } from "@/app/components/LanguageProvider";
 import {
   AlertCircle,
   Bot,
@@ -108,6 +109,7 @@ export function CommandBar({
   onCaptured: () => void;
 }) {
   const pathname = usePathname();
+  const { t } = useLanguage();
   const [messages, setMessages] = useState<AssistantMessage[]>([
     {
       role: "assistant",
@@ -245,7 +247,7 @@ export function CommandBar({
                   <Sparkles size={17} />
                 </span>
                 <div className="min-w-0">
-                  <h2 className="text-[14px] font-bold text-fg">Horolog Assistant</h2>
+                  <h2 className="text-[14px] font-bold text-fg">{t("Horolog Assistant")}</h2>
                   <p className="truncate text-[10.5px] font-medium text-fg-muted">
                     {contextLabel} · niczego nie zmieniam bez potwierdzenia
                   </p>
@@ -256,8 +258,8 @@ export function CommandBar({
                   type="button"
                   onClick={reset}
                   className="flex h-9 w-9 items-center justify-center rounded-xl text-fg-muted hover:bg-sunk hover:text-fg"
-                  aria-label="Nowa rozmowa"
-                  title="Nowa rozmowa"
+                  aria-label={t("Nowa rozmowa")}
+                  title={t("Nowa rozmowa")}
                 >
                   <RefreshCcw size={15} />
                 </button>
@@ -265,7 +267,7 @@ export function CommandBar({
                   type="button"
                   onClick={onClose}
                   className="flex h-9 w-9 items-center justify-center rounded-xl text-fg-muted hover:bg-sunk hover:text-fg"
-                  aria-label="Zamknij"
+                  aria-label={t("Zamknij")}
                 >
                   <X size={16} />
                 </button>
@@ -407,7 +409,7 @@ export function CommandBar({
                   rows={2}
                   placeholder={
                     hasProposal
-                      ? "Doprecyzuj albo zmień propozycję…"
+                      ? t("Doprecyzuj albo zmień propozycję…")
                       : "Np. jutro mam spotkanie z Anną o 10:30, wcześniej potrzebuję 45 min na przygotowanie…"
                   }
                   className="min-h-[54px] w-full resize-none border-0 bg-transparent px-2 py-1.5 text-[13px] leading-relaxed outline-none placeholder:text-fg-subtle"
@@ -420,7 +422,7 @@ export function CommandBar({
                     type="button"
                     onClick={() => void send()}
                     disabled={!input.trim() || busy || executing}
-                    aria-label="Wyślij"
+                    aria-label={t("Wyślij")}
                     className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground disabled:opacity-35"
                   >
                     <Send size={14} />
