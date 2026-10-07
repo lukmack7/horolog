@@ -11,13 +11,15 @@ import {
   api,
   createIntent,
   formatDuration,
-  type EnergyLevel,
+  WORK_CATEGORIES,
+  WORK_CATEGORY_LABEL,
   type Intent,
   type IntentKind,
   type Plan,
   type Priority,
+  type WorkCategory,
 } from "@/app/lib/api";
-import { Plus, Trash2, Pencil, X, RotateCcw, AlertTriangle, Sparkles, Clock, Zap } from "lucide-react";
+import { Plus, Trash2, Pencil, X, RotateCcw, AlertTriangle, Sparkles, Clock, Tag } from "lucide-react";
 
 /** Focus needs a >=90m minimum sitting (see docs/ARCHITECTURE.md's model
  *  table: `kind=focus, weekly, >=90m chunks`), enforced with a floor rather
@@ -70,7 +72,7 @@ export default function Habits() {
   const [from, setFrom] = useState(600);
   const [to, setTo] = useState(960);
   const [priority, setPriority] = useState<Priority>(4);
-  const [energy, setEnergy] = useState<EnergyLevel | "">("");
+  const [category, setCategory] = useState<WorkCategory | "">("");
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -107,7 +109,7 @@ export default function Habits() {
     setFrom(600);
     setTo(960);
     setPriority(4);
-    setEnergy("");
+    setCategory("");
     setSelectedDays([]);
   }
 
@@ -119,7 +121,7 @@ export default function Habits() {
     setKind(habit.kind);
     setMinutes(habit.min_chunk_minutes);
     setPriority(habit.priority);
-    setEnergy(habit.energy ?? "");
+    setCategory(habit.category ?? "");
     setSelectedDays(habit.allowed_weekdays ?? []);
     setFrom(window?.start_min ?? 600);
     setTo(window?.end_min ?? 960);
@@ -150,7 +152,7 @@ export default function Habits() {
       title: title.trim(),
       kind,
       priority,
-      energy: energy || undefined,
+      category: category || undefined,
       minutes_per_period: kind === "focus" ? weeklyHours * 60 : times * minutes,
       period_days: 7,
       min_chunk_minutes: chunkMinutes,
@@ -365,19 +367,21 @@ export default function Habits() {
             <div className="flex items-center gap-1.5">
               <PriorityPicker value={priority} onChange={setPriority} />
               <span className="mx-1 h-4 w-px bg-black/[0.08]" aria-hidden />
-              {(["high", "medium", "low"] as const).map((level) => (
+              {WORK_CATEGORIES.map((value) => (
                 <button
-                  key={t(`${level.charAt(0).toUpperCase()}${level.slice(1)} energy`)}
+                  key={value}
                   type="button"
-                  onClick={() => setEnergy(energy === level ? "" : level)}
-                  aria-pressed={energy === level}
-                  title={t(`${level.charAt(0).toUpperCase()}${level.slice(1)} energy`)}
-                  className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[12px] font-semibold capitalize transition-all duration-150 ${
-                    energy === level ? "bg-surface shadow-sm border border-black/[0.08] text-fg" : "text-fg-muted hover:bg-surface/60"
+                  onClick={() => setCategory(category === value ? "" : value)}
+                  aria-pressed={category === value}
+                  title={WORK_CATEGORY_LABEL[value]}
+                  className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[12px] font-semibold transition-all duration-150 ${
+                    category === value
+                      ? "border border-black/[0.08] bg-surface text-fg shadow-sm"
+                      : "text-fg-muted hover:bg-surface/60"
                   }`}
                 >
-                  <Zap size={12} className={energy === level ? "text-accent" : ""} />
-                  {level}
+                  <Tag size={12} className={category === value ? "text-accent" : ""} />
+                  {WORK_CATEGORY_LABEL[value]}
                 </button>
               ))}
             </div>
