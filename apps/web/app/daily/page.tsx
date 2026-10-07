@@ -710,10 +710,21 @@ function QuadrantCard({
           >
             <option value="">Wybierz temat do tej ćwiartki…</option>
             {todos.map((todo) => (
-              <option key={todo.id} value={todo.id}>
+              <option
+                key={todo.id}
+                value={todo.id}
+                disabled={Boolean(
+                  quadrant.schedule &&
+                  todo.deadline_date &&
+                  todo.deadline_date < dateKey,
+                )}
+              >
                 {todo.title}
                 {todo.category ? ` · ${WORK_CATEGORY_LABEL[todo.category]}` : ""}
                 {todo.deadline_date ? ` · max ${todo.deadline_date}` : ""}
+                {quadrant.schedule && todo.deadline_date && todo.deadline_date < dateKey
+                  ? " · deadline minął"
+                  : ""}
               </option>
             ))}
           </select>
@@ -762,6 +773,7 @@ function QuadrantCard({
                 <CalendarDays size={12} />
                 <input
                   type="date"
+                  min={quadrant.schedule ? dateKey : undefined}
                   value={deadline}
                   onChange={(e) => setDeadline(e.target.value)}
                   aria-label="Max deadline"
