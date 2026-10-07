@@ -50,6 +50,11 @@ class MainActivity : ComponentActivity() {
         load(resolveUrl(intent))
     }
 
+    override fun onResume() {
+        super.onResume()
+        NotificationSyncWorker.syncNow(this)
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
