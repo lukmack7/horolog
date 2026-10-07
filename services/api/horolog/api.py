@@ -2738,6 +2738,111 @@ async def _execute_assistant_action(
     raise HTTPException(status_code=422, detail=f"unsupported assistant action {action.action!r}")
 
 
+async def _order_atomic_assistant_actions(
+    actions: list[AssistantAction],
+    db: AsyncSession,
+) -> list[AssistantAction]:
+    """Order dependent moves before creates to avoid transient collisions."""
+
+    completes = [action for action in actions if action.action == "complete_task"]
+    swaps = [action for action in actions if action.action == "swap_tasks"]
+    moves = [
+        action
+        for action in actions
+        if action.action in ("reschedule_task", "reschedule_break", "reschedule_meeting")
+    ]
+    creates = [
+        action
+        for action in actions
+        if action.action in ("create_task", "create_break", "create_meeting")
+    ]
+    daily = [action for action in actions if action.action == "update_daily_plan"]
+    known = {id(action) for action in [*completes, *swaps, *moves, *creates, *daily]}
+    other = [action for action in actions if id(action) not in known]
+
+    if len(moves) <= 1:
+        return [*completes, *swaps, *moves, *creates, *daily, *other]
+
+    plan = await get_plan(db)
+    current: dict[str, tuple[datetime, datetime]] = {}
+    for block in sorted(plan.blocks, key=lambda item: item.start):
+        current.setdefault(block.intent_id, (block.start, block.end))
+
+    targets: dict[int, tuple[datetime, datetime] | None] = {}
+    for index, action in enumerate(moves):
+        if not action.intent_id or action.intent_id not in current:
+            targets[index] = None
+            continue
+        old_start, old_end = current[action.intent_id]
+        target_date = (
+            _daily_date(action.date)
+            if action.date
+            else old_start.astimezone(settings().zone).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+        )
+        start_min = (
+            action.start_min
+            if action.start_min is not None
+            else old_start.astimezone(settings().zone).hour * 60
+            + old_start.astimezone(settings().zone).minute
+        )
+        duration = (
+            action.minutes
+            if action.minutes is not None
+            else max(SLOT_MINUTES, int((old_end - old_start).total_seconds() // 60))
+        )
+        target_start = target_date.replace(
+            hour=start_min // 60,
+            minute=start_min % 60,
+            second=0,
+            microsecond=0,
+        )
+        targets[index] = (target_start, target_start + timedelta(minutes=duration))
+
+    dependencies: dict[int, set[int]] = {index: set() for index in range(len(moves))}
+    for index, action in enumerate(moves):
+        target = targets[index]
+        if target is None:
+            continue
+        target_start, target_end = target
+        for other_index, other_action in enumerate(moves):
+            if index == other_index or not other_action.intent_id:
+                continue
+            occupied = current.get(other_action.intent_id)
+            if occupied is None:
+                continue
+            occupied_start, occupied_end = occupied
+            if target_start < occupied_end and target_end > occupied_start:
+                dependencies[index].add(other_index)
+
+    ordered_indices: list[int] = []
+    remaining = set(range(len(moves)))
+    while remaining:
+        ready = [
+            index
+            for index in remaining
+            if not (dependencies[index] & remaining)
+        ]
+        if not ready:
+            # A true cycle is a swap/rotation and should be expressed with
+            # swap_tasks. Preserve model order so validation can reject it
+            # without silently inventing a different operation.
+            ordered_indices.extend(sorted(remaining))
+            break
+        ready.sort(
+            key=lambda index: (
+                targets[index][0] if targets[index] is not None else origin()
+            ),
+            reverse=True,
+        )
+        for index in ready:
+            ordered_indices.append(index)
+            remaining.remove(index)
+
+    ordered_moves = [moves[index] for index in ordered_indices]
+    return [*completes, *swaps, *ordered_moves, *creates, *daily, *other]
+
 @app.post("/api/assistant/execute")
 async def assistant_execute(
     body: AssistantExecuteIn,
@@ -2749,7 +2854,8 @@ async def assistant_execute(
     results: list[dict[str, Any]] = []
 
     try:
-        for action in body.actions:
+        ordered_actions = await _order_atomic_assistant_actions(body.actions, db)
+        for action in ordered_actions:
             result = await _execute_assistant_action(action, db)
             if result.get("status") == "failed":
                 raise HTTPException(
