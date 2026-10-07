@@ -3212,7 +3212,13 @@ async def stop_time_tracking(
     now = datetime.now(UTC)
     if row.status == "running" and row.last_resumed_at is not None:
         row.accumulated_seconds += max(
-            0, int((now - row.last_resumed_at).total_seconds())
+            0,
+            int(
+                (
+                    _utc_aware(now)
+                    - _utc_aware(row.last_resumed_at)
+                ).total_seconds()
+            ),
         )
     row.last_resumed_at = None
     row.status = "stopped"
