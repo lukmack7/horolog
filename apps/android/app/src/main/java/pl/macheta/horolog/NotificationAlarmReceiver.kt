@@ -20,6 +20,7 @@ class NotificationAlarmReceiver : BroadcastReceiver() {
             channel = intent.getStringExtra(EXTRA_CHANNEL) ?: NotificationChannels.SCHEDULE,
             deepLink = intent.getStringExtra(EXTRA_DEEP_LINK) ?: "horolog://planner",
             notificationId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, 0),
+            fullScreen = intent.getBooleanExtra(EXTRA_FULL_SCREEN, false),
         )
     }
 
@@ -30,6 +31,7 @@ class NotificationAlarmReceiver : BroadcastReceiver() {
         const val EXTRA_CHANNEL = "channel"
         const val EXTRA_DEEP_LINK = "deep_link"
         const val EXTRA_NOTIFICATION_ID = "notification_id"
+        const val EXTRA_FULL_SCREEN = "full_screen"
 
         fun showNow(
             context: Context,
@@ -38,6 +40,7 @@ class NotificationAlarmReceiver : BroadcastReceiver() {
             channel: String,
             deepLink: String,
             notificationId: Int,
+            fullScreen: Boolean = false,
         ) {
             if (
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -50,12 +53,21 @@ class NotificationAlarmReceiver : BroadcastReceiver() {
             }
 
             val id = if (notificationId != 0) notificationId else title.hashCode()
-            val openIntent = Intent(
-                Intent.ACTION_VIEW,
-                android.net.Uri.parse(deepLink),
-                context,
-                MainActivity::class.java,
-            )
+            val openIntent = if (fullScreen) {
+                Intent(context, AlarmActivity::class.java).apply {
+                    putExtra(EXTRA_TITLE, title)
+                    putExtra(EXTRA_MESSAGE, message)
+                    putExtra(EXTRA_NOTIFICATION_ID, id)
+                    putExtra(EXTRA_DEEP_LINK, deepLink)
+                }
+            } else {
+                Intent(
+                    Intent.ACTION_VIEW,
+                    android.net.Uri.parse(deepLink),
+                    context,
+                    MainActivity::class.java,
+                )
+            }
             val openPendingIntent = PendingIntent.getActivity(
                 context,
                 id,
@@ -63,15 +75,32 @@ class NotificationAlarmReceiver : BroadcastReceiver() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
 
-            val notification = NotificationCompat.Builder(context, channel)
+            val builder = NotificationCompat.Builder(
+                context,
+                if (fullScreen) NotificationChannels.ALARM else channel,
+            )
                 .setSmallIcon(R.drawable.ic_horolog)
                 .setContentTitle(title)
                 .setContentText(message)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(message))
                 .setContentIntent(openPendingIntent)
-                .setAutoCancel(true)
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                .build()
+                .setCategory(
+                    if (fullScreen) NotificationCompat.CATEGORY_ALARM
+                    else NotificationCompat.CATEGORY_REMINDER,
+                )
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setAutoCancel(!fullScreen)
+                .setOngoing(fullScreen)
+                .setPriority(
+                    if (fullScreen) NotificationCompat.PRIORITY_MAX
+                    else NotificationCompat.PRIORITY_DEFAULT,
+                )
+
+            if (fullScreen) {
+                builder.setFullScreenIntent(openPendingIntent, true)
+            }
+
+            val notification = builder.build()
 
             NotificationManagerCompat.from(context).notify(id, notification)
         }
