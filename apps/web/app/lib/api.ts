@@ -136,6 +136,7 @@ export interface DailyItem {
   quadrant: 1 | 2 | 3 | 4;
   minutes: number;
   priority: Priority;
+  category?: WorkCategory | null;
   intent_id?: string | null;
   schedule_enabled: boolean;
   completed_at?: string | null;
