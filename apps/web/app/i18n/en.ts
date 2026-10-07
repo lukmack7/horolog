@@ -302,6 +302,8 @@ export const en = {
   "Enter wysyła · Shift+Enter nowa linia": "Enter sends · Shift+Enter new line",
   "AI proponuje · backend sprawdza · Ty zatwierdzasz": "AI proposes · backend checks · you approve",
   "Wyślij": "Send",
+  "in": "in",
+  "or": "or",
 } as const;
 
 export type TranslationKey = keyof typeof en;
