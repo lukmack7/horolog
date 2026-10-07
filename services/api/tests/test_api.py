@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 import typing
@@ -30,11 +31,15 @@ from horolog.db import (
     DailyPlanItemRow,
     DailyPlanRow,
     DailyReviewRow,
+    IntentRow,
     NotificationSettingsRow,
+    PlanRow,
+    SlotOriginRow,
     TimeEntryRow,
     TodoInboxRow,
     UserSettingsRow,
     init_db,
+    rebase_slot_origin,
     session,
 )
 
@@ -208,6 +213,112 @@ async def test_daily_close_is_recorded_and_undoable(client: AsyncClient) -> None
 @pytest.mark.asyncio
 async def test_health(client: AsyncClient) -> None:
     assert (await client.get("/api/health")).json() == {"status": "ok"}
+
+
+@pytest.mark.asyncio
+async def test_persisted_slots_rebase_once_when_local_day_advances(
+    client: AsyncClient,
+) -> None:
+    gen = cast("AsyncGenerator[AsyncSession, None]", session())
+    db = await anext(gen)
+    try:
+        await db.execute(delete(SlotOriginRow))
+        await db.execute(delete(PlanRow))
+        await db.execute(delete(IntentRow).where(IntentRow.id == "slot-origin-test"))
+        await db.execute(delete(BusyRow).where(BusyRow.id == "slot-origin-busy"))
+
+        db.add(SlotOriginRow(id=1, origin_date="2026-10-07"))
+        db.add(
+            IntentRow(
+                id="slot-origin-test",
+                payload={
+                    "id": "slot-origin-test",
+                    "kind": "task",
+                    "title": "Pinned tomorrow",
+                    "priority": 2,
+                    "minutes_per_period": 90,
+                    "period_days": None,
+                    "min_chunk_minutes": 90,
+                    "max_chunk_minutes": 90,
+                    "max_per_day": 1,
+                    "daily_windows": [{"start_min": 540, "end_min": 630}],
+                    "allowed_weekdays": [],
+                    "earliest_slot": 132,
+                    "latest_slot": 138,
+                    "due_slot": 138,
+                    "preferred_start_min": 540,
+                    "blocked_slots": [],
+                },
+            )
+        )
+        db.add(
+            BusyRow(
+                id="slot-origin-busy",
+                source="manual",
+                label="Busy",
+                start_slot=140,
+                end_slot=144,
+            )
+        )
+        db.add(
+            PlanRow(
+                id=1,
+                payload=json.dumps(
+                    {
+                        "blocks": [
+                            {
+                                "intent_id": "slot-origin-test",
+                                "occurrence": 0,
+                                "chunk": 0,
+                                "start_slot": 132,
+                                "end_slot": 138,
+                                "priority": 2,
+                                "moved_from": None,
+                            }
+                        ],
+                        "unmet": [],
+                        "solve_ms": 0.0,
+                        "horizon_slots": 21 * 96,
+                    }
+                ),
+            )
+        )
+        await db.commit()
+
+        assert await rebase_slot_origin(db, "2026-10-08") == 1
+
+        intent = await db.get(IntentRow, "slot-origin-test")
+        assert intent is not None
+        assert intent.payload["earliest_slot"] == 36
+        assert intent.payload["latest_slot"] == 42
+        assert intent.payload["due_slot"] == 42
+
+        busy = await db.get(BusyRow, "slot-origin-busy")
+        assert busy is not None
+        assert busy.start_slot == 44
+        assert busy.end_slot == 48
+
+        plan = await db.get(PlanRow, 1)
+        assert plan is not None
+        plan_payload = json.loads(plan.payload)
+        assert plan_payload["blocks"][0]["start_slot"] == 36
+        assert plan_payload["blocks"][0]["end_slot"] == 42
+
+        meta = await db.get(SlotOriginRow, 1)
+        assert meta is not None
+        assert meta.origin_date == "2026-10-08"
+
+        assert await rebase_slot_origin(db, "2026-10-08") == 0
+        plan_again = await db.get(PlanRow, 1)
+        assert plan_again is not None
+        assert json.loads(plan_again.payload)["blocks"][0]["start_slot"] == 36
+    finally:
+        await db.execute(delete(SlotOriginRow))
+        await db.execute(delete(PlanRow))
+        await db.execute(delete(IntentRow).where(IntentRow.id == "slot-origin-test"))
+        await db.execute(delete(BusyRow).where(BusyRow.id == "slot-origin-busy"))
+        await db.commit()
+        await gen.aclose()
 
 
 @pytest.mark.asyncio
