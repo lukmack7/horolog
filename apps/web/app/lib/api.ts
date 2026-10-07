@@ -13,6 +13,7 @@ export type EnergyLevel = "high" | "medium" | "low";
 export type AssistantActionKind =
   | "create_task"
   | "create_meeting"
+  | "create_break"
   | "reschedule_task"
   | "complete_task"
   | "update_daily_plan";
@@ -30,6 +31,7 @@ export interface AssistantAction {
   minutes?: number | null;
   quadrant?: 1 | 2 | 3 | 4 | null;
   start_min?: number | null;
+  start_mode?: "fixed" | "preferred" | null;
   win_condition?: string | null;
   first_step?: string | null;
 }
