@@ -140,7 +140,7 @@ async def test_focus_intent_round_trips(client: AsyncClient) -> None:
             "title": "Deep work",
             "kind": "focus",
             "priority": 2,
-            "energy": "high",
+            "category": "macheta_data",
             "minutes_per_period": 600,
             "period_days": 7,
             "min_chunk_minutes": 120,
@@ -152,7 +152,7 @@ async def test_focus_intent_round_trips(client: AsyncClient) -> None:
     intents = (await client.get("/api/intents")).json()
     mine = next(i for i in intents if i["title"] == "Deep work")
     assert mine["kind"] == "focus"
-    assert mine["energy"] == "high"
+    assert mine["category"] == "macheta_data"
 
 
 @pytest.mark.asyncio
