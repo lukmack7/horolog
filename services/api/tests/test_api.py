@@ -25,9 +25,11 @@ from horolog.api import IntentIn, app, origin
 from horolog.db import (
     BusyRow,
     DailyItemDecisionRow,
+    DailyItemMetaRow,
     DailyPlanItemRow,
     DailyPlanRow,
     DailyReviewRow,
+    TodoInboxRow,
     UserSettingsRow,
     init_db,
     session,
@@ -55,7 +57,9 @@ async def client() -> AsyncIterator[AsyncClient]:
         db = await anext(gen)
         await db.execute(delete(BusyRow))
         await db.execute(delete(DailyItemDecisionRow))
+        await db.execute(delete(DailyItemMetaRow))
         await db.execute(delete(DailyPlanItemRow))
+        await db.execute(delete(TodoInboxRow))
         await db.execute(delete(DailyPlanRow))
         await db.execute(delete(DailyReviewRow))
         await db.execute(delete(UserSettingsRow))
@@ -112,6 +116,51 @@ async def test_user_workday_preferences_are_persistent_defaults_not_manual_limit
         json={"start": start.isoformat(), "end": end.isoformat()},
     )
     assert moved.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_todo_inbox_assigns_to_matrix_and_preserves_deadline(
+    client: AsyncClient,
+) -> None:
+    tomorrow = (origin() + timedelta(days=1)).date()
+    deadline = tomorrow + timedelta(days=3)
+
+    created = await client.post(
+        "/api/todos",
+        json={
+            "title": "Prepare customer analysis",
+            "minutes": 45,
+            "category": "cmr",
+            "deadline_date": deadline.isoformat(),
+        },
+    )
+    assert created.status_code == 201
+    todo = created.json()
+    assert todo["deadline_date"] == deadline.isoformat()
+
+    inbox = (await client.get("/api/todos")).json()
+    assert [item["id"] for item in inbox] == [todo["id"]]
+
+    assigned = await client.post(
+        f"/api/todos/{todo['id']}/assign",
+        json={"date": tomorrow.isoformat(), "quadrant": 2},
+    )
+    assert assigned.status_code == 201
+    item = assigned.json()
+    assert item["quadrant"] == 2
+    assert item["deadline_date"] == deadline.isoformat()
+    assert item["intent_id"]
+
+    assert (await client.get("/api/todos")).json() == []
+
+    daily = (await client.get(f"/api/daily/{tomorrow.isoformat()}")).json()
+    matrix_item = next(entry for entry in daily["items"] if entry["id"] == item["id"])
+    assert matrix_item["deadline_date"] == deadline.isoformat()
+
+    intents = (await client.get("/api/intents")).json()
+    intent = next(entry for entry in intents if entry["id"] == item["intent_id"])
+    assert intent["deadline_date"] == deadline.isoformat()
+    assert intent["due_slot"] is not None
 
 
 @pytest.mark.asyncio
