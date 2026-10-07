@@ -196,7 +196,7 @@ export function Shell({
           <div
             className="fixed left-3 right-3 z-40 rounded-[24px] border border-black/[0.08] p-3 shadow-2xl lg:hidden"
             style={{
-              bottom: "calc(4.5rem + env(safe-area-inset-bottom))",
+              bottom: "4.5rem",
               backgroundColor: "#ffffff",
             }}
             role="dialog"
@@ -253,11 +253,7 @@ export function Shell({
 
       {/* Mobile Nav */}
       <div
-        className="fixed bottom-0 left-0 right-0 z-40 grid grid-cols-5 border-t border-border bg-white/98 px-1 shadow-[0_-8px_24px_rgba(0,0,0,0.06)] backdrop-blur lg:hidden"
-        style={{
-          height: "calc(4rem + max(8px, env(safe-area-inset-bottom)))",
-          paddingBottom: "max(8px, env(safe-area-inset-bottom))",
-        }}
+        className="fixed bottom-0 left-0 right-0 z-40 grid h-16 grid-cols-5 border-t border-border bg-white/98 px-1 shadow-[0_-8px_24px_rgba(0,0,0,0.06)] backdrop-blur lg:hidden"
       >
         {NAV.slice(0, 4).map((item) => {
           const active = pathname === item.href;
@@ -292,8 +288,7 @@ export function Shell({
 
       <main
         id="main"
-        className="min-w-0 flex-1 overflow-x-hidden lg:overflow-visible lg:pb-0"
-        style={{ paddingBottom: "calc(6rem + env(safe-area-inset-bottom))" }}
+        className="min-w-0 flex-1 overflow-x-hidden pb-24 lg:overflow-visible lg:pb-0"
       >
         {children}
       </main>
