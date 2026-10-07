@@ -350,6 +350,7 @@ class DailyCaptureIn(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
     quadrant: int = Field(ge=1, le=4)
     default_minutes: int = Field(default=30, gt=0, le=480)
+    category: WorkCategory | None = None
 
 
 class DailyMeetingConfirmIn(BaseModel):
@@ -1004,7 +1005,7 @@ async def capture_daily(
                 title=action.title,
                 quadrant=body.quadrant,
                 minutes=minutes,
-                category=action.category,
+                category=action.category or body.category,
                 schedule_enabled=body.quadrant <= 2,
             ),
             db,
