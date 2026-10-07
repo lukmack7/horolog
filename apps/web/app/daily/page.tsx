@@ -488,6 +488,7 @@ function QuadrantCard({
     date: string;
     start_min: number | null;
     minutes: number;
+    category?: WorkCategory | null;
   }>>([]);
 
   const submit = async () => {
@@ -763,6 +764,7 @@ function MeetingSuggestionCard({
     date: string;
     start_min: number | null;
     minutes: number;
+    category?: WorkCategory | null;
   };
   onDismiss: () => void;
   onCreated: () => Promise<void>;
@@ -807,6 +809,7 @@ function MeetingSuggestionCard({
         start_min: hours * 60 + mins,
         minutes,
         priority: 2,
+        ...(suggestion.category ? { category: suggestion.category } : {}),
       });
       await onCreated();
     } catch (caught) {
