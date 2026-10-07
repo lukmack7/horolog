@@ -254,10 +254,26 @@ export default function Planner() {
       }
 
       try {
+        // Editing the event dialog is an explicit move. Keep the duration from
+        // the original task when only one edge was changed (common with native
+        // datetime-local controls), so changing the day cannot create an
+        // accidental 23/25-hour task or a reversed interval.
+        let start = event.startTime;
+        let end = event.endTime;
+        const originalDuration = source.endTime.getTime() - source.startTime.getTime();
+        const startChanged = start.getTime() !== source.startTime.getTime();
+        const endChanged = end.getTime() !== source.endTime.getTime();
+
+        if (startChanged && !endChanged) {
+          end = new Date(start.getTime() + originalDuration);
+        } else if (!startChanged && endChanged) {
+          start = new Date(end.getTime() - originalDuration);
+        }
+
         await api.moveIntent(
           source.intentId,
-          event.startTime.toISOString(),
-          event.endTime.toISOString(),
+          start.toISOString(),
+          end.toISOString(),
         );
         await load();
       } catch (caught) {
