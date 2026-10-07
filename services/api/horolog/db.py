@@ -8,6 +8,7 @@ placement engine needs it to stay stable across re-solves.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
@@ -343,6 +344,7 @@ def _session_factory() -> async_sessionmaker[AsyncSession]:
 
 
 LATEST_PLAN_ID = 1
+_slot_origin_lock = asyncio.Lock()
 """Single-user deployment: one current plan. Becomes a user foreign key when
 multi-tenancy arrives; nothing else in the schema has to change."""
 
@@ -503,7 +505,8 @@ async def rebase_slot_origin(
 
 async def ensure_slot_origin(db: AsyncSession) -> int:
     today = datetime.now(settings().zone).date().isoformat()
-    return await rebase_slot_origin(db, today)
+    async with _slot_origin_lock:
+        return await rebase_slot_origin(db, today)
 
 
 async def session() -> AsyncIterator[AsyncSession]:
