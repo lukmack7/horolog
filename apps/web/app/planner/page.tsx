@@ -10,6 +10,7 @@ import {
   createIntent,
   formatDuration,
   minutesBetween,
+  numberBreakTitles,
   type Plan,
   type Block,
   type Busy,
@@ -62,7 +63,7 @@ function kindToCategory(kind: string): string {
 
 /** Convert backend Block[] to EventManager Event[] */
 function blocksToEvents(blocks: Block[]): Event[] {
-  return blocks.map((block) => {
+  return numberBreakTitles(blocks).map((block) => {
     const tags: string[] = [PRIORITY_LABEL[block.priority]];
     if (block.moved_from !== null && block.moved_from !== block.start) {
       tags.push("Moved");
