@@ -1021,6 +1021,7 @@ async def capture_daily(
                 "date": meeting_day.strftime("%Y-%m-%d"),
                 "start_min": suggestion.preferred_start_min,
                 "minutes": suggestion.minutes or body.default_minutes,
+                "category": suggestion.category.value if suggestion.category is not None else None,
             }
         )
 
