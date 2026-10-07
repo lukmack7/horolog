@@ -57,7 +57,27 @@ const PL: Record<string, string> = {
   "Event title":"Tytuł wydarzenia","Event description":"Opis wydarzenia","Select category":"Wybierz kategorię","Select color":"Wybierz kolor",
   "Create":"Utwórz","Save":"Zapisz","Cancel":"Anuluj","Delete":"Usuń","No events found":"Nie znaleziono wydarzeń",
   "Blue":"Niebieski","Green":"Zielony","Purple":"Fioletowy","Orange":"Pomarańczowy","Pink":"Różowy","Red":"Czerwony",
-  "Reminder":"Przypomnienie","Personal":"Osobiste","Important":"Ważne","Urgent":"Pilne","Work":"Praca","Team":"Zespół","Client":"Klient"
+  "Reminder":"Przypomnienie","Personal":"Osobiste","Important":"Ważne","Urgent":"Pilne","Work":"Praca","Team":"Zespół","Client":"Klient",
+  "Today":"Dziś","New Event":"Nowe wydarzenie","Colors":"Kolory","Categories":"Kategorie","All Events":"Wszystkie wydarzenia",
+  "Calendar view":"Widok kalendarza","High Energy":"Wysoka energia","Medium Energy":"Średnia energia","Low Energy":"Niska energia",
+  "Shift Stability":"Stabilność zmian","Unmet Demand":"Niezaplanowane zapotrzebowanie",
+  "Habits & Focus Time":"Nawyki i czas skupienia","ROUTINE TITLE":"NAZWA RUTYNY","Habit":"Nawyk","Focus":"Skupienie",
+  "Gym":"Siłownia","Deep work":"Głęboka praca","Lunch":"Lunch","Inbox & admin":"Skrzynka i administracja",
+  "Hours per week":"Godziny tygodniowo","Max sitting":"Maks. długość sesji","Save Changes":"Zapisz zmiany","Add Routine":"Dodaj rutynę",
+  "Smart Meetings":"Inteligentne spotkania","MEETING TITLE":"NAZWA SPOTKANIA","DURATION":"CZAS TRWANIA","MEETING DATE":"DATA SPOTKANIA",
+  "PREFERRED TIME":"PREFEROWANA GODZINA","ATTENDEE BUSY TIMES":"ZAJĘTOŚĆ UCZESTNIKA","Add range":"Dodaj zakres","Add Meeting":"Dodaj spotkanie",
+  "No busy ranges yet - the meeting will schedule against your own calendar only.":"Brak zakresów zajętości — spotkanie zostanie zaplanowane wyłącznie względem Twojego kalendarza.",
+  "Placed only where every attendee is free - their busy time never touches your own calendar.":"Planowane tylko wtedy, gdy każdy uczestnik jest wolny — jego zajętość nie blokuje Twojego kalendarza.",
+  "Productivity Analytics":"Analiza produktywności","Priority":"Priorytet","Exec":"Zarządczy","Task":"Zadanie",
+  "Measured across your 21-day planning horizon":"Pomiar dla 21-dniowego horyzontu planowania",
+  "2% of working capacity":"2% dostępnego czasu pracy","100% of scheduled work":"100% zaplanowanej pracy","0m across the horizon":"0 min w całym horyzoncie",
+  "P1 + P2 share of planned work":"Udział P1 + P2 w zaplanowanej pracy",
+  "Calendars & Sync":"Kalendarze i synchronizacja","Connect Google Calendar":"Połącz Kalendarz Google",
+  "Connect Outlook / Microsoft 365":"Połącz Outlook / Microsoft 365","Subscribe to a published iCal (.ics) feed":"Subskrybuj opublikowany kanał iCal (.ics)",
+  "Connect a CalDAV server":"Połącz serwer CalDAV","username":"nazwa użytkownika","app password":"hasło aplikacji",
+  "OAuth needs your own app credentials — self-hosting means there is no shared client to hand out (see .env.example). The feed and server options below need none.":"OAuth wymaga własnych danych aplikacji — przy samodzielnym hostingu nie ma współdzielonego klienta (zobacz .env.example). Kanał i opcje serwera poniżej ich nie wymagają.",
+  "Push writes scheduled blocks onto a dedicated \"Horolog\" calendar as real events — never your primary calendar. Off by default; enable with":"Wysyłanie zapisuje zaplanowane bloki jako prawdziwe wydarzenia w osobnym kalendarzu \"Horolog\", nigdy w kalendarzu głównym. Domyślnie wyłączone; włącz przez",
+  "Recurring commitments placed around real calendar events and moved automatically when meetings land.":"Powtarzalne zobowiązania są układane wokół wydarzeń z kalendarza i automatycznie przesuwane, gdy pojawiają się spotkania."
 };
 
 const PATTERNS: Array<[RegExp,(m:RegExpMatchArray)=>string]> = [
