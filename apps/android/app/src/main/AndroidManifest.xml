@@ -12,6 +12,10 @@
         android:theme="@style/Theme.PlanerHorolog"
         android:usesCleartextTraffic="true">
 
+        <receiver
+            android:name=".NotificationAlarmReceiver"
+            android:exported="false" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
