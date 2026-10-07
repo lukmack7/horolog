@@ -116,6 +116,12 @@ class Intent(BaseModel):
     selected calendar day/window."""
 
     due_slot: int | None = None
+    deadline_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    """Optional explicit user-facing maximum deadline (local calendar date).
+
+    Unlike due_slot, this survives as readable metadata so the UI can
+    distinguish a real deadline from other solver bounds.
+    """
 
     preferred_start_min: int | None = Field(default=None, ge=0, le=24 * 60)
     """Time-of-day the user would rather this land at. A soft objective term."""
