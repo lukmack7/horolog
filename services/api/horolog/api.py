@@ -1431,6 +1431,11 @@ async def move_daily_item(
             title=row.title,
             kind=IntentKind.TASK,
             priority=Priority(body.quadrant),
+            category=(
+                WorkCategory(row.category)
+                if row.category in {category.value for category in WorkCategory}
+                else None
+            ),
             minutes_per_period=row.minutes,
             min_chunk_minutes=min(30, row.minutes),
             max_chunk_minutes=row.minutes,
