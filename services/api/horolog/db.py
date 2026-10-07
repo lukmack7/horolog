@@ -131,6 +131,34 @@ class SyncedBlockRow(Base):
     end_slot: Mapped[int] = mapped_column(Integer)
 
 
+class TodoInboxRow(Base):
+    """Unclassified task captured before an Eisenhower decision is made."""
+
+    __tablename__ = "todo_inbox"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    title: Mapped[str] = mapped_column(String(300))
+    minutes: Mapped[int] = mapped_column(Integer, default=30)
+    category: Mapped[str | None] = mapped_column(String(32), default=None)
+    deadline_date: Mapped[str | None] = mapped_column(String(10), default=None, index=True)
+    assigned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class DailyItemMetaRow(Base):
+    """Optional metadata that should not force a migration of daily_plan_items."""
+
+    __tablename__ = "daily_item_meta"
+
+    item_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    deadline_date: Mapped[str | None] = mapped_column(String(10), default=None)
+
+
 class DailyPlanRow(Base):
     """One day's deliberate plan: the win condition and the first action."""
 
