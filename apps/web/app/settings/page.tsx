@@ -621,7 +621,7 @@ export default function SettingsPage() {
                     disabled={!trackerKeys[p.id]?.trim() || pending !== null}
                     className="inline-flex h-11 items-center gap-2 rounded-xl border border-black/[0.08] bg-white px-4 text-[13px] font-semibold text-fg shadow-sm transition-all hover:bg-sunk disabled:opacity-40"
                   >
-                    Sync
+                    {t("Sync")}
                   </button>
                 </div>
               );
@@ -648,13 +648,13 @@ export default function SettingsPage() {
               className="inline-flex h-11 items-center gap-2 rounded-xl border border-black/[0.08] bg-surface px-4 text-[13px] font-semibold text-fg shadow-sm transition-all hover:bg-sunk"
             >
               {copied ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} className="text-fg-muted" />}
-              {copied ? "Copied!" : "Copy Feed Link"}
+              {copied ? t("Copied!") : t("Copy Feed Link")}
             </button>
             <a
               href="/api/plan.ics"
               className="inline-flex h-11 items-center gap-2 rounded-xl bg-slate-900 px-4 text-[13px] font-semibold text-white shadow-sm transition-all hover:bg-slate-800"
             >
-              <Download size={14} /> Download .ics
+              <Download size={14} /> {t("Download .ics")}
             </a>
           </div>
         </section>
