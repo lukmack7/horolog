@@ -474,12 +474,32 @@ export default function SettingsPage() {
             </summary>
             <div className="grid gap-3 border-t border-black/[0.06] p-4 sm:grid-cols-2">
               {[
-                ["One timeline", "Tasks, habits, focus blocks and meetings compete for the same real time instead of living in separate silos."],
-                ["Cognitive scheduling", "Flexible work is fitted around hard commitments and can adapt when the plan changes."],
-                ["Local-first", "The engine can run on your own infrastructure and use local models, keeping control close to the user."],
-                ["User decisions win", "A manually fixed time, move or resize is authoritative; automation should assist rather than silently overrule it."],
-                ["Open integrations", "Calendars and external task systems can feed the same planning engine without becoming the source of truth for your day."],
-              ].map(([title, description]) => (
+                {
+                  title: "One timeline",
+                  description:
+                    "Tasks, habits, focus blocks and meetings compete for the same real time instead of living in separate silos.",
+                },
+                {
+                  title: "Cognitive scheduling",
+                  description:
+                    "Flexible work is fitted around hard commitments and can adapt when the plan changes.",
+                },
+                {
+                  title: "Local-first",
+                  description:
+                    "The engine can run on your own infrastructure and use local models, keeping control close to the user.",
+                },
+                {
+                  title: "User decisions win",
+                  description:
+                    "A manually fixed time, move or resize is authoritative; automation should assist rather than silently overrule it.",
+                },
+                {
+                  title: "Open integrations",
+                  description:
+                    "Calendars and external task systems can feed the same planning engine without becoming the source of truth for your day.",
+                },
+              ].map(({ title, description }) => (
                 <div key={title} className="rounded-lg bg-surface p-3">
                   <div className="text-[12px] font-semibold text-fg">{t(title)}</div>
                   <p className="mt-1 text-[11.5px] leading-relaxed text-fg-muted">{t(description)}</p>
