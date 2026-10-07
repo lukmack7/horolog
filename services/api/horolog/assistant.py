@@ -58,6 +58,7 @@ class AssistantAction(BaseModel):
         "reschedule_meeting",
         "complete_task",
         "update_daily_plan",
+        "find_time",
     ]
     title: str | None = None
     intent_id: str | None = None
@@ -70,6 +71,10 @@ class AssistantAction(BaseModel):
     category: WorkCategory | None = None
     win_condition: str | None = None
     first_step: str | None = None
+    search_days: int | None = Field(default=None, ge=1, le=14)
+    count: int | None = Field(default=None, ge=1, le=8)
+    window_start_min: int | None = Field(default=None, ge=0, lt=24 * 60)
+    window_end_min: int | None = Field(default=None, ge=1, le=24 * 60)
 
     @model_validator(mode="after")
     def _sane(self) -> "AssistantAction":
@@ -95,6 +100,15 @@ class AssistantAction(BaseModel):
                 datetime.strptime(self.date, "%Y-%m-%d")
             except ValueError as exc:
                 raise ValueError("date must be YYYY-MM-DD") from exc
+        if self.action == "find_time":
+            if self.date is None or self.minutes is None:
+                raise ValueError("find_time requires date and minutes")
+            if (
+                self.window_start_min is not None
+                and self.window_end_min is not None
+                and self.window_end_min <= self.window_start_min
+            ):
+                raise ValueError("find_time window end must be after start")
         return self
 
 
@@ -232,6 +246,15 @@ Core rules:
   resizing an existing meeting; preserve the meeting itself rather than
   creating a second meeting.
 - complete_task requires an intent_id from FACTUAL CONTEXT.
+- find_time is informational and NEVER mutates the plan. Use it when the user
+  asks "znajdź mi miejsce", "kiedy mam wolne", "gdzie zmieszczę X minut" or
+  equivalent. It requires date and minutes. Optional:
+    * search_days = number of consecutive calendar days to search (default 1),
+    * count = how many usable slots are requested (default 3),
+    * window_start_min/window_end_min for explicit boundaries such as "before 17".
+  Use category only as descriptive context; it does not change availability.
+  Do not fabricate free slots in the reply: backend will calculate them from
+  the authoritative plan and append the result.
 - update_daily_plan requires date and at least win_condition or first_step.
   Use update_daily_plan ONLY when the user explicitly asks to change Daily,
   "Dzisiaj wygrywam", "Zaczynam od", or a first step. Do not use it as a
