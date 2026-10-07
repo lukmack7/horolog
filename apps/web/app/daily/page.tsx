@@ -482,6 +482,8 @@ function QuadrantCard({
   draggingSuggestionId,
   setDraggingSuggestionId,
   onSuggestionDrop,
+  todos,
+  onTodoAssign,
 }: {
   quadrant: (typeof QUADRANTS)[number];
   items: DailyData["items"];
@@ -492,12 +494,15 @@ function QuadrantCard({
   draggingSuggestionId: string | null;
   setDraggingSuggestionId: (id: string | null) => void;
   onSuggestionDrop: (suggestionId: string, quadrant: 1 | 2 | 3 | 4) => Promise<void>;
+  todos: TodoInboxItem[];
+  onTodoAssign: (todoId: string, quadrant: 1 | 2 | 3 | 4) => Promise<void>;
 }) {
   const { t } = useLanguage();
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const [minutes, setMinutes] = useState(30);
   const [category, setCategory] = useState<WorkCategory | "">("");
+  const [deadline, setDeadline] = useState("");
   const [smartAdding, setSmartAdding] = useState(false);
   const [smartResult, setSmartResult] = useState<string | null>(null);
   const [meetingSuggestions, setMeetingSuggestions] = useState<Array<{
@@ -518,6 +523,7 @@ function QuadrantCard({
         quadrant: quadrant.id,
         default_minutes: minutes,
         ...(category ? { category } : {}),
+        ...(deadline ? { deadline_date: deadline } : {}),
       });
 
       const tasks = result.created.length;
@@ -533,6 +539,7 @@ function QuadrantCard({
       setTitle("");
       setMinutes(30);
       setCategory("");
+      setDeadline("");
       setAdding(result.meeting_suggestions.length > 0);
       await reload();
     } catch (caught) {
@@ -620,6 +627,15 @@ function QuadrantCard({
                       {WORK_CATEGORY_LABEL[item.category]}
                     </span>
                   )}
+                  {item.deadline_date && (
+                    <span className={`rounded-full px-2 py-0.5 font-semibold ${
+                      item.deadline_date < dateKey
+                        ? "bg-red-50 text-red-700"
+                        : "bg-amber-50 text-amber-700"
+                    }`}>
+                      max {new Date(`${item.deadline_date}T12:00:00`).toLocaleDateString("pl-PL")}
+                    </span>
+                  )}
                   <span className="hidden rounded-full bg-sunk px-2 py-0.5 text-fg-subtle sm:inline">{t("przeciągnij")}</span>
                   {item.schedule_enabled && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">Planner</span>}
                   {item.carried && (
@@ -677,6 +693,33 @@ function QuadrantCard({
         ))}
       </div>
 
+      {todos.length > 0 && (
+        <div className="mt-3 rounded-xl border border-black/[0.07] bg-white/70 p-2.5">
+          <div className="mb-1.5 text-[9.5px] font-bold uppercase tracking-wide text-fg-subtle">
+            Z Do zrobienia
+          </div>
+          <select
+            defaultValue=""
+            onChange={(e) => {
+              const id = e.target.value;
+              if (!id) return;
+              e.target.value = "";
+              void onTodoAssign(id, quadrant.id);
+            }}
+            className="w-full rounded-lg border border-black/[0.08] bg-white px-2.5 py-2 text-[11px] font-medium text-fg"
+          >
+            <option value="">Wybierz temat do tej ćwiartki…</option>
+            {todos.map((todo) => (
+              <option key={todo.id} value={todo.id}>
+                {todo.title}
+                {todo.category ? ` · ${WORK_CATEGORY_LABEL[todo.category]}` : ""}
+                {todo.deadline_date ? ` · max ${todo.deadline_date}` : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {adding ? (
         <div className="mt-3 rounded-xl border border-black/[0.08] bg-white p-3">
           <input
@@ -715,6 +758,16 @@ function QuadrantCard({
                   <option key={value} value={value}>{WORK_CATEGORY_LABEL[value]}</option>
                 ))}
               </select>
+              <label className="flex items-center gap-1 text-[10px] font-medium text-fg-muted">
+                <CalendarDays size={12} />
+                <input
+                  type="date"
+                  value={deadline}
+                  onChange={(e) => setDeadline(e.target.value)}
+                  aria-label="Max deadline"
+                  className="rounded-lg border bg-white px-2 py-1"
+                />
+              </label>
             </div>
             <div className="flex gap-2">
               <button type="button" onClick={() => setAdding(false)} className="rounded-lg px-2.5 py-1.5 text-[10.5px] font-semibold text-fg-muted">{t("Anuluj")}</button>
