@@ -17,6 +17,7 @@ export type AssistantActionKind =
   | "swap_tasks"
   | "reschedule_task"
   | "reschedule_break"
+  | "reschedule_meeting"
   | "complete_task"
   | "update_daily_plan";
 
