@@ -155,16 +155,14 @@ export function Shell({
 
       {/* Mobile-only capture button. Keep it above the bottom navigation and
           away from the device safe area. */}
-      {!mobileMoreOpen && (
-        <button
-          type="button"
-          onClick={() => setCommandOpen(true)}
-          aria-label={t("Ask Horolog")}
-          className="fixed bottom-20 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-accent text-on-accent shadow-pop transition-transform active:scale-95 lg:hidden"
-        >
-          <Sparkles size={20} />
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={() => setCommandOpen(true)}
+        aria-label={t("Ask Horolog")}
+        className="fixed bottom-20 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-accent text-on-accent shadow-pop transition-transform active:scale-95 lg:hidden"
+      >
+        <Sparkles size={20} />
+      </button>
 
       {/* Mobile Nav — Planner is the app; Settings is the only secondary destination. */}
       <div
