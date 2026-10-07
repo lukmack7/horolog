@@ -302,6 +302,8 @@ export const pl = {
   "Wyślij": "Wyślij",
   "in": "za",
   "Settings": "Ustawienia",
+  "Additional views": "Dodatkowe widoki",
+  "Planner is the main workspace. These secondary views remain available when you need them.": "Planner jest głównym miejscem pracy. Pozostałe widoki są dostępne tutaj, gdy będą potrzebne.",
   "Planning preferences": "Preferencje planowania",
   "Planning preferences, language, calendars and export in one place.": "Preferencje planowania, język, kalendarze i eksport w jednym miejscu.",
   "Suggested working hours": "Sugerowane godziny pracy",
