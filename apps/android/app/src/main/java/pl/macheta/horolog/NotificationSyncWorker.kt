@@ -30,10 +30,12 @@ class NotificationSyncWorker(
             val settings = getJson("/api/settings/notifications")
             val plan = getJson("/api/plan")
             val intents = getArray("/api/intents")
+            val todos = getArray("/api/todos")
 
             val alarms = mutableListOf<AlarmSpec>()
             appendScheduleAlarms(settings, plan, alarms)
-            appendDeadlineAlarms(settings, intents, alarms)
+            appendDeadlineAlarms(settings, intents, alarms, "intent")
+            appendDeadlineAlarms(settings, todos, alarms, "todo")
             appendEndOfDayAlarm(settings, alarms)
 
             NotificationScheduler.replaceAll(applicationContext, alarms)
@@ -121,6 +123,7 @@ class NotificationSyncWorker(
         settings: JSONObject,
         intents: JSONArray,
         alarms: MutableList<AlarmSpec>,
+        source: String,
     ) {
         if (!settings.optBoolean("deadline_enabled", true)) return
 
@@ -143,7 +146,7 @@ class NotificationSyncWorker(
             val trigger = reminderDay.atTime(hour, minute).atZone(zone)
 
             alarms += AlarmSpec(
-                key = "deadline:${intent.optString("id")}:$deadlineText:$daysBefore:$timeMin",
+                key = "deadline:$source:${intent.optString("id")}:$deadlineText:$daysBefore:$timeMin",
                 triggerAtMillis = trigger.toInstant().toEpochMilli(),
                 title = intent.optString("title", "Deadline"),
                 message = if (daysBefore == 0L) {
