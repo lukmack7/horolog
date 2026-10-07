@@ -1370,11 +1370,12 @@ async def _assistant_context(db: AsyncSession, context_page: str | None) -> dict
             "scheduled": scheduled.get(intent.id, []),
         })
 
+    workday_start_min, workday_end_min = await _preferred_workday(db)
     return {
         "page": context_page,
         "today": base.date().isoformat(),
-        "workday_start_min": settings().workday_start_min,
-        "workday_end_min": settings().workday_end_min,
+        "workday_start_min": workday_start_min,
+        "workday_end_min": workday_end_min,
         "active_items": active[:80],
         "unmet": [
             {
@@ -3007,7 +3008,11 @@ async def availability(
     # start is already in the past (except for an impossible zero-microsecond
     # race), so availability must begin at the following boundary.
     now_slot = to_slot(datetime.now(cfg.zone), base) + 1
-    window = (cfg.workday_start_min // SLOT_MINUTES, cfg.workday_end_min // SLOT_MINUTES)
+    workday_start_min, workday_end_min = await _preferred_workday(db)
+    window = (
+        workday_start_min // SLOT_MINUTES,
+        workday_end_min // SLOT_MINUTES,
+    )
     out: list[FreeSlot] = []
     for day in range(days):
         day_lo = day * SLOTS_PER_DAY
