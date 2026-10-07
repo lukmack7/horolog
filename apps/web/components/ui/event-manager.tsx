@@ -990,6 +990,7 @@ function EventCard({
   getColorClasses: (color: string) => { bg: string; text: string }
   variant?: "default" | "compact" | "detailed"
 }) {
+  const { t, language } = useLanguage();
   const [isHovered, setIsHovered] = useState(false)
   const colorClasses = getColorClasses(event.color)
 
@@ -1263,6 +1264,7 @@ function MonthView({
   onDrop: (date: Date, hour?: number, eventId?: string) => void
   getColorClasses: (color: string) => { bg: string; text: string }
 }) {
+  const { t, language } = useLanguage();
   const [selectedDay, setSelectedDay] = useState(new Date(currentDate))
 
   useEffect(() => {
