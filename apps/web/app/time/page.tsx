@@ -4,9 +4,10 @@ import { useLanguage } from "@/app/components/LanguageProvider";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Grid } from "@/app/components/Grid";
 import { Glyph, KIND_LABEL } from "@/app/components/Glyph";
+import { WorkCategoryMedal } from "@/app/components/WorkCategoryMedal";
 import { Shell } from "@/app/components/Shell";
 import { Skeleton } from "@/app/components/Skeleton";
-import { api, formatDuration, minutesBetween, numberBreakTitles, type DailyData, type IntentKind, type Plan } from "@/app/lib/api";
+import { api, formatDuration, minutesBetween, numberBreakTitles, type DailyData, type IntentKind, type Plan, type WorkCategory } from "@/app/lib/api";
 import { ArrowRight, Sunrise, Target } from "lucide-react";
 import Link from "next/link";
 
@@ -172,7 +173,7 @@ function StatusCard({
   loading = false,
 }: {
   label: string;
-  block: { title: string; kind: IntentKind; priority: number; start: string; end: string } | undefined;
+  block: { title: string; kind: IntentKind; priority: number; category?: WorkCategory | null; start: string; end: string } | undefined;
   empty: string;
   untilNow?: Date;
   loading?: boolean;
@@ -195,7 +196,10 @@ function StatusCard({
             <Glyph kind={block.kind} size={15} />
           </span>
           <div className="min-w-0">
-            <div className="truncate text-[15px] font-semibold text-fg">{block.title}</div>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <WorkCategoryMedal category={block.category} />
+              <div className="truncate text-[15px] font-semibold text-fg">{block.title}</div>
+            </div>
             <div className="tabular mt-0.5 flex items-center gap-1.5 text-[12px] text-fg-muted">
               <span>{t(KIND_LABEL[block.kind])}</span>
               <span>·</span>
