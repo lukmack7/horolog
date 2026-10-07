@@ -300,11 +300,11 @@ export default function Planner() {
             <p className="mt-1 text-[13.5px] text-fg-muted">
               {plan ? (
                 <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                  <span className="font-semibold text-fg">{plan.blocks.length} blocks</span>
+                  <span className="font-semibold text-fg">{plan.blocks.length} {language === "pl" ? (plan.blocks.length === 1 ? "blok" : "bloki") : (plan.blocks.length === 1 ? "block" : "blocks")}</span>
                   <span>·</span>
                   <span>{formatDuration(scheduledMinutes)} scheduled</span>
                   <span>·</span>
-                  <span className="tabular text-accent font-medium">solved in {plan.solve_ms.toFixed(1)}ms</span>
+                  <span className="tabular text-accent font-medium">{language === "pl" ? "ułożono w" : "solved in"} {plan.solve_ms.toFixed(1)}ms</span>
                 </span>
               ) : (
                 "Loading schedule..."
