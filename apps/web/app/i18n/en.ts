@@ -1,6 +1,7 @@
 export const en = {
   "Time": "Time",
   "Planner": "Planner",
+  "To do": "To do",
   "Daily": "Daily",
   "Habits": "Habits",
   "Task inbox": "Task inbox",
