@@ -1,16 +1,18 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { usePathname } from "next/navigation";
 import { useLanguage } from "@/app/components/LanguageProvider";
 import {
   AlertCircle,
+  AtSign,
   Bot,
   CalendarClock,
   Check,
   CheckCircle2,
   CirclePlus,
+  Hash,
   Loader2,
   RefreshCcw,
   Send,
@@ -20,9 +22,70 @@ import {
 } from "lucide-react";
 import {
   api,
+  WORK_CATEGORIES,
+  WORK_CATEGORY_LABEL,
   type AssistantAction,
   type AssistantMessage,
+  type AssistantReference,
+  type Block,
+  type WorkCategory,
 } from "@/app/lib/api";
+
+type MentionTrigger = {
+  kind: "intent" | "category";
+  query: string;
+  start: number;
+};
+
+type MentionOption = {
+  key: string;
+  label: string;
+  meta: string;
+  reference: AssistantReference;
+};
+
+function normalizeSearch(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pl-PL");
+}
+
+function localDayKey(value: Date): string {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function detectMentionTrigger(value: string): MentionTrigger | null {
+  const match = value.match(/(^|\s)([@#])([^@#\[\]\n]*)$/);
+  if (!match) return null;
+  const prefix = match[1] ?? "";
+  const symbol = match[2];
+  const query = (match[3] ?? "").trim();
+  return {
+    kind: symbol === "@" ? "intent" : "category",
+    query,
+    start: (match.index ?? 0) + prefix.length,
+  };
+}
+
+function safeTokenLabel(value: string): string {
+  return value.replaceAll("]", ")");
+}
+
+function blockTime(block: Block): string {
+  const start = new Date(block.start);
+  const end = new Date(block.end);
+  return `${start.toLocaleTimeString("pl-PL", {
+    hour: "2-digit",
+    minute: "2-digit",
+  })}–${end.toLocaleTimeString("pl-PL", {
+    hour: "2-digit",
+    minute: "2-digit",
+  })}`;
+}
 
 function actionLabel(action: AssistantAction): string {
   if (action.action === "create_task") {
