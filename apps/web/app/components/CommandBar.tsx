@@ -138,6 +138,9 @@ function actionLabel(action: AssistantAction): string {
   if (action.action === "complete_task") {
     return "Oznacz zadanie jako wykonane";
   }
+  if (action.action === "find_time") {
+    return `Znajdź wolne miejsce · ${action.minutes ?? "?"} min`;
+  }
   return `Aktualizuj Daily · ${action.date ?? ""}`;
 }
 
@@ -635,7 +638,9 @@ export function CommandBar({
                           Do potwierdzenia
                         </div>
                         <p className="mt-0.5 text-[11px] text-amber-900/75">
-                          Te zmiany nie zostały jeszcze wykonane.
+                          {pendingActions.length > 1
+                            ? `Pakiet atomowy: ${pendingActions.length} zmian. Jeśli jedna się nie powiedzie, nie zostanie zapisana żadna.`
+                            : "Ta zmiana nie została jeszcze wykonana."}
                         </p>
                       </div>
                     </div>
