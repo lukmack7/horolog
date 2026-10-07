@@ -390,6 +390,7 @@ export const api = {
       quadrant: 1 | 2 | 3 | 4;
       minutes: number;
       priority?: Priority;
+      category?: WorkCategory;
       schedule_enabled: boolean;
       intent_id?: string;
     },
