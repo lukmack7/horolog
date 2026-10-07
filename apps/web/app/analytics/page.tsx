@@ -188,15 +188,15 @@ export default function AnalyticsPage() {
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h1 className="text-[30px] font-bold leading-tight text-fg sm:text-[28px]">
-                Productivity Analytics
+                {t("Productivity Analytics")}
               </h1>
               <p className="mt-1 text-[13px] text-fg-muted sm:text-[13.5px]">
-                {data ? `Measured across your ${data.horizon_days}-day planning horizon` : "Reading the plan..."}
+                {data ? t(`Measured across your ${data.horizon_days}-day planning horizon`) : t("Reading the plan...")}
               </p>
             </div>
             {plan && (
               <div className="hidden rounded-full bg-sunk px-3 py-1.5 text-[11px] font-semibold text-fg-muted sm:block">
-                {derived?.totalBlocks ?? 0} blocks · {formatDuration(derived?.totalVisibleMinutes ?? 0)}
+                {derived?.totalBlocks ?? 0} {t("blocks")} · {formatDuration(derived?.totalVisibleMinutes ?? 0)}
               </div>
             )}
           </div>
