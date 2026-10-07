@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 
 from pydantic import BaseModel, Field, model_validator
 
-from horolog.domain.intent import EnergyLevel, IntentKind, Priority
+from horolog.domain.intent import IntentKind, Priority, WorkCategory
 from horolog.llm import Provider, extract
 from horolog.settings import settings
 
@@ -70,9 +70,10 @@ Rules:
   deadline gives only a day/date and no exact clock time.
 - Priority: 1 critical, 2 high, 3 normal, 4 low. Default 3 unless urgency,
   importance, or "whenever" language says otherwise.
-- energy: "high" only when the text itself implies demanding/creative work or a
-  preference for peak alertness ("when I'm sharpest", "best focus", "deep work").
-  Otherwise null - do not guess.
+- category is an optional work area, never a scheduling priority:
+  "cmr" for CMR work, "macheta_data" for Macheta Data, "private" for personal
+  matters. Set it only when the text clearly names or implies one of these
+  areas. Otherwise null - do not guess.
 
 Example:
 "Przygotować miesięczny P&L, 90 minut, jutro do 16:00, wysoki priorytet"
@@ -194,7 +195,7 @@ class IntentDraft(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     kind: IntentKind
     priority: Priority
-    energy: EnergyLevel | None
+    category: WorkCategory | None = None
     minutes_per_period: int
     period_days: int | None
     min_chunk_minutes: int
@@ -264,7 +265,7 @@ def to_payload(draft: IntentDraft, now: datetime) -> dict[str, object]:
         "title": draft.title,
         "kind": draft.kind.value,
         "priority": int(draft.priority),
-        "energy": draft.energy.value if draft.energy is not None else None,
+        "category": draft.category.value if draft.category is not None else None,
         "minutes_per_period": up(draft.minutes_per_period),
         "period_days": draft.period_days,
         "min_chunk_minutes": up(draft.min_chunk_minutes),
