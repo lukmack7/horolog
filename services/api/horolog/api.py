@@ -2919,11 +2919,16 @@ async def assistant_execute(
 
 
 
+def _utc_aware(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
 def _time_entry_elapsed(row: TimeEntryRow, now: datetime | None = None) -> int:
     elapsed = row.accumulated_seconds
     if row.status == "running" and row.last_resumed_at is not None:
-        current = now or datetime.now(UTC)
-        elapsed += max(0, int((current - row.last_resumed_at).total_seconds()))
+        current = _utc_aware(now or datetime.now(UTC))
+        resumed = _utc_aware(row.last_resumed_at)
+        elapsed += max(0, int((current - resumed).total_seconds()))
     return elapsed
 
 
@@ -3134,7 +3139,13 @@ async def pause_time_tracking(
     now = datetime.now(UTC)
     if row.last_resumed_at is not None:
         row.accumulated_seconds += max(
-            0, int((now - row.last_resumed_at).total_seconds())
+            0,
+            int(
+                (
+                    _utc_aware(now)
+                    - _utc_aware(row.last_resumed_at)
+                ).total_seconds()
+            ),
         )
     row.last_resumed_at = None
     row.status = "paused"
