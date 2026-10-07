@@ -911,6 +911,64 @@ async def test_assistant_executes_confirmed_task_only_after_execute(client: Asyn
 
 
 @pytest.mark.asyncio
+async def test_assistant_fixed_task_returns_success_after_exact_placement(client: AsyncClient) -> None:
+    target = origin().date() + timedelta(days=1)
+    response = await client.post(
+        "/api/assistant/execute",
+        json={
+            "actions": [
+                {
+                    "action": "create_task",
+                    "title": "Fixed prep",
+                    "date": target.isoformat(),
+                    "minutes": 30,
+                    "quadrant": 1,
+                    "start_min": 9 * 60,
+                    "start_mode": "fixed",
+                }
+            ]
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success_count"] == 1
+    assert body["results"][0]["status"] == "done"
+    assert body["results"][0]["scheduled"][0]["start"].startswith(
+        f"{target.isoformat()}T09:00"
+    )
+
+
+@pytest.mark.asyncio
+async def test_assistant_create_break_returns_success_after_exact_placement(client: AsyncClient) -> None:
+    target = origin().date() + timedelta(days=1)
+    response = await client.post(
+        "/api/assistant/execute",
+        json={
+            "actions": [
+                {
+                    "action": "create_break",
+                    "title": "Przerwa",
+                    "date": target.isoformat(),
+                    "minutes": 30,
+                    "start_min": 14 * 60 + 30,
+                }
+            ]
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success_count"] == 1
+    assert body["results"][0]["status"] == "done"
+    assert body["results"][0]["scheduled"][0]["start"].startswith(
+        f"{target.isoformat()}T14:30"
+    )
+
+    plan = (await client.get("/api/plan")).json()
+    block = next(b for b in plan["blocks"] if b["title"] == "Przerwa")
+    assert datetime.fromisoformat(block["start"]).date() == target
+
+
+@pytest.mark.asyncio
 async def test_assistant_confirmed_meeting_stays_on_requested_day(client: AsyncClient) -> None:
     target = origin().date() + timedelta(days=2)
     response = await client.post(
