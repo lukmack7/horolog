@@ -82,6 +82,33 @@ class UserSettingsRow(Base):
     )
 
 
+class NotificationSettingsRow(Base):
+    """Persistent notification preferences consumed by mobile clients."""
+
+    __tablename__ = "notification_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    task_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    task_minutes_before: Mapped[int] = mapped_column(Integer, default=15)
+    task_at_start: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    meeting_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    meeting_minutes_before: Mapped[int] = mapped_column(Integer, default=15)
+    meeting_at_start: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    deadline_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    deadline_days_before: Mapped[int] = mapped_column(Integer, default=1)
+    deadline_time_min: Mapped[int] = mapped_column(Integer, default=9 * 60)
+
+    end_of_day_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    end_of_day_time_min: Mapped[int] = mapped_column(Integer, default=20 * 60 + 30)
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
 class OAuthTokenRow(Base):
     """A connected account's access token.
 
