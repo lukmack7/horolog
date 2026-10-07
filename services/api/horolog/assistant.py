@@ -18,9 +18,33 @@ from horolog.llm import Provider, extract
 from horolog.settings import settings
 
 
+class AssistantReference(BaseModel):
+    """Explicit UI-selected reference carried alongside natural-language text."""
+
+    kind: Literal["intent", "category"]
+    token: str = Field(min_length=2, max_length=400)
+    intent_id: str | None = None
+    category: WorkCategory | None = None
+
+    @model_validator(mode="after")
+    def _valid_reference(self) -> "AssistantReference":
+        if self.kind == "intent":
+            if not self.intent_id:
+                raise ValueError("intent reference requires intent_id")
+            if self.category is not None:
+                raise ValueError("intent reference cannot carry category")
+        else:
+            if self.category is None:
+                raise ValueError("category reference requires category")
+            if self.intent_id is not None:
+                raise ValueError("category reference cannot carry intent_id")
+        return self
+
+
 class AssistantMessage(BaseModel):
     role: Literal["user", "assistant"]
     content: str = Field(min_length=1, max_length=6000)
+    references: list[AssistantReference] = Field(default_factory=list, max_length=12)
 
 
 class AssistantAction(BaseModel):
@@ -109,6 +133,16 @@ Core rules:
     4 = not important + not urgent ("Usuń/odłóż")
   Infer only when the wording supports it; otherwise use quadrant 2 as a calm
   default and mention that assumption.
+- The UI may provide EXPLICIT REFERENCES selected with @ or #. They are listed
+  in FACTUAL CONTEXT under explicit_references and are authoritative:
+    * @ references point to one exact existing intent_id. When the latest user
+      message names that token, use that exact intent_id instead of fuzzy title
+      matching. Never substitute another similarly named item.
+    * # references point to an explicit work category. Apply that category to
+      newly created tasks/meetings when the user's instruction concerns that
+      item. A category reference never changes scheduling priority.
+  If an @ reference is stale or missing from FACTUAL CONTEXT, ask rather than
+  guessing another item.
 - Categories describe the area of life/work and NEVER affect scheduling priority:
     * category="cmr" for CMR,
     * category="macheta_data" for Macheta Data,
@@ -178,9 +212,18 @@ async def converse(
     provider: Provider | None = None,
 ) -> AssistantDecision:
     now = datetime.now(settings().zone)
-    transcript = "\n".join(
-        f"{message.role.upper()}: {message.content}" for message in messages[-16:]
-    )
+    transcript_lines: list[str] = []
+    for message in messages[-16:]:
+        transcript_lines.append(f"{message.role.upper()}: {message.content}")
+        if message.references:
+            transcript_lines.append(
+                "EXPLICIT MESSAGE REFERENCES: "
+                + json.dumps(
+                    [ref.model_dump(mode="json") for ref in message.references],
+                    ensure_ascii=False,
+                )
+            )
+    transcript = "\n".join(transcript_lines)
     pending = [action.model_dump(mode="json") for action in (pending_actions or [])]
     user = (
         f"Current local time: {now.isoformat(timespec='minutes')}\n"
