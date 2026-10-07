@@ -214,7 +214,7 @@ export function EventManager({
   }, [])
 
   const handleDrop = useCallback(
-    (date: Date, hour?: number, eventId?: string) => {
+    (date: Date, hour?: number, eventId?: string, minute = 0) => {
       const source =
         (eventId ? events.find((event) => event.id === eventId) : undefined) ??
         draggedEventRef.current
@@ -224,7 +224,7 @@ export function EventManager({
       const newStartTime = new Date(date)
 
       if (hour !== undefined) {
-        newStartTime.setHours(hour, 0, 0, 0)
+        newStartTime.setHours(hour, minute, 0, 0)
       } else {
         // Month view changes the day only. Keep the task's existing clock
         // time instead of dropping it at midnight.
@@ -1659,68 +1659,208 @@ function DayView({
   onEventClick: (event: Event) => void
   onDragStart: (event: Event) => void
   onDragEnd: () => void
-  onDrop: (date: Date, hour: number, eventId?: string) => void
+  onDrop: (date: Date, hour: number, eventId?: string, minute?: number) => void
   getColorClasses: (color: string) => { bg: string; text: string }
 }) {
-  const { t, language } = useLanguage();
-  const hours = Array.from({ length: 24 }, (_, i) => i)
+  const { language } = useLanguage()
+  const slotMinutes = 15
+  const slotHeight = 24
+  const slots = Array.from({ length: (24 * 60) / slotMinutes }, (_, index) => {
+    const minuteOfDay = index * slotMinutes
+    return {
+      index,
+      hour: Math.floor(minuteOfDay / 60),
+      minute: minuteOfDay % 60,
+    }
+  })
+  const timelineHeight = slots.length * slotHeight
 
-  const getEventsForHour = (hour: number) => {
-    return events.filter((event) => {
-      const eventDate = new Date(event.startTime)
-      const eventHour = eventDate.getHours()
-      return (
-        eventDate.getDate() === currentDate.getDate() &&
-        eventDate.getMonth() === currentDate.getMonth() &&
-        eventDate.getFullYear() === currentDate.getFullYear() &&
-        eventHour === hour
-      )
+  const sameDay = (date: Date) =>
+    date.getDate() === currentDate.getDate() &&
+    date.getMonth() === currentDate.getMonth() &&
+    date.getFullYear() === currentDate.getFullYear()
+
+  const dayEvents = events
+    .filter((event) => sameDay(event.startTime))
+    .slice()
+    .sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
+
+  const formatTime = (date: Date) =>
+    date.toLocaleTimeString(language === "pl" ? "pl-PL" : "en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
     })
-  }
 
   return (
-    <Card className="overflow-auto bg-white">
-      <div className="space-y-0">
-        {hours.map((hour) => {
-          const hourEvents = getEventsForHour(hour)
-          return (
-            <div
-              key={hour}
-              className="flex border-b last:border-b-0"
-              onDragOver={(e) => {
-                e.preventDefault()
-                e.dataTransfer.dropEffect = "move"
-              }}
-              onDrop={(e) => {
-                e.preventDefault()
-                onDrop(
-                  currentDate,
-                  hour,
-                  e.dataTransfer.getData("application/x-horolog-event"),
-                )
-              }}
-            >
-              <div className="w-14 flex-shrink-0 border-r p-2 text-xs text-muted-foreground sm:w-20 sm:p-3 sm:text-sm">
-                {hour.toString().padStart(2, "0")}:00
+    <Card className="max-h-[76vh] overflow-auto bg-white">
+      <div className="flex min-w-0">
+        <div
+          className="relative w-[70px] shrink-0 border-r bg-muted/10 sm:w-20"
+          style={{ height: timelineHeight }}
+        >
+          {slots.map(({ index, hour, minute }) => {
+            const major = minute === 0
+            const half = minute === 30
+            return (
+              <div
+                key={index}
+                className={cn(
+                  "absolute inset-x-0 border-t",
+                  major
+                    ? "border-black/10"
+                    : half
+                      ? "border-black/[0.06]"
+                      : "border-black/[0.035]",
+                )}
+                style={{ top: index * slotHeight, height: slotHeight }}
+              >
+                <span
+                  className={cn(
+                    "tabular absolute -top-2 right-1 rounded bg-white/95 px-1 leading-none",
+                    major
+                      ? "text-[10.5px] font-semibold text-muted-foreground"
+                      : "text-[8.5px] font-medium text-muted-foreground/70",
+                  )}
+                >
+                  {String(hour).padStart(2, "0")}:{String(minute).padStart(2, "0")}
+                </span>
               </div>
-              <div className="min-h-16 flex-1 p-1 transition-colors hover:bg-accent/50 sm:min-h-20 sm:p-2">
-                <div className="space-y-2">
-                  {hourEvents.map((event) => (
-                    <EventCard
-                      key={event.id}
-                      event={event}
-                      onEventClick={onEventClick}
-                      onDragStart={onDragStart}
-                      onDragEnd={onDragEnd}
-                      getColorClasses={getColorClasses}
-                      variant="detailed"
-                    />
-                  ))}
+            )
+          })}
+        </div>
+
+        <div className="relative min-w-0 flex-1" style={{ height: timelineHeight }}>
+          {slots.map(({ index, hour, minute }) => {
+            const major = minute === 0
+            const half = minute === 30
+            return (
+              <div
+                key={index}
+                className={cn(
+                  "absolute inset-x-0 border-t transition-colors hover:bg-accent/20",
+                  major
+                    ? "border-black/10"
+                    : half
+                      ? "border-black/[0.06]"
+                      : "border-black/[0.035]",
+                )}
+                style={{ top: index * slotHeight, height: slotHeight }}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = "move"
+                }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  onDrop(
+                    currentDate,
+                    hour,
+                    e.dataTransfer.getData("application/x-horolog-event"),
+                    minute,
+                  )
+                }}
+              />
+            )
+          })}
+
+          {dayEvents.map((event) => {
+            const startMinutes =
+              event.startTime.getHours() * 60 + event.startTime.getMinutes()
+            const durationMinutes = Math.max(
+              slotMinutes,
+              (event.endTime.getTime() - event.startTime.getTime()) / 60000,
+            )
+            const top = (startMinutes / slotMinutes) * slotHeight
+            const height = Math.max(
+              slotHeight,
+              (durationMinutes / slotMinutes) * slotHeight,
+            )
+            const priority = event.priority
+            const colorClasses = getColorClasses(event.color)
+            const moved = event.tags?.includes("Moved") ?? false
+            const ruleColor = priority ? RULE[priority] : undefined
+            const showTime = height >= slotHeight * 1.5
+            const showDescription = height >= slotHeight * 3
+
+            return (
+              <div
+                key={event.id}
+                draggable
+                onDragStart={(nativeEvent) => {
+                  nativeEvent.dataTransfer.effectAllowed = "move"
+                  nativeEvent.dataTransfer.setData(
+                    "application/x-horolog-event",
+                    event.id,
+                  )
+                  nativeEvent.dataTransfer.setData("text/plain", event.id)
+                  onDragStart(event)
+                }}
+                onDragEnd={onDragEnd}
+                onClick={() => onEventClick(event)}
+                title={`${event.title} · ${formatTime(event.startTime)}–${formatTime(event.endTime)}`}
+                style={{
+                  top,
+                  height,
+                  ...(priority
+                    ? {
+                        background: FILL[priority],
+                        borderLeft: `3px ${moved ? "dashed" : "solid"} ${ruleColor}`,
+                      }
+                    : {}),
+                }}
+                className={cn(
+                  "absolute inset-x-1 z-10 cursor-pointer overflow-hidden rounded-lg border border-black/[0.08] px-2.5 py-1 text-left shadow-sm transition-all hover:z-20 hover:shadow-md",
+                  !priority && colorClasses.bg,
+                  !priority && "text-white",
+                  event.completed && "opacity-65",
+                )}
+              >
+                <div className="flex min-w-0 items-center gap-1.5">
+                  {event.completed && <span className="shrink-0 text-[10px] font-bold">✓</span>}
+                  {event.kind && (
+                    <span
+                      className="shrink-0"
+                      style={priority ? { color: ruleColor } : undefined}
+                      aria-hidden
+                    >
+                      <Glyph kind={event.kind} size={12} />
+                    </span>
+                  )}
+                  <span
+                    className={cn(
+                      "truncate text-[11px] font-semibold leading-tight",
+                      event.completed && "line-through",
+                    )}
+                  >
+                    {event.title}
+                  </span>
+                  {!showTime && (
+                    <span className="tabular ml-auto shrink-0 text-[9px] opacity-75">
+                      {formatTime(event.startTime)}–{formatTime(event.endTime)}
+                    </span>
+                  )}
                 </div>
+
+                {showTime && (
+                  <div className={cn(
+                    "tabular mt-0.5 truncate text-[9.5px]",
+                    priority ? "text-fg-muted" : "text-white/80",
+                  )}>
+                    {formatTime(event.startTime)}–{formatTime(event.endTime)}
+                  </div>
+                )}
+
+                {showDescription && event.description && (
+                  <div className={cn(
+                    "mt-0.5 truncate text-[9px]",
+                    priority ? "text-fg-subtle" : "text-white/70",
+                  )}>
+                    {event.description}
+                  </div>
+                )}
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
       </div>
     </Card>
   )
