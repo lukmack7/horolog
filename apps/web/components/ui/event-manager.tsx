@@ -1114,7 +1114,6 @@ export function EventManager({
                       )}
                   </div>
                 </div>
-              </div>
             )}
 
           <DialogFooter>
