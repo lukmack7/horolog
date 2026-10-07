@@ -53,6 +53,15 @@ class AssistantAction(BaseModel):
             raise ValueError("start_min must be 0..1439")
         if self.start_mode is not None and self.start_min is None:
             raise ValueError("start_mode requires start_min")
+        if (
+            self.action == "reschedule_task"
+            and self.date is None
+            and self.start_min is None
+            and self.minutes is None
+        ):
+            raise ValueError(
+                "reschedule_task requires at least one of date, start_min or minutes"
+            )
         if self.date is not None:
             try:
                 datetime.strptime(self.date, "%Y-%m-%d")
@@ -115,8 +124,11 @@ Core rules:
   second_intent_id, both copied from FACTUAL CONTEXT. Never emulate a swap with
   two reschedule_task actions: the first move can collide with the second task.
   Never guess either id.
-- reschedule_task requires an intent_id from FACTUAL CONTEXT and date; start_min
-  is optional. Never guess an intent_id.
+- reschedule_task edits an existing one-shot task. It requires intent_id from
+  FACTUAL CONTEXT and at least one requested change among date, start_min or
+  minutes. Use it for "move", "change the time", "make it 45 minutes",
+  "shorten/extend", or any combination of those. Omitted fields mean "keep the
+  task's current value". Never guess an intent_id.
 - complete_task requires an intent_id from FACTUAL CONTEXT.
 - update_daily_plan requires date and at least win_condition or first_step.
   Use update_daily_plan ONLY when the user explicitly asks to change Daily,
