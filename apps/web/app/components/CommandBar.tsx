@@ -28,7 +28,6 @@ import {
   type AssistantMessage,
   type AssistantReference,
   type Block,
-  type WorkCategory,
 } from "@/app/lib/api";
 
 type MentionTrigger = {
@@ -339,8 +338,12 @@ export function CommandBar({
         );
         const needsTime =
           (duplicateTitles.get(normalizeSearch(block.title)) ?? 0) > 1;
+        const tokenStart = start.toLocaleTimeString("pl-PL", {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
         const tokenLabel = needsTime
-          ? `${block.title} · ${blockTime(block).split("–")[0]}`
+          ? `${block.title} · ${tokenStart}`
           : block.title;
         const token = `@[${safeTokenLabel(tokenLabel)}]`;
 
@@ -492,6 +495,10 @@ export function CommandBar({
       ]);
       setPendingActions([]);
       onCaptured();
+      void api
+        .plan()
+        .then((plan) => setMentionBlocks(plan.blocks))
+        .catch(() => undefined);
       scrollDown();
     } catch (caught) {
       setError(
@@ -772,11 +779,11 @@ export function CommandBar({
                       }
                       if (event.key === "Enter" && !event.shiftKey) {
                         event.preventDefault();
-                        selectMention(
+                        const option =
                           mentionOptions[
                             Math.min(mentionIndex, mentionOptions.length - 1)
-                          ],
-                        );
+                          ];
+                        if (option) selectMention(option);
                         return;
                       }
                     }
