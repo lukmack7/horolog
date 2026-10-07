@@ -20,7 +20,6 @@ import {
 import { EventManager, type Event } from "@/components/ui/event-manager";
 import Link from "next/link";
 import {
-  Download,
   AlertTriangle,
   Sparkles,
   Command,
@@ -346,14 +345,6 @@ export default function Planner() {
             </p>
           </div>
 
-          <a
-            href="/api/plan.ics"
-            className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-black/[0.08] bg-surface px-3 text-[12.5px] font-semibold text-fg shadow-sm transition-all duration-150 hover:bg-sunk hover:shadow-md sm:h-9.5 sm:px-4 sm:text-[13px]"
-          >
-            <Download size={14} className="text-fg-muted" />
-            <span className="sm:hidden">{t("Export")}</span>
-            <span className="hidden sm:inline">{t("Export .ics")}</span>
-          </a>
         </header>
 
         {error && (
@@ -385,7 +376,7 @@ export default function Planner() {
               </li>
               <li className="flex items-center gap-2">
                 <Link2 size={13} className="text-accent" />
-                <Link href="/connect" className="font-medium text-accent hover:underline">
+                <Link href="/settings" className="font-medium text-accent hover:underline">
                   Connect a calendar
                 </Link>
                 {" "}to pull in what you already have
