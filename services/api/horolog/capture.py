@@ -148,6 +148,7 @@ class DailyMeetingSuggestionDraft(BaseModel):
     day_offset: int = 0
     minutes: int | None = None
     preferred_start_min: int | None = None
+    category: WorkCategory | None = None
 
     @model_validator(mode="after")
     def _meeting_sane(self) -> DailyMeetingSuggestionDraft:
