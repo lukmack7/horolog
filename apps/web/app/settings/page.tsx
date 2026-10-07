@@ -4,9 +4,18 @@ import Link from "next/link";
 import { useLanguage } from "@/app/components/LanguageProvider";
 import { useCallback, useEffect, useState } from "react";
 import { Shell } from "@/app/components/Shell";
-import { api, calendarPush, connections, sync, type Plan, type Provider } from "@/app/lib/api";
+import {
+  api,
+  calendarPush,
+  connections,
+  sync,
+  type NotificationPreferences,
+  type Plan,
+  type Provider,
+} from "@/app/lib/api";
 import {
   AlertCircle,
+  BellRing,
   BookOpenText,
   Calendar,
   Check,
@@ -119,6 +128,21 @@ export default function SettingsPage() {
   const [workEnd, setWorkEnd] = useState("17:00");
   const [preferencesPending, setPreferencesPending] = useState(false);
   const [preferencesMessage, setPreferencesMessage] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState<NotificationPreferences>({
+    task_enabled: true,
+    task_minutes_before: 15,
+    task_at_start: true,
+    meeting_enabled: true,
+    meeting_minutes_before: 15,
+    meeting_at_start: true,
+    deadline_enabled: true,
+    deadline_days_before: 1,
+    deadline_time_min: 9 * 60,
+    end_of_day_enabled: true,
+    end_of_day_time_min: 20 * 60 + 30,
+  });
+  const [notificationsPending, setNotificationsPending] = useState(false);
+  const [notificationsMessage, setNotificationsMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     // Two independent calls, so one failing doesn't have to take down a page
@@ -142,6 +166,11 @@ export default function SettingsPage() {
       setWorkEnd(minutesToTime(preferences.preferred_workday_end_min));
     } catch (caught) {
       failure ??= caught instanceof Error ? caught.message : "Could not load settings.";
+    }
+    try {
+      setNotifications(await api.notificationSettings());
+    } catch (caught) {
+      failure ??= caught instanceof Error ? caught.message : "Could not load notification settings.";
     }
     setLoadError(failure);
   }, []);
@@ -195,6 +224,24 @@ export default function SettingsPage() {
       );
     } finally {
       setPreferencesPending(false);
+    }
+  }
+
+  async function saveNotificationPreferences() {
+    setNotificationsMessage(null);
+    setNotificationsPending(true);
+    try {
+      const saved = await api.saveNotificationSettings(notifications);
+      setNotifications(saved);
+      setNotificationsMessage(t("Notification settings saved."));
+    } catch (caught) {
+      setNotificationsMessage(
+        caught instanceof Error
+          ? caught.message
+          : t("Could not save notification settings."),
+      );
+    } finally {
+      setNotificationsPending(false);
     }
   }
 
@@ -424,6 +471,261 @@ export default function SettingsPage() {
               <div className="mt-3 text-[12px] font-medium text-fg-muted">
                 {preferencesMessage}
               </div>
+            )}
+          </div>
+        </section>
+
+        <section className="space-y-5 overflow-hidden rounded-card border border-black/[0.08] bg-surface p-6 shadow-sm">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sunk text-fg">
+              <BellRing size={18} />
+            </span>
+            <div>
+              <h2 className="text-[15px] font-bold text-fg">{t("Notifications")}</h2>
+              <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">
+                {t("Choose what Planer Horolog should remind you about and when. These settings are shared with the Android app.")}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="rounded-xl border border-black/[0.07] bg-bg p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-[13px] font-semibold text-fg">{t("Tasks")}</div>
+                  <div className="mt-0.5 text-[11.5px] text-fg-muted">{t("Remind me before scheduled task blocks.")}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setNotifications((current) => ({ ...current, task_enabled: !current.task_enabled }))
+                  }
+                  aria-pressed={notifications.task_enabled}
+                  className={`relative h-6 w-11 rounded-full transition-colors ${
+                    notifications.task_enabled ? "bg-accent" : "bg-black/10"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+                      notifications.task_enabled ? "translate-x-5" : "translate-x-0.5"
+                    }`}
+                  />
+                </button>
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <label className="text-[11px] font-medium text-fg-muted">
+                  {t("Before start")}
+                  <select
+                    value={notifications.task_minutes_before}
+                    disabled={!notifications.task_enabled}
+                    onChange={(e) =>
+                      setNotifications((current) => ({
+                        ...current,
+                        task_minutes_before: Number(e.target.value),
+                      }))
+                    }
+                    className="ml-2 h-9 rounded-lg border border-black/[0.08] bg-surface px-2.5 text-[12px] font-semibold text-fg disabled:opacity-40"
+                  >
+                    {[0, 5, 10, 15, 30, 60].map((value) => (
+                      <option key={value} value={value}>
+                        {value === 0 ? t("Off") : `${value} min`}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex items-center gap-2 text-[11.5px] font-medium text-fg-muted">
+                  <input
+                    type="checkbox"
+                    checked={notifications.task_at_start}
+                    disabled={!notifications.task_enabled}
+                    onChange={(e) =>
+                      setNotifications((current) => ({ ...current, task_at_start: e.target.checked }))
+                    }
+                  />
+                  {t("At start time")}
+                </label>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-black/[0.07] bg-bg p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-[13px] font-semibold text-fg">{t("Meetings")}</div>
+                  <div className="mt-0.5 text-[11.5px] text-fg-muted">{t("Remind me before meetings.")}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setNotifications((current) => ({ ...current, meeting_enabled: !current.meeting_enabled }))
+                  }
+                  aria-pressed={notifications.meeting_enabled}
+                  className={`relative h-6 w-11 rounded-full transition-colors ${
+                    notifications.meeting_enabled ? "bg-accent" : "bg-black/10"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+                      notifications.meeting_enabled ? "translate-x-5" : "translate-x-0.5"
+                    }`}
+                  />
+                </button>
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <label className="text-[11px] font-medium text-fg-muted">
+                  {t("Before start")}
+                  <select
+                    value={notifications.meeting_minutes_before}
+                    disabled={!notifications.meeting_enabled}
+                    onChange={(e) =>
+                      setNotifications((current) => ({
+                        ...current,
+                        meeting_minutes_before: Number(e.target.value),
+                      }))
+                    }
+                    className="ml-2 h-9 rounded-lg border border-black/[0.08] bg-surface px-2.5 text-[12px] font-semibold text-fg disabled:opacity-40"
+                  >
+                    {[0, 5, 10, 15, 30, 60].map((value) => (
+                      <option key={value} value={value}>
+                        {value === 0 ? t("Off") : `${value} min`}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex items-center gap-2 text-[11.5px] font-medium text-fg-muted">
+                  <input
+                    type="checkbox"
+                    checked={notifications.meeting_at_start}
+                    disabled={!notifications.meeting_enabled}
+                    onChange={(e) =>
+                      setNotifications((current) => ({ ...current, meeting_at_start: e.target.checked }))
+                    }
+                  />
+                  {t("At start time")}
+                </label>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-black/[0.07] bg-bg p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-[13px] font-semibold text-fg">{t("Max deadline")}</div>
+                  <div className="mt-0.5 text-[11.5px] text-fg-muted">{t("Warn me before a task reaches its maximum deadline.")}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setNotifications((current) => ({ ...current, deadline_enabled: !current.deadline_enabled }))
+                  }
+                  aria-pressed={notifications.deadline_enabled}
+                  className={`relative h-6 w-11 rounded-full transition-colors ${
+                    notifications.deadline_enabled ? "bg-accent" : "bg-black/10"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+                      notifications.deadline_enabled ? "translate-x-5" : "translate-x-0.5"
+                    }`}
+                  />
+                </button>
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <label className="text-[11px] font-medium text-fg-muted">
+                  {t("Days before")}
+                  <select
+                    value={notifications.deadline_days_before}
+                    disabled={!notifications.deadline_enabled}
+                    onChange={(e) =>
+                      setNotifications((current) => ({
+                        ...current,
+                        deadline_days_before: Number(e.target.value),
+                      }))
+                    }
+                    className="ml-2 h-9 rounded-lg border border-black/[0.08] bg-surface px-2.5 text-[12px] font-semibold text-fg disabled:opacity-40"
+                  >
+                    {[0, 1, 2, 3, 7].map((value) => (
+                      <option key={value} value={value}>{value}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-[11px] font-medium text-fg-muted">
+                  {t("At")}
+                  <input
+                    type="time"
+                    step={900}
+                    value={minutesToTime(notifications.deadline_time_min)}
+                    disabled={!notifications.deadline_enabled}
+                    onChange={(e) =>
+                      setNotifications((current) => ({
+                        ...current,
+                        deadline_time_min: timeToMinutes(e.target.value),
+                      }))
+                    }
+                    className="ml-2 h-9 rounded-lg border border-black/[0.08] bg-surface px-2.5 text-[12px] font-semibold text-fg disabled:opacity-40"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-black/[0.07] bg-bg p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-[13px] font-semibold text-fg">{t("End of day")}</div>
+                  <div className="mt-0.5 text-[11.5px] text-fg-muted">
+                    {t("Remind me to review today and refine tomorrow's plan.")}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setNotifications((current) => ({
+                      ...current,
+                      end_of_day_enabled: !current.end_of_day_enabled,
+                    }))
+                  }
+                  aria-pressed={notifications.end_of_day_enabled}
+                  className={`relative h-6 w-11 rounded-full transition-colors ${
+                    notifications.end_of_day_enabled ? "bg-accent" : "bg-black/10"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+                      notifications.end_of_day_enabled ? "translate-x-5" : "translate-x-0.5"
+                    }`}
+                  />
+                </button>
+              </div>
+              <div className="mt-4">
+                <label className="text-[11px] font-medium text-fg-muted">
+                  {t("Reminder time")}
+                  <input
+                    type="time"
+                    step={900}
+                    value={minutesToTime(notifications.end_of_day_time_min)}
+                    disabled={!notifications.end_of_day_enabled}
+                    onChange={(e) =>
+                      setNotifications((current) => ({
+                        ...current,
+                        end_of_day_time_min: timeToMinutes(e.target.value),
+                      }))
+                    }
+                    className="ml-2 h-9 rounded-lg border border-black/[0.08] bg-surface px-2.5 text-[12px] font-semibold text-fg disabled:opacity-40"
+                  />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 border-t border-black/[0.06] pt-4">
+            <button
+              type="button"
+              onClick={() => void saveNotificationPreferences()}
+              disabled={notificationsPending}
+              className="inline-flex h-10 items-center rounded-xl bg-accent px-4 text-[12.5px] font-semibold text-on-accent shadow-sm transition-all hover:bg-accent-hover disabled:opacity-50"
+            >
+              {notificationsPending ? t("Saving...") : t("Save notification settings")}
+            </button>
+            {notificationsMessage && (
+              <span className="text-[12px] font-medium text-fg-muted">{notificationsMessage}</span>
             )}
           </div>
         </section>
