@@ -305,6 +305,7 @@ function PlanView({
   savePlan: (patch: Partial<DailyData["plan"]>) => Promise<void>;
   reload: () => Promise<void>;
 }) {
+  const { t } = useLanguage();
   const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
   const [draggingSuggestionId, setDraggingSuggestionId] = useState<string | null>(null);
 
@@ -472,6 +473,7 @@ function QuadrantCard({
   setDraggingSuggestionId: (id: string | null) => void;
   onSuggestionDrop: (suggestionId: string, quadrant: 1 | 2 | 3 | 4) => Promise<void>;
 }) {
+  const { t } = useLanguage();
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const [minutes, setMinutes] = useState(30);
@@ -869,6 +871,7 @@ function ReviewView({
   data: DailyData;
   saveReview: (review: DailyReview) => Promise<void>;
 }) {
+  const { t } = useLanguage();
   const filled = REVIEW_FIELDS.filter((field) => data.review[field.key].trim()).length;
 
   return (
@@ -958,6 +961,7 @@ function HistoryView({
   currentDate: Date;
   onOpenDay: (date: Date) => void;
 }) {
+  const { t } = useLanguage();
   const [history, setHistory] = useState<DailyHistoryEntry[]>([]);
   const [weekly, setWeekly] = useState<DailyWeekly | null>(null);
   const [loading, setLoading] = useState(true);
