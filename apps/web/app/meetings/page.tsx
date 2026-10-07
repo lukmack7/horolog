@@ -10,7 +10,7 @@ import {
   PRIORITY_TINT,
   api,
   createIntent,
-  format{t("Duration")},
+  formatDuration,
   type AttendeeBusy,
   type Intent,
   type Priority,
@@ -298,7 +298,7 @@ export default function Meetings() {
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[15px] font-semibold text-fg">{meeting.title}</div>
                     <div className="tabular mt-1 text-[12.5px] font-medium text-fg-muted">
-                      {format{t("Duration")}(meeting.minutes_per_period)} ·{" "}
+                      {formatDuration(meeting.minutes_per_period)} ·{" "}
                       {ranges > 0 ? `${ranges} attendee range${ranges === 1 ? "" : "s"} avoided` : "no attendee ranges"}
                     </div>
                     {meeting.zoom_join_url && (
