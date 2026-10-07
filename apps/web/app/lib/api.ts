@@ -491,6 +491,9 @@ export const api = {
   assistantExecute: (actions: AssistantAction[]) =>
     request<{
       count: number;
+      success_count: number;
+      atomic: boolean;
+      change_set_id: string;
       results: Array<Record<string, unknown>>;
     }>("/api/assistant/execute", {
       method: "POST",
