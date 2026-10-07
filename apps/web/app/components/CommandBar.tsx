@@ -222,6 +222,17 @@ export function CommandBar({
       setPendingActions(result.actions);
       scrollDown();
     } catch (caught) {
+      // A failed model call must not permanently append the user's message.
+      // Otherwise every retry grows the context with duplicates and makes the
+      // local model progressively slower.
+      setMessages((current) => {
+        const last = current[current.length - 1];
+        if (last?.role === "user" && last.content === text) {
+          return current.slice(0, -1);
+        }
+        return current;
+      });
+      setInput(text);
       setError(
         caught instanceof Error
           ? caught.message
