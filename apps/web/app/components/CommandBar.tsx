@@ -60,6 +60,7 @@ function actionLabel(action: AssistantAction): string {
 }
 
 function actionTitle(action: AssistantAction): string {
+  if (action.action === "swap_tasks") return "Zamień zadania miejscami";
   if (action.title) return action.title;
   if (action.win_condition) return `Dzisiaj wygrywam, jeśli: ${action.win_condition}`;
   if (action.first_step) return `Zaczynam od: ${action.first_step}`;
