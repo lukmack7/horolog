@@ -11,6 +11,7 @@ import {
   formatDuration,
   minutesBetween,
   numberBreakTitles,
+  WORK_CATEGORY_LABEL,
   type Plan,
   type Block,
   type Busy,
@@ -67,8 +68,8 @@ function blocksToEvents(blocks: Block[]): Event[] {
     if (block.moved_from !== null && block.moved_from !== block.start) {
       tags.push("Moved");
     }
-    if (block.energy) {
-      tags.push(block.energy.charAt(0).toUpperCase() + block.energy.slice(1) + " Energy");
+    if (block.category) {
+      tags.push(WORK_CATEGORY_LABEL[block.category]);
     }
     return {
       // Multiple chunks of the same occurrence (a long focus session split
@@ -83,6 +84,7 @@ function blocksToEvents(blocks: Block[]): Event[] {
       endTime: new Date(block.end),
       color: PRIORITY_COLOR[block.priority] || "p3",
       category: kindToCategory(block.kind),
+      workCategory: block.category ?? undefined,
       priority: block.priority,
       kind: block.kind,
       completed: block.completed ?? false,
@@ -178,6 +180,7 @@ export default function Planner() {
           title: event.title,
           kind,
           priority,
+          category: event.workCategory,
           minutes_per_period: durationMinutes,
           period_days: null,
           min_chunk_minutes: durationMinutes,
@@ -286,11 +289,17 @@ export default function Planner() {
           event.priority ??
           source.priority;
         const nextTitle = event.title?.trim() || source.title;
+        const nextCategory = event.workCategory ?? source.workCategory;
 
-        if (nextTitle !== source.title || nextPriority !== source.priority) {
+        if (
+          nextTitle !== source.title ||
+          nextPriority !== source.priority ||
+          nextCategory !== source.workCategory
+        ) {
           await api.patchIntent(source.intentId, {
             title: nextTitle,
             priority: nextPriority,
+            ...(nextCategory ? { category: nextCategory } : {}),
           });
         }
 
@@ -401,7 +410,7 @@ export default function Planner() {
               onEventDelete={handleEventDelete}
               onEventComplete={handleEventComplete}
               categories={["Task", "Habit", "Focus", "Buffer", "Meeting", "External"]}
-              availableTags={["Critical", "High", "Normal", "Low", "Moved", "Locked", "High Energy", "Medium Energy", "Low Energy"]}
+              availableTags={["Critical", "High", "Normal", "Low", "Moved", "Locked", "CMR", "Macheta Data", "Prywatne"]}
               colors={COLORS}
               defaultView="month"
               className="min-h-[600px]"
