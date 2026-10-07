@@ -1,19 +1,26 @@
 "use client";
 
+import Link from "next/link";
 import { useLanguage } from "@/app/components/LanguageProvider";
 import { useCallback, useEffect, useState } from "react";
 import { Shell } from "@/app/components/Shell";
 import { api, calendarPush, connections, sync, type Plan, type Provider } from "@/app/lib/api";
 import {
   AlertCircle,
+  BarChart3,
+  BookOpenCheck,
   Calendar,
   Check,
   CheckCircle2,
   Copy,
   Download,
+  Inbox,
+  RotateCcw,
   Server,
   Unplug,
   UploadCloud,
+  Users,
+  Clock,
 } from "lucide-react";
 
 type Result =
@@ -88,6 +95,16 @@ const TRACKER_PROVIDERS: {
     placeholder: "site:email:api_token",
   },
 ];
+
+const ADDITIONAL_VIEWS = [
+  { href: "/time", label: "Time", icon: Clock },
+  { href: "/daily", label: "Daily", icon: BookOpenCheck },
+  { href: "/inbox", label: "Task inbox", icon: Inbox },
+  { href: "/habits", label: "Habits", icon: RotateCcw },
+  { href: "/meetings", label: "Meetings", icon: Users },
+  { href: "/analytics", label: "Analytics", icon: BarChart3 },
+] as const;
+
 
 function minutesToTime(value: number): string {
   const hours = Math.floor(value / 60);
@@ -422,6 +439,38 @@ export default function SettingsPage() {
                 {preferencesMessage}
               </div>
             )}
+          </div>
+        </section>
+
+        <section className="space-y-4 overflow-hidden rounded-card border border-black/[0.08] bg-surface p-6 shadow-sm">
+          <div>
+            <h2 className="text-[15px] font-bold text-fg">{t("Additional views")}</h2>
+            <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">
+              {t("Planner is the main workspace. These secondary views remain available when you need them.")}
+            </p>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {ADDITIONAL_VIEWS.map((item) => {
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="group flex items-center gap-3 rounded-xl border border-black/[0.07] bg-bg px-3.5 py-3 transition-all hover:border-black/[0.12] hover:bg-sunk/60"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sunk text-fg">
+                    <Icon size={17} />
+                  </span>
+                  <span className="min-w-0 flex-1 text-[13px] font-semibold text-fg">
+                    {t(item.label)}
+                  </span>
+                  <span className="text-[16px] text-fg-subtle transition-transform group-hover:translate-x-0.5">
+                    →
+                  </span>
+                </Link>
+              );
+            })}
           </div>
         </section>
 
