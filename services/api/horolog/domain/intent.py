@@ -26,10 +26,10 @@ class Priority(IntEnum):
     P4 = 4
 
 
-class EnergyLevel(StrEnum):
-    HIGH = "high"
-    MEDIUM = "medium"
-    LOW = "low"
+class WorkCategory(StrEnum):
+    CMR = "cmr"
+    MACHETA_DATA = "macheta_data"
+    PRIVATE = "private"
 
 
 class IntentKind(StrEnum):
@@ -89,7 +89,7 @@ class Intent(BaseModel):
     kind: IntentKind
     title: str
     priority: Priority = Priority.P3
-    energy: EnergyLevel | None = None
+    category: WorkCategory | None = None
 
     # How much time, over what repeating period.
     minutes_per_period: int = Field(gt=0)
