@@ -554,7 +554,11 @@ def _daily_item_dict(
         "category": (
             intent_payload.get("category")
             if intent_payload and intent_payload.get("category") is not None
-            else row.category
+            else (
+                row.category
+                if row.category in {category.value for category in WorkCategory}
+                else None
+            )
         ),
         "intent_id": row.intent_id,
         "schedule_enabled": row.schedule_enabled,
