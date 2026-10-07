@@ -11,7 +11,7 @@ import {
   RotateCcw,
   Users,
   BarChart3,
-  Link2,
+  Settings2,
   Sparkles,
   Command,
   Activity,
@@ -32,7 +32,7 @@ const NAV = [
   { href: "/inbox", label: "Task inbox", icon: Inbox },
   { href: "/meetings", label: "Meetings", icon: Users },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/connect", label: "Calendars", icon: Link2 },
+  { href: "/settings", label: "Settings", icon: Settings2 },
 ] as const;
 
 /** Ultra-Luxury Shell Navigation for Horolog.
@@ -47,7 +47,7 @@ export function Shell({
   onPlanChange?: () => void;
 }) {
   const pathname = usePathname();
-  const { language, setLanguage, t } = useLanguage();
+  const { t } = useLanguage();
   const [commandOpen, setCommandOpen] = useState(false);
   const [pulse, setPulse] = useState(false);
   const [live, setLive] = useState(true);
@@ -144,11 +144,6 @@ export function Shell({
           </kbd>
         </button>
 
-        <div className="mt-4 flex items-center gap-1 rounded-xl border border-border bg-secondary/30 p-1" aria-label="Language">
-          <button type="button" onClick={() => setLanguage("pl")} className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition-colors ${language === "pl" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`}>PL</button>
-          <button type="button" onClick={() => setLanguage("en")} className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition-colors ${language === "en" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`}>EN</button>
-        </div>
-
         {/* Live SSE Plan Status Indicator */}
         <div className="mt-auto flex items-center justify-between rounded-xl border border-border bg-secondary/30 px-3 py-2.5">
           <div className="flex items-center gap-2">
@@ -219,11 +214,6 @@ export function Shell({
               >
                 <X size={16} />
               </button>
-            </div>
-
-            <div className="mb-2 grid grid-cols-2 gap-1 rounded-xl bg-secondary p-1">
-              <button type="button" onClick={() => setLanguage("pl")} className={`rounded-lg px-3 py-2 text-[12px] font-semibold ${language === "pl" ? "bg-white text-foreground shadow-sm" : "text-muted-foreground"}`}>Polski</button>
-              <button type="button" onClick={() => setLanguage("en")} className={`rounded-lg px-3 py-2 text-[12px] font-semibold ${language === "en" ? "bg-white text-foreground shadow-sm" : "text-muted-foreground"}`}>English</button>
             </div>
 
             <nav
