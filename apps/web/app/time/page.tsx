@@ -6,7 +6,7 @@ import { Grid } from "@/app/components/Grid";
 import { Glyph, KIND_LABEL } from "@/app/components/Glyph";
 import { Shell } from "@/app/components/Shell";
 import { Skeleton } from "@/app/components/Skeleton";
-import { api, formatDuration, minutesBetween, type DailyData, type IntentKind, type Plan } from "@/app/lib/api";
+import { api, formatDuration, minutesBetween, numberBreakTitles, type DailyData, type IntentKind, type Plan } from "@/app/lib/api";
 import { ArrowRight, Sunrise, Target } from "lucide-react";
 import Link from "next/link";
 
@@ -60,9 +60,14 @@ export default function TimePage() {
   // tab is left open past midnight instead of filtering forever for a stale day.
   const todayKey = now.toISOString().slice(0, 10);
 
+  const displayBlocks = useMemo(
+    () => (plan ? numberBreakTitles(plan.blocks) : []),
+    [plan],
+  );
+
   const todaysBlocks = useMemo(
-    () => (plan ? plan.blocks.filter((b) => dayKey(b.start) === todayKey) : []),
-    [plan, todayKey],
+    () => displayBlocks.filter((b) => dayKey(b.start) === todayKey),
+    [displayBlocks, todayKey],
   );
 
   // Blocks come back with the server's local UTC offset (e.g. `-05:00`), not
@@ -149,7 +154,7 @@ export default function TimePage() {
 
         <Grid
           days={[now]}
-          blocks={plan?.blocks ?? []}
+          blocks={displayBlocks}
           busy={plan?.busy ?? []}
           selected={selected}
           onSelect={setSelected}
