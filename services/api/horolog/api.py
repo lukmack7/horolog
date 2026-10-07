@@ -651,6 +651,11 @@ async def put_user_preferences(
         window = intent.daily_windows[0]
         if window.start_min != old_start or window.end_min != old_end:
             continue
+        if (
+            body.preferred_workday_end_min - body.preferred_workday_start_min
+            < intent.min_chunk_minutes
+        ):
+            continue
         updated = intent.model_copy(
             update={
                 "daily_windows": [
