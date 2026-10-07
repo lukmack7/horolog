@@ -969,6 +969,107 @@ async def test_assistant_create_break_returns_success_after_exact_placement(clie
 
 
 @pytest.mark.asyncio
+async def test_planner_exact_move_can_resize_task(client: AsyncClient) -> None:
+    target = origin() + timedelta(days=1)
+    start = target.replace(hour=10, minute=0, second=0, microsecond=0)
+    end = start + timedelta(minutes=60)
+
+    created = await client.post(
+        "/api/intents",
+        json={
+            "title": "Resize me",
+            "kind": "task",
+            "priority": 2,
+            "minutes_per_period": 60,
+            "min_chunk_minutes": 60,
+            "max_chunk_minutes": 60,
+            "max_per_day": 1,
+            "earliest": start.isoformat(),
+            "latest": end.isoformat(),
+            "due": end.isoformat(),
+            "preferred_start_min": 10 * 60,
+            "window_start_min": 10 * 60,
+            "window_end_min": 11 * 60,
+        },
+    )
+    assert created.status_code == 201
+    ident = created.json()["id"]
+
+    new_start = target.replace(hour=12, minute=0, second=0, microsecond=0)
+    new_end = new_start + timedelta(minutes=30)
+    moved = await client.post(
+        f"/api/intents/{ident}/move",
+        json={"start": new_start.isoformat(), "end": new_end.isoformat()},
+    )
+    assert moved.status_code == 200
+
+    intents = (await client.get("/api/intents")).json()
+    resized = next(item for item in intents if item["id"] == ident)
+    assert resized["minutes_per_period"] == 30
+    assert resized["min_chunk_minutes"] == 30
+    assert resized["max_chunk_minutes"] == 30
+
+    plan = (await client.get("/api/plan")).json()
+    block = next(item for item in plan["blocks"] if item["intent_id"] == ident)
+    assert datetime.fromisoformat(block["start"]) == new_start
+    assert datetime.fromisoformat(block["end"]) == new_end
+
+
+@pytest.mark.asyncio
+async def test_assistant_can_retime_and_resize_existing_task(client: AsyncClient) -> None:
+    target = origin() + timedelta(days=1)
+    start = target.replace(hour=9, minute=0, second=0, microsecond=0)
+    end = start + timedelta(minutes=60)
+
+    created = await client.post(
+        "/api/intents",
+        json={
+            "title": "Assistant resize",
+            "kind": "task",
+            "priority": 2,
+            "minutes_per_period": 60,
+            "min_chunk_minutes": 60,
+            "max_chunk_minutes": 60,
+            "max_per_day": 1,
+            "earliest": start.isoformat(),
+            "latest": end.isoformat(),
+            "due": end.isoformat(),
+            "preferred_start_min": 9 * 60,
+            "window_start_min": 9 * 60,
+            "window_end_min": 10 * 60,
+        },
+    )
+    assert created.status_code == 201
+    ident = created.json()["id"]
+
+    response = await client.post(
+        "/api/assistant/execute",
+        json={
+            "actions": [
+                {
+                    "action": "reschedule_task",
+                    "intent_id": ident,
+                    "date": target.date().isoformat(),
+                    "start_min": 10 * 60 + 30,
+                    "minutes": 30,
+                }
+            ]
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success_count"] == 1
+    assert body["results"][0]["status"] == "done"
+
+    plan = (await client.get("/api/plan")).json()
+    block = next(item for item in plan["blocks"] if item["intent_id"] == ident)
+    actual_start = datetime.fromisoformat(block["start"])
+    actual_end = datetime.fromisoformat(block["end"])
+    assert (actual_start.hour, actual_start.minute) == (10, 30)
+    assert (actual_end.hour, actual_end.minute) == (11, 0)
+
+
+@pytest.mark.asyncio
 async def test_assistant_swaps_two_scheduled_tasks_atomically(client: AsyncClient) -> None:
     target = origin() + timedelta(days=1)
     first_start = target.replace(hour=9, minute=0, second=0, microsecond=0)
