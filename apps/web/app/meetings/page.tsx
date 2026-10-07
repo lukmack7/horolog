@@ -15,7 +15,7 @@ import {
   type Intent,
   type Priority,
 } from "@/app/lib/api";
-import { Plus, Trash2, AlertTriangle, Video } from "lucide-react";
+import { Plus, Trash2, AlertTriangle, Video, Pencil, Check, X } from "lucide-react";
 
 interface BusyRow {
   start: string;
@@ -34,6 +34,10 @@ export default function Meetings() {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editPriority, setEditPriority] = useState<Priority>(2);
+  const [editSaving, setEditSaving] = useState(false);
 
   const [title, setTitle] = useState("");
   const [minutes, setMinutes] = useState(30);
@@ -110,6 +114,33 @@ export default function Meetings() {
 
   function updateRow(index: number, patch: Partial<BusyRow>) {
     setRows((prev) => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+  }
+
+  function beginEdit(meeting: Intent) {
+    setEditingId(meeting.id);
+    setEditTitle(meeting.title);
+    setEditPriority(meeting.priority as Priority);
+    setError(null);
+  }
+
+  async function saveEdit(meeting: Intent) {
+    const nextTitle = editTitle.trim();
+    if (!nextTitle || editSaving) return;
+
+    setEditSaving(true);
+    setError(null);
+    try {
+      await api.patchIntent(meeting.id, {
+        title: nextTitle,
+        priority: editPriority,
+      });
+      setEditingId(null);
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not update that meeting.");
+    } finally {
+      setEditSaving(false);
+    }
   }
 
   return (
@@ -295,35 +326,82 @@ export default function Meetings() {
                   <span className="shrink-0 text-accent">
                     <Glyph kind={meeting.kind} size={18} />
                   </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[15px] font-semibold text-fg">{meeting.title}</div>
-                    <div className="tabular mt-1 text-[12.5px] font-medium text-fg-muted">
-                      {formatDuration(meeting.minutes_per_period)} ·{" "}
-                      {ranges > 0 ? `${ranges} attendee range${ranges === 1 ? "" : "s"} avoided` : "no attendee ranges"}
-                    </div>
-                    {meeting.zoom_join_url && (
-                      <a
-                        href={meeting.zoom_join_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-1.5 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-accent hover:underline"
-                      >
-                        <Video size={13} />
-                        Join Zoom
-                      </a>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      await api.remove(meeting.id);
-                      await load();
-                    }}
-                    aria-label={`Remove ${meeting.title}`}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-fg-subtle opacity-0 transition-all duration-150 hover:bg-red-50 hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
-                  >
-                    <Trash2 size={15} />
-                  </button>
+                  {editingId === meeting.id ? (
+                    <>
+                      <div className="min-w-0 flex-1 space-y-3">
+                        <input
+                          value={editTitle}
+                          onChange={(e) => setEditTitle(e.target.value)}
+                          className="h-10 w-full rounded-xl border border-black/[0.08] bg-bg px-3.5 text-[14px] font-semibold outline-none focus:border-accent"
+                          aria-label={t("Meeting Title")}
+                          autoFocus
+                        />
+                        <PriorityPicker value={editPriority} onChange={setEditPriority} />
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => void saveEdit(meeting)}
+                          disabled={!editTitle.trim() || editSaving}
+                          aria-label={t("Save")}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg text-accent transition-colors hover:bg-accent/10 disabled:opacity-40"
+                        >
+                          <Check size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingId(null)}
+                          disabled={editSaving}
+                          aria-label={t("Cancel")}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg text-fg-subtle transition-colors hover:bg-sunk"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[15px] font-semibold text-fg">{meeting.title}</div>
+                        <div className="tabular mt-1 text-[12.5px] font-medium text-fg-muted">
+                          {formatDuration(meeting.minutes_per_period)} ·{" "}
+                          {ranges > 0 ? `${ranges} attendee range${ranges === 1 ? "" : "s"} avoided` : "no attendee ranges"}
+                        </div>
+                        {meeting.zoom_join_url && (
+                          <a
+                            href={meeting.zoom_join_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-1.5 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-accent hover:underline"
+                          >
+                            <Video size={13} />
+                            Join Zoom
+                          </a>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => beginEdit(meeting)}
+                          aria-label={`Edit ${meeting.title}`}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg text-fg-subtle opacity-0 transition-all duration-150 hover:bg-sunk hover:text-fg focus-visible:opacity-100 group-hover:opacity-100"
+                        >
+                          <Pencil size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await api.remove(meeting.id);
+                            await load();
+                          }}
+                          aria-label={`Remove ${meeting.title}`}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg text-fg-subtle opacity-0 transition-all duration-150 hover:bg-red-50 hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </li>
               );
             })}
