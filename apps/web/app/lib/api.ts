@@ -233,6 +233,23 @@ export interface UserPreferences {
   preferred_workday_end_min: number;
 }
 
+export interface NotificationPreferences {
+  task_enabled: boolean;
+  task_minutes_before: number;
+  task_at_start: boolean;
+
+  meeting_enabled: boolean;
+  meeting_minutes_before: number;
+  meeting_at_start: boolean;
+
+  deadline_enabled: boolean;
+  deadline_days_before: number;
+  deadline_time_min: number;
+
+  end_of_day_enabled: boolean;
+  end_of_day_time_min: number;
+}
+
 
 export interface DailyWindow {
   start_min: number;
@@ -328,6 +345,13 @@ export const api = {
   settings: () => request<UserPreferences>("/api/settings"),
   saveSettings: (body: UserPreferences) =>
     request<UserPreferences>("/api/settings", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  notificationSettings: () =>
+    request<NotificationPreferences>("/api/settings/notifications"),
+  saveNotificationSettings: (body: NotificationPreferences) =>
+    request<NotificationPreferences>("/api/settings/notifications", {
       method: "PUT",
       body: JSON.stringify(body),
     }),
