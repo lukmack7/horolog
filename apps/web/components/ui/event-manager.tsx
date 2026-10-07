@@ -1486,6 +1486,7 @@ function WeekView({
   onDrop: (date: Date, hour: number, eventId?: string) => void
   getColorClasses: (color: string) => { bg: string; text: string }
 }) {
+  const { t, language } = useLanguage();
   const startOfWeek = new Date(currentDate)
   const mondayOffset = (currentDate.getDay() + 6) % 7
   startOfWeek.setDate(currentDate.getDate() - mondayOffset)
@@ -1735,6 +1736,7 @@ function ListView({
   onEventClick: (event: Event) => void
   getColorClasses: (color: string) => { bg: string; text: string }
 }) {
+  const { t, language } = useLanguage();
   const sortedEvents = [...events].sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
 
   const groupedEvents = sortedEvents.reduce(
