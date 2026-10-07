@@ -30,7 +30,12 @@ from sse_starlette.sse import EventSourceResponse
 
 from horolog import oauth
 from horolog.analytics import Analytics, analyse
-from horolog.assistant import AssistantAction, AssistantMessage, converse
+from horolog.assistant import (
+    AssistantAction,
+    AssistantMessage,
+    converse,
+    suggest_todo_item,
+)
 from horolog.capture import capture, capture_daily_actions, to_payload
 from horolog.db import (
     BusyRow,
@@ -750,6 +755,38 @@ async def create_todo(
     db.add(row)
     await db.commit()
     return _todo_dict(row)
+
+
+@app.post("/api/todos/{todo_id}/suggest")
+async def suggest_todo(
+    todo_id: str,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    row = await db.get(TodoInboxRow, todo_id)
+    if row is None or row.assigned_at is not None:
+        raise HTTPException(status_code=404, detail="todo item not found")
+
+    category = (
+        WorkCategory(row.category)
+        if row.category in {item.value for item in WorkCategory}
+        else None
+    )
+    try:
+        suggestion = await suggest_todo_item(
+            title=row.title,
+            current_minutes=row.minutes,
+            current_category=category,
+            current_deadline_date=row.deadline_date,
+        )
+    except ExtractionFailed as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (ProviderError, httpx.HTTPError, RuntimeError) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"language model unreachable: {exc}",
+        ) from exc
+
+    return suggestion.model_dump(mode="json")
 
 
 @app.patch("/api/todos/{todo_id}")
