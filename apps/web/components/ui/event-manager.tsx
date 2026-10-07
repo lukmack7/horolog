@@ -1054,6 +1054,13 @@ export function EventManager({
                       {trackingStats.sessions > 1
                         ? ` · średnio ${Math.round(trackingStats.average_seconds / 60)} min`
                         : ""}
+                      {trackingStats.similar_sessions >= 2 && (
+                        <span className="mt-1 block font-semibold text-violet-700">
+                          Podobne zadania: średnio{" "}
+                          {Math.round(trackingStats.similar_average_seconds / 60)} min
+                          {" · "}sugeruj {trackingStats.suggested_minutes} min
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
