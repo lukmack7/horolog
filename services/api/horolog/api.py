@@ -358,6 +358,7 @@ class DailyMeetingConfirmIn(BaseModel):
     start_min: int = Field(ge=0, lt=24 * 60)
     minutes: int = Field(default=30, gt=0, le=480)
     priority: Priority = Priority.P2
+    category: WorkCategory | None = None
 
 
 class DailyItemIn(BaseModel):
@@ -1051,6 +1052,7 @@ async def confirm_daily_meeting(
         title=body.title,
         kind=IntentKind.MEETING,
         priority=body.priority,
+        category=body.category,
         minutes_per_period=minutes,
         period_days=None,
         min_chunk_minutes=minutes,
@@ -1446,6 +1448,7 @@ async def _execute_assistant_action(
                 title=action.title,
                 kind=IntentKind.TASK,
                 priority=Priority(action.quadrant),
+                category=action.category,
                 minutes_per_period=minutes,
                 min_chunk_minutes=minutes,
                 max_chunk_minutes=minutes,
@@ -1516,15 +1519,22 @@ async def _execute_assistant_action(
             db,
         )
 
-        # A preferred time is a hint, not a promise. Keep the ordinary flexible
-        # task semantics but preserve the preference on the linked intent.
-        if action.start_min is not None and action.start_mode == "preferred" and item.get("intent_id"):
+        # A preferred time is a hint, not a promise. Category is descriptive
+        # metadata only. Preserve either on the linked intent without changing
+        # scheduling priority.
+        if item.get("intent_id") and (
+            (action.start_min is not None and action.start_mode == "preferred")
+            or action.category is not None
+        ):
             intent_row = await db.get(IntentRow, item["intent_id"])
             if intent_row is not None:
                 intent = Intent.model_validate(intent_row.payload)
-                intent_row.payload = intent.model_copy(
-                    update={"preferred_start_min": action.start_min}
-                ).model_dump(mode="json")
+                updates: dict[str, Any] = {}
+                if action.start_min is not None and action.start_mode == "preferred":
+                    updates["preferred_start_min"] = action.start_min
+                if action.category is not None:
+                    updates["category"] = action.category
+                intent_row.payload = intent.model_copy(update=updates).model_dump(mode="json")
                 await db.commit()
                 await _replan(db)
 
@@ -1559,6 +1569,7 @@ async def _execute_assistant_action(
             title=title,
             kind=IntentKind.BUFFER,
             priority=Priority.P1,
+            category=action.category,
             minutes_per_period=minutes,
             min_chunk_minutes=minutes,
             max_chunk_minutes=minutes,
@@ -1613,6 +1624,7 @@ async def _execute_assistant_action(
                 start_min=action.start_min,
                 minutes=action.minutes,
                 priority=Priority.P2,
+                category=action.category,
             ),
             db,
         )
