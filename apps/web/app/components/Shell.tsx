@@ -72,6 +72,11 @@ export function Shell({
       setPulse(true);
       setTimeout(() => setPulse(false), 1200);
       onPlanChange?.();
+      (
+        window as Window & {
+          HorologAndroid?: { refreshNotifications?: () => void };
+        }
+      ).HorologAndroid?.refreshNotifications?.();
     });
     // The browser retries a dropped SSE connection on its own, so this isn't
     // a fatal error — but the "Engine steady" dot was previously static and
