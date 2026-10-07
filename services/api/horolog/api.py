@@ -3009,6 +3009,46 @@ async def time_tracking_stats(
     ).scalars().all()
     total = sum(row.accumulated_seconds for row in rows)
     intent = Intent.model_validate(intent_row.payload)
+
+    all_intent_rows = (await db.execute(select(IntentRow))).scalars().all()
+    similar_ids: list[str] = []
+    normalized_title = intent.title.strip().casefold()
+    for candidate_row in all_intent_rows:
+        candidate = Intent.model_validate(candidate_row.payload)
+        if candidate.title.strip().casefold() != normalized_title:
+            continue
+        if candidate.category != intent.category:
+            continue
+        similar_ids.append(candidate.id)
+
+    similar_rows = (
+        (
+            await db.execute(
+                select(TimeEntryRow).where(
+                    TimeEntryRow.intent_id.in_(similar_ids),
+                    TimeEntryRow.status == "stopped",
+                )
+            )
+        ).scalars().all()
+        if similar_ids
+        else []
+    )
+    similar_total = sum(row.accumulated_seconds for row in similar_rows)
+    similar_average = (
+        round(similar_total / len(similar_rows))
+        if similar_rows
+        else 0
+    )
+    suggested_minutes = (
+        max(
+            SLOT_MINUTES,
+            ((round(similar_average / 60) + SLOT_MINUTES - 1) // SLOT_MINUTES)
+            * SLOT_MINUTES,
+        )
+        if similar_average
+        else intent.minutes_per_period
+    )
+
     return {
         "intent_id": intent_id,
         "title": intent.title,
@@ -3016,6 +3056,9 @@ async def time_tracking_stats(
         "sessions": len(rows),
         "total_seconds": total,
         "average_seconds": round(total / len(rows)) if rows else 0,
+        "similar_sessions": len(similar_rows),
+        "similar_average_seconds": similar_average,
+        "suggested_minutes": suggested_minutes,
     }
 
 
