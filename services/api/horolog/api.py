@@ -717,8 +717,8 @@ def _todo_dict(row: TodoInboxRow) -> dict[str, Any]:
         "minutes": row.minutes,
         "category": row.category,
         "deadline_date": row.deadline_date,
-        "created_at": row.created_at.isoformat(),
-        "updated_at": row.updated_at.isoformat(),
+        "created_at": _stable_iso(row.created_at),
+        "updated_at": _stable_iso(row.updated_at),
     }
 
 
@@ -1857,8 +1857,17 @@ async def create_intent(body: IntentIn, db: AsyncSession = Depends(session)) -> 
     return intent.model_dump(mode="json")
 
 
+def _stable_iso(value: datetime) -> str:
+    normalized = (
+        value.replace(tzinfo=UTC)
+        if value.tzinfo is None
+        else value.astimezone(UTC)
+    )
+    return normalized.isoformat()
+
+
 def _iso_or_none(value: datetime | None) -> str | None:
-    return value.isoformat() if value is not None else None
+    return _stable_iso(value) if value is not None else None
 
 
 def _dt_or_none(value: str | None) -> datetime | None:
@@ -1881,7 +1890,7 @@ async def _planning_snapshot(db: AsyncSession) -> dict[str, Any]:
             {
                 "id": row.id,
                 "payload": row.payload,
-                "created_at": row.created_at.isoformat(),
+                "created_at": _stable_iso(row.created_at),
             }
             for row in intents
         ],
@@ -1891,8 +1900,8 @@ async def _planning_snapshot(db: AsyncSession) -> dict[str, Any]:
                 "win_condition": row.win_condition,
                 "first_step": row.first_step,
                 "closed_at": _iso_or_none(row.closed_at),
-                "created_at": row.created_at.isoformat(),
-                "updated_at": row.updated_at.isoformat(),
+                "created_at": _stable_iso(row.created_at),
+                "updated_at": _stable_iso(row.updated_at),
             }
             for row in daily_plans
         ],
@@ -1909,7 +1918,7 @@ async def _planning_snapshot(db: AsyncSession) -> dict[str, Any]:
                 "schedule_enabled": row.schedule_enabled,
                 "completed_at": _iso_or_none(row.completed_at),
                 "cancelled_at": _iso_or_none(row.cancelled_at),
-                "created_at": row.created_at.isoformat(),
+                "created_at": _stable_iso(row.created_at),
             }
             for row in daily_items
         ],
@@ -1925,7 +1934,7 @@ async def _planning_snapshot(db: AsyncSession) -> dict[str, Any]:
                 "item_id": row.item_id,
                 "defer_until": row.defer_until,
                 "acknowledged_date": row.acknowledged_date,
-                "updated_at": row.updated_at.isoformat(),
+                "updated_at": _stable_iso(row.updated_at),
             }
             for row in daily_decisions
         ],
@@ -1938,7 +1947,7 @@ async def _planning_snapshot(db: AsyncSession) -> dict[str, Any]:
                 "learned": row.learned,
                 "improve_tomorrow": row.improve_tomorrow,
                 "first_step_morning": row.first_step_morning,
-                "updated_at": row.updated_at.isoformat(),
+                "updated_at": _stable_iso(row.updated_at),
             }
             for row in daily_reviews
         ],
@@ -1950,8 +1959,8 @@ async def _planning_snapshot(db: AsyncSession) -> dict[str, Any]:
                 "category": row.category,
                 "deadline_date": row.deadline_date,
                 "assigned_at": _iso_or_none(row.assigned_at),
-                "created_at": row.created_at.isoformat(),
-                "updated_at": row.updated_at.isoformat(),
+                "created_at": _stable_iso(row.created_at),
+                "updated_at": _stable_iso(row.updated_at),
             }
             for row in todos
         ],
@@ -3035,7 +3044,7 @@ async def assistant_execute(
 
 
 def _utc_aware(value: datetime) -> datetime:
-    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+    return datetime.fromisoformat(_stable_iso(value))
 
 
 def _time_entry_elapsed(row: TimeEntryRow, now: datetime | None = None) -> int:
@@ -3400,7 +3409,7 @@ async def change_history(
             "source": row.source,
             "title": row.title,
             "summary": row.summary,
-            "created_at": row.created_at.isoformat(),
+            "created_at": _stable_iso(row.created_at),
             "undone_at": _iso_or_none(row.undone_at),
             "can_undo": (
                 row.undone_at is None
