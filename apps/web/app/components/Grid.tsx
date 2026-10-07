@@ -8,8 +8,12 @@ import { Clock, Calendar, MoveRight } from "lucide-react";
 
 const DAY_START_H = 7;
 const DAY_END_H = 21;
-const PX_PER_HOUR = 60;
-const HEIGHT = (DAY_END_H - DAY_START_H) * PX_PER_HOUR;
+const SLOT_MINUTES = 15;
+const PX_PER_SLOT = 24;
+const SLOTS_PER_HOUR = 60 / SLOT_MINUTES;
+const PX_PER_HOUR = PX_PER_SLOT * SLOTS_PER_HOUR;
+const SLOT_COUNT = (DAY_END_H - DAY_START_H) * SLOTS_PER_HOUR;
+const HEIGHT = SLOT_COUNT * PX_PER_SLOT;
 
 /** `PRIORITY_TINT` doubles as the block's border-left rule (and its Glyph's
  *  color) — it's already four accent weights, exactly what a rule needs. */
@@ -38,7 +42,11 @@ function offsetPx(iso: string): number {
 }
 
 function clock(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 }
 
 export interface GridProps {
@@ -54,10 +62,14 @@ export interface GridProps {
  *  dashed borders for relocated tasks, and soft-edge scroll container masks.
  */
 export function Grid({ days, blocks, busy, selected, onSelect }: GridProps) {
-  const hours = Array.from(
-    { length: DAY_END_H - DAY_START_H },
-    (_, i) => DAY_START_H + i,
-  );
+  const slots = Array.from({ length: SLOT_COUNT }, (_, index) => {
+    const minuteOfDay = DAY_START_H * 60 + index * SLOT_MINUTES;
+    return {
+      index,
+      hour: Math.floor(minuteOfDay / 60),
+      minute: minuteOfDay % 60,
+    };
+  });
   const todayStr = new Date().toDateString();
   const todayKey = new Date().toISOString().slice(0, 10);
 
@@ -109,18 +121,33 @@ export function Grid({ days, blocks, busy, selected, onSelect }: GridProps) {
         <div className="flex">
           {/* Time Rail */}
           <div className={singleDay ? "w-12 shrink-0 border-r border-black/[0.06] bg-sunk/30 sm:w-14" : "w-14 shrink-0 border-r border-black/[0.06] bg-sunk/30"}>
-            {hours.map((hour) => (
-              <div
-                key={hour}
-                style={{ height: PX_PER_HOUR }}
-                className="relative border-b border-black/[0.04] last:border-b-0"
-              >
-                <span className="tabular absolute -top-2.5 right-2 rounded bg-surface/90 px-1 py-0.5 text-[10.5px] font-medium text-fg-muted backdrop-blur-sm">
-                  {hour % 12 === 0 ? 12 : hour % 12}
-                  {hour < 12 ? "a" : "p"}
-                </span>
-              </div>
-            ))}
+            {slots.map(({ index, hour, minute }) => {
+              const major = minute === 0;
+              const half = minute === 30;
+              return (
+                <div
+                  key={index}
+                  style={{ height: PX_PER_SLOT }}
+                  className={`relative border-b ${
+                    major
+                      ? "border-black/[0.09]"
+                      : half
+                        ? "border-black/[0.055]"
+                        : "border-black/[0.03]"
+                  }`}
+                >
+                  <span
+                    className={`tabular absolute -top-2 right-1 rounded bg-surface/95 px-1 py-0.5 leading-none backdrop-blur-sm ${
+                      major
+                        ? "text-[10.5px] font-semibold text-fg-muted"
+                        : "text-[8.5px] font-medium text-fg-subtle"
+                    }`}
+                  >
+                    {String(hour).padStart(2, "0")}:{String(minute).padStart(2, "0")}
+                  </span>
+                </div>
+              );
+            })}
           </div>
 
           {/* Grid Columns */}
@@ -136,11 +163,17 @@ export function Grid({ days, blocks, busy, selected, onSelect }: GridProps) {
                 style={{ height: HEIGHT }}
               >
                 {/* Horizontal Guide Lines */}
-                {hours.map((hour) => (
+                {slots.map(({ index, minute }) => (
                   <div
-                    key={hour}
-                    style={{ height: PX_PER_HOUR }}
-                    className="border-b border-black/[0.04] last:border-b-0"
+                    key={index}
+                    style={{ height: PX_PER_SLOT }}
+                    className={`border-b ${
+                      minute === 0
+                        ? "border-black/[0.09]"
+                        : minute === 30
+                          ? "border-black/[0.055]"
+                          : "border-black/[0.03]"
+                    }`}
                   />
                 ))}
 
@@ -160,15 +193,15 @@ export function Grid({ days, blocks, busy, selected, onSelect }: GridProps) {
                 {dayBusy.map((event, i) => {
                   const top = offsetPx(event.start);
                   const height = Math.max(
-                    18,
-                    (minutesBetween(event.start, event.end) / 60) * PX_PER_HOUR,
+                    PX_PER_SLOT,
+                    (minutesBetween(event.start, event.end) / SLOT_MINUTES) * PX_PER_SLOT,
                   );
                   return (
                     <div
                       key={`${event.start}-${i}`}
                       style={{ top, height }}
                       className="absolute inset-x-1 z-0 overflow-hidden rounded-block border border-black/10 bg-slate-100/90 px-2.5 py-1 backdrop-blur-xs"
-                      title={`${event.label || "Busy"} · ${clock(event.start)}`}
+                      title={`${event.label || "Busy"} · ${clock(event.start)}–${clock(event.end)}`}
                     >
                       <div className="truncate text-[11.5px] font-semibold text-slate-700">
                         {event.label || "Busy"}
@@ -187,7 +220,10 @@ export function Grid({ days, blocks, busy, selected, onSelect }: GridProps) {
                   const id = `${block.intent_id}:${block.occurrence}:${block.chunk}`;
                   const minutes = minutesBetween(block.start, block.end);
                   const top = offsetPx(block.start);
-                  const height = Math.max(24, (minutes / 60) * PX_PER_HOUR);
+                  const height = Math.max(
+                    PX_PER_SLOT,
+                    (minutes / SLOT_MINUTES) * PX_PER_SLOT,
+                  );
                   const moved = block.moved_from !== null && block.moved_from !== block.start;
                   const isSelected = selected === id;
 
@@ -246,7 +282,7 @@ export function Grid({ days, blocks, busy, selected, onSelect }: GridProps) {
                         </div>
                         {height > 36 && (
                           <div className="tabular mt-0.5 flex items-center gap-1 truncate text-[10px] font-medium text-fg-muted">
-                            <span>{clock(block.start)}</span>
+                            <span>{clock(block.start)}–{clock(block.end)}</span>
                             <span>·</span>
                             <span>{formatDuration(minutes)}</span>
                           </div>
