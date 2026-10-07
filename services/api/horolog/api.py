@@ -342,17 +342,6 @@ class NotificationPreferencesIn(BaseModel):
     end_of_day_enabled: bool = True
     end_of_day_time_min: int = Field(default=20 * 60 + 30, ge=0, lt=24 * 60)
 
-    @model_validator(mode="after")
-    def _valid_notification_times(self) -> "NotificationPreferencesIn":
-        if self.deadline_time_min % SLOT_MINUTES:
-            raise ValueError(
-                f"deadline reminder time must use {SLOT_MINUTES}-minute increments"
-            )
-        if self.end_of_day_time_min % SLOT_MINUTES:
-            raise ValueError(
-                f"end-of-day reminder time must use {SLOT_MINUTES}-minute increments"
-            )
-        return self
 
 
 class IntentPatchIn(BaseModel):
