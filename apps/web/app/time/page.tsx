@@ -172,9 +172,10 @@ function StatusCard({
   untilNow?: Date;
   loading?: boolean;
 }) {
+  const { t, language } = useLanguage();
   return (
     <div className="rounded-card border border-black/[0.08] bg-surface p-5 shadow-sm">
-      <div className="text-[11px] font-semibold uppercase tracking-wider text-fg-muted">{label}</div>
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-fg-muted">{t(label)}</div>
       {loading ? (
         <div aria-hidden className="mt-2 flex items-center gap-2.5">
           <Skeleton className="h-8 w-8 shrink-0 rounded-full" />
@@ -191,7 +192,7 @@ function StatusCard({
           <div className="min-w-0">
             <div className="truncate text-[15px] font-semibold text-fg">{block.title}</div>
             <div className="tabular mt-0.5 flex items-center gap-1.5 text-[12px] text-fg-muted">
-              <span>{KIND_LABEL[block.kind]}</span>
+              <span>{t(KIND_LABEL[block.kind])}</span>
               <span>·</span>
               <span>
                 {new Date(block.start).toLocaleTimeString(language === "pl" ? "pl-PL" : "en-US", { hour: "numeric", minute: "2-digit" })}
@@ -201,14 +202,14 @@ function StatusCard({
               {untilNow && (
                 <>
                   <span>·</span>
-                  <span>in {formatDuration(minutesBetween(untilNow.toISOString(), block.start))}</span>
+                  <span>{t("in")} {formatDuration(minutesBetween(untilNow.toISOString(), block.start))}</span>
                 </>
               )}
             </div>
           </div>
         </div>
       ) : (
-        <p className="mt-2.5 text-[13.5px] text-fg-muted">{empty}</p>
+        <p className="mt-2.5 text-[13.5px] text-fg-muted">{t(empty)}</p>
       )}
     </div>
   );
