@@ -300,6 +300,8 @@ export const en = {
   "Wyślij": "Send",
   "in": "in",
   "Settings": "Settings",
+  "Additional views": "Additional views",
+  "Planner is the main workspace. These secondary views remain available when you need them.": "Planner is the main workspace. These secondary views remain available when you need them.",
   "Planning preferences": "Planning preferences",
   "Planning preferences, language, calendars and export in one place.": "Planning preferences, language, calendars and export in one place.",
   "Suggested working hours": "Suggested working hours",
