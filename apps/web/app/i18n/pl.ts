@@ -307,7 +307,6 @@ export const pl = {
   "Choose what Planer Horolog should remind you about and when. These settings are shared with the Android app.": "Wybierz, o czym i kiedy Planer Horolog ma przypominać. Te ustawienia są wspólne z aplikacją Android.",
   "Tasks": "Zadania",
   "Remind me before scheduled task blocks.": "Przypominaj przed rozpoczęciem zaplanowanych zadań.",
-  "Meetings": "Spotkania",
   "Remind me before meetings.": "Przypominaj przed spotkaniami.",
   "Before start": "Przed startem",
   "At start time": "W chwili rozpoczęcia",
