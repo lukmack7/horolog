@@ -109,6 +109,53 @@ class NotificationSettingsRow(Base):
     )
 
 
+class ChangeSetRow(Base):
+    """One reversible group of planning changes.
+
+    The single-user app snapshots only planning state, never credentials or
+    settings. Assistant batches are stored as one row so Undo restores the
+    whole user-visible operation rather than individual low-level writes.
+    """
+
+    __tablename__ = "change_sets"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    source: Mapped[str] = mapped_column(String(32), index=True)
+    title: Mapped[str] = mapped_column(String(300))
+    summary: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    before_state: Mapped[dict[str, Any]] = mapped_column(JSON)
+    after_state: Mapped[dict[str, Any]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True
+    )
+    undone_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+
+
+class TimeEntryRow(Base):
+    """One real-work timer session attached to an existing Horolog intent."""
+
+    __tablename__ = "time_entries"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    intent_id: Mapped[str] = mapped_column(String(64), index=True)
+    status: Mapped[str] = mapped_column(String(16), default="running", index=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    last_resumed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    accumulated_seconds: Mapped[int] = mapped_column(Integer, default=0)
+    ended_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
 class OAuthTokenRow(Base):
     """A connected account's access token.
 
