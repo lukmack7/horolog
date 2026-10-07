@@ -140,7 +140,7 @@ export default function Meetings() {
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Weekly sync"
+                placeholder={t("Weekly sync")}
                 className="h-11 w-full rounded-xl border border-black/[0.08] bg-bg px-4 text-[15px] font-medium outline-none transition-colors focus:border-accent"
               />
             </label>
@@ -217,14 +217,14 @@ export default function Meetings() {
                   <input
                     value={row.attendee}
                     onChange={(e) => updateRow(i, { attendee: e.target.value })}
-                    placeholder="attendee (optional)"
+                    placeholder={t("attendee (optional)")}
                     className="h-10 w-36 rounded-xl border border-black/[0.08] bg-bg px-3 text-[13px] font-medium outline-none focus:border-accent"
                   />
                   <button
                     type="button"
                     onClick={() => setRows((prev) => prev.filter((_, idx) => idx !== i))}
                     disabled={rows.length === 1}
-                    aria-label="Remove range"
+                    aria-label={t("Remove range")}
                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-fg-subtle transition-colors hover:bg-red-50 hover:text-danger disabled:opacity-30"
                   >
                     <Trash2 size={15} />
@@ -276,7 +276,7 @@ export default function Meetings() {
         ) : meetings.length === 0 ? (
           <div className="rounded-card border border-black/[0.06] bg-surface p-10 text-center shadow-sm">
             <p className="text-[14px] font-semibold text-fg">{t("No smart meetings yet")}</p>
-            <p className="mt-1 text-[13px] text-fg-muted">Configure one above, with or without attendee ranges.</p>
+            <p className="mt-1 text-[13px] text-fg-muted">{t("Configure one above, with or without attendee ranges.")}</p>
           </div>
         ) : (
           <ul className="space-y-3">
