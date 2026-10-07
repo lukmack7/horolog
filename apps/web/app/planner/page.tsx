@@ -17,6 +17,7 @@ import {
   type Busy,
   type IntentKind,
   type Priority,
+  type TimeTrackingEntry,
 } from "@/app/lib/api";
 import { EventManager, type Event } from "@/components/ui/event-manager";
 import Link from "next/link";
