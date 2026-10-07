@@ -6,17 +6,32 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Calendar,
+  Clock,
+  Inbox,
+  RotateCcw,
+  Users,
+  BarChart3,
   Settings2,
   Sparkles,
   Command,
   Activity,
   Hexagon,
+  MoreHorizontal,
+  X,
+  ChevronRight,
+  BookOpenCheck,
 } from "lucide-react";
 import { CommandBar } from "@/app/components/CommandBar";
 import { useLanguage } from "@/app/components/LanguageProvider";
 
 const NAV = [
+  { href: "/time", label: "Time", icon: Clock },
   { href: "/planner", label: "Planner", icon: Calendar },
+  { href: "/daily", label: "Daily", icon: BookOpenCheck },
+  { href: "/habits", label: "Habits", icon: RotateCcw },
+  { href: "/inbox", label: "Task inbox", icon: Inbox },
+  { href: "/meetings", label: "Meetings", icon: Users },
+  { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/settings", label: "Settings", icon: Settings2 },
 ] as const;
 
@@ -36,6 +51,7 @@ export function Shell({
   const [commandOpen, setCommandOpen] = useState(false);
   const [pulse, setPulse] = useState(false);
   const [live, setLive] = useState(true);
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -155,21 +171,90 @@ export function Shell({
 
       {/* Mobile-only capture button. Keep it above the bottom navigation and
           away from the device safe area. */}
-      <button
-        type="button"
-        onClick={() => setCommandOpen(true)}
-        aria-label={t("Ask Horolog")}
-        className="fixed bottom-20 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-accent text-on-accent shadow-pop transition-transform active:scale-95 lg:hidden"
-      >
-        <Sparkles size={20} />
-      </button>
+      {!mobileMoreOpen && (
+        <button
+          type="button"
+          onClick={() => setCommandOpen(true)}
+          aria-label={t("Ask Horolog")}
+          className="fixed bottom-20 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-accent text-on-accent shadow-pop transition-transform active:scale-95 lg:hidden"
+        >
+          <Sparkles size={20} />
+        </button>
+      )}
 
-      {/* Mobile Nav — Planner is the app; Settings is the only secondary destination. */}
+      {/* Mobile secondary navigation: compact, opaque action sheet. */}
+      {mobileMoreOpen && (
+        <>
+          <button
+            type="button"
+            aria-label={t("Close more navigation")}
+            onClick={() => setMobileMoreOpen(false)}
+            className="fixed inset-0 z-30 bg-black/20 lg:hidden"
+          />
+          <div
+            className="fixed left-3 right-3 z-40 rounded-[24px] border border-black/[0.08] p-3 shadow-2xl lg:hidden"
+            style={{
+              bottom: "calc(4.5rem + env(safe-area-inset-bottom))",
+              backgroundColor: "#ffffff",
+            }}
+            role="dialog"
+            aria-modal="true"
+            aria-label={t("More navigation")}
+          >
+            <div className="mb-2 flex items-center justify-between px-1">
+              <div className="flex items-center gap-2">
+                <MoreHorizontal size={18} className="text-muted-foreground" />
+                <span className="text-[13px] font-semibold text-foreground">{t("More")}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileMoreOpen(false)}
+                aria-label={t("Close")}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <nav
+              className="overflow-hidden rounded-2xl border border-black/[0.07]"
+              style={{ backgroundColor: "#ffffff" }}
+            >
+              {NAV.slice(4).map((item, index) => {
+                const active = pathname === item.href;
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMobileMoreOpen(false)}
+                    className={`flex h-[54px] items-center gap-3 px-3.5 transition-colors ${
+                      index > 0 ? "border-t border-black/[0.06]" : ""
+                    } ${
+                      active
+                        ? "bg-secondary font-semibold text-foreground"
+                        : "text-foreground hover:bg-secondary/60"
+                    }`}
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-secondary text-foreground">
+                      <Icon size={17} />
+                    </span>
+                    <span className="min-w-0 flex-1 text-[13px] font-medium">{t(item.label)}</span>
+                    <ChevronRight size={15} className="shrink-0 text-muted-foreground" />
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
+        </>
+      )}
+
+      {/* Mobile Nav */}
       <div
-        className="fixed bottom-0 left-0 right-0 z-40 grid h-16 grid-cols-2 border-t border-border bg-white px-1 lg:hidden"
+        className="fixed bottom-0 left-0 right-0 z-40 grid h-16 grid-cols-5 border-t border-border bg-white px-1 lg:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        {NAV.map((item) => {
+        {NAV.slice(0, 4).map((item) => {
           const active = pathname === item.href;
           const Icon = item.icon;
           return (
@@ -185,6 +270,19 @@ export function Shell({
             </Link>
           );
         })}
+        <button
+          type="button"
+          onClick={() => setMobileMoreOpen((open) => !open)}
+          aria-expanded={mobileMoreOpen}
+          className={`flex min-w-0 flex-col items-center justify-center gap-0.5 px-1 ${
+            mobileMoreOpen || NAV.slice(4).some((item) => pathname === item.href)
+              ? "font-semibold text-foreground"
+              : "text-muted-foreground"
+          }`}
+        >
+          <MoreHorizontal size={20} />
+          <span className="text-[9.5px] leading-tight">{t("More")}</span>
+        </button>
       </div>
 
       <main id="main" className="min-w-0 flex-1 overflow-x-hidden pb-24 lg:overflow-visible lg:pb-0">{children}</main>
