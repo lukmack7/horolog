@@ -253,8 +253,11 @@ export function Shell({
 
       {/* Mobile Nav */}
       <div
-        className="fixed bottom-0 left-0 right-0 z-40 grid h-16 grid-cols-5 border-t border-border bg-white px-1 lg:hidden"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        className="fixed bottom-0 left-0 right-0 z-40 grid grid-cols-5 border-t border-border bg-white/98 px-1 shadow-[0_-8px_24px_rgba(0,0,0,0.06)] backdrop-blur lg:hidden"
+        style={{
+          height: "calc(4rem + max(8px, env(safe-area-inset-bottom)))",
+          paddingBottom: "max(8px, env(safe-area-inset-bottom))",
+        }}
       >
         {NAV.slice(0, 4).map((item) => {
           const active = pathname === item.href;
@@ -287,7 +290,13 @@ export function Shell({
         </button>
       </div>
 
-      <main id="main" className="min-w-0 flex-1 overflow-x-hidden pb-24 lg:overflow-visible lg:pb-0">{children}</main>
+      <main
+        id="main"
+        className="min-w-0 flex-1 overflow-x-hidden lg:overflow-visible lg:pb-0"
+        style={{ paddingBottom: "calc(6rem + env(safe-area-inset-bottom))" }}
+      >
+        {children}
+      </main>
       <CommandBar
         open={commandOpen}
         onClose={() => setCommandOpen(false)}
