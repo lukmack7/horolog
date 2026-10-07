@@ -235,7 +235,7 @@ export function CommandBar({
     {
       role: "assistant",
       content:
-        "Co chcesz zaplanować albo zmienić? Mogę dopytać o szczegóły, sprawdzić obecny plan i dopiero po Twoim potwierdzeniu wykonać zmiany.",
+        "Co chcesz zaplanować albo zmienić? Użyj @, aby wskazać konkretny wpis z dziś/jutra, oraz #, aby wskazać kategorię. Niczego nie zmienię bez Twojego potwierdzenia.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -517,7 +517,7 @@ export function CommandBar({
       {
         role: "assistant",
         content:
-          "Nowa rozmowa. Co chcesz zaplanować, przełożyć albo uporządkować?",
+          "Nowa rozmowa. Możesz użyć @ do wskazania wpisu z planu i # do wskazania kategorii.",
       },
     ]);
     setPendingActions([]);
