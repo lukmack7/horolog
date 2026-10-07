@@ -163,6 +163,8 @@ export const en = {
   "End Time": "End Time",
   "Category": "Category",
   "Type": "Type",
+  "Types": "Types",
+  "Filter by Type": "Filter by Type",
   "Select type": "Select type",
   "No category": "No category",
   "Color": "Color",
