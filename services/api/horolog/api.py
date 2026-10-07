@@ -2719,6 +2719,28 @@ async def patch_intent(
         updates["priority"] = body.priority
     if "category" in body.model_fields_set:
         updates["category"] = body.category
+    if "deadline_date" in body.model_fields_set:
+        if body.deadline_date is None:
+            # Remove the solver bound only when it came from the previous
+            # explicit deadline. Other due constraints must survive.
+            old_deadline_slot = (
+                to_slot(_deadline_end(intent.deadline_date), origin())
+                if intent.deadline_date
+                else None
+            )
+            updates["deadline_date"] = None
+            if old_deadline_slot is not None and intent.due_slot == old_deadline_slot:
+                updates["due_slot"] = None
+        else:
+            deadline_end = _deadline_end(body.deadline_date)
+            deadline_slot = to_slot(deadline_end, origin())
+            if intent.earliest_slot is not None and deadline_slot <= intent.earliest_slot:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Maksymalny deadline musi być późniejszy niż początek dostępności zadania.",
+                )
+            updates["deadline_date"] = body.deadline_date
+            updates["due_slot"] = deadline_slot
 
     if not updates:
         return intent.model_dump(mode="json")
@@ -2728,8 +2750,8 @@ async def patch_intent(
     await db.commit()
 
     # Title/category are metadata only and must never reshuffle the calendar.
-    # Priority is the only safe patch field here that changes placement order.
-    if body.priority is not None:
+    # Priority and deadline can change legal placement and require a re-solve.
+    if body.priority is not None or "deadline_date" in body.model_fields_set:
         await _replan(db)
 
     return updated.model_dump(mode="json")
