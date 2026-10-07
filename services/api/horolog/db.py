@@ -69,6 +69,19 @@ class PlanRow(Base):
     )
 
 
+class UserSettingsRow(Base):
+    """Persistent single-user preferences editable from the Settings page."""
+
+    __tablename__ = "user_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    preferred_workday_start_min: Mapped[int | None] = mapped_column(Integer, default=None)
+    preferred_workday_end_min: Mapped[int | None] = mapped_column(Integer, default=None)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
 class OAuthTokenRow(Base):
     """A connected account's access token.
 
