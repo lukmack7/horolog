@@ -1692,41 +1692,85 @@ async def _execute_assistant_action(
         }
 
     if action.action == "reschedule_task":
-        if not action.intent_id or not action.date:
-            raise HTTPException(status_code=422, detail="reschedule_task proposal is incomplete")
+        if not action.intent_id:
+            raise HTTPException(status_code=422, detail="reschedule_task needs intent_id")
+
         row = await db.get(IntentRow, action.intent_id)
         if row is None:
             raise HTTPException(status_code=404, detail=f"no intent {action.intent_id!r}")
+
         intent = Intent.model_validate(row.payload)
-        if intent.period_days is not None or intent.kind != IntentKind.TASK:
-            raise HTTPException(status_code=422, detail="only one-shot tasks can be rescheduled")
-        target = _daily_date(action.date)
+        if (
+            intent.period_days is not None
+            or intent.kind != IntentKind.TASK
+            or intent.completed_at is not None
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="only active one-shot tasks can be rescheduled",
+            )
+
+        current_plan = await load_previous_plan(db) or await _replan(db)
+        current_blocks = [
+            block for block in current_plan.blocks if block.intent_id == intent.id
+        ]
+        if len(current_blocks) != 1:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Mogę edytować godzinę lub długość tylko zadania, które ma "
+                    "jeden aktualnie zaplanowany blok."
+                ),
+            )
+
+        base = origin()
+        zone = settings().zone
+        current_start = from_slot(current_blocks[0].start_slot, base).astimezone(zone)
+
+        target_day = (
+            _daily_date(action.date)
+            if action.date is not None
+            else current_start.replace(hour=0, minute=0, second=0, microsecond=0)
+        )
         start_min = (
             action.start_min
             if action.start_min is not None
-            else (
-                intent.preferred_start_min
-                if intent.preferred_start_min is not None
-                else settings().workday_start_min
-            )
+            else current_start.hour * 60 + current_start.minute
         )
-        start = target.replace(
+        duration_minutes = (
+            max(SLOT_MINUTES, minutes_to_slots(action.minutes) * SLOT_MINUTES)
+            if action.minutes is not None
+            else intent.minutes_per_period
+        )
+
+        start = target_day.replace(
             hour=start_min // 60,
             minute=start_min % 60,
             second=0,
             microsecond=0,
         )
-        end = start + timedelta(minutes=intent.minutes_per_period)
+        end = start + timedelta(minutes=duration_minutes)
+
+        # Explicit clock or duration edits are exact user decisions. A pure
+        # date move stays flexible within that day, preserving the older
+        # reschedule semantics.
+        exact = action.start_min is not None or action.minutes is not None
+
         moved = await move_intent(
             action.intent_id,
             MoveIntentIn(
                 start=start,
                 end=end,
-                exact=action.start_min is not None,
+                exact=exact,
             ),
             db,
         )
-        return {"action": action.action, "status": "done", **moved}
+        return {
+            "action": action.action,
+            "status": "done",
+            "title": intent.title,
+            **moved,
+        }
 
     if action.action == "update_daily_plan":
         if not action.date or (action.win_condition is None and action.first_step is None):
