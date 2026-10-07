@@ -1347,8 +1347,12 @@ async def _execute_assistant_action(
             plan = await _replan(db)
 
             blocks = [block for block in plan.blocks if block.intent_id == ident]
+            expected_start_slot = to_slot(start, origin())
+            expected_end_slot = to_slot(end, origin())
             exact = bool(blocks) and all(
-                block.start == start and block.end == end for block in blocks
+                block.start_slot == expected_start_slot
+                and block.end_slot == expected_end_slot
+                for block in blocks
             )
             if not exact:
                 row = await db.get(IntentRow, ident)
@@ -1455,7 +1459,13 @@ async def _execute_assistant_action(
         await db.commit()
         plan = await _replan(db)
         blocks = [b for b in plan.blocks if b.intent_id == ident]
-        exact = bool(blocks) and all(b.start == start and b.end == end for b in blocks)
+        expected_start_slot = to_slot(start, origin())
+        expected_end_slot = to_slot(end, origin())
+        exact = bool(blocks) and all(
+            b.start_slot == expected_start_slot
+            and b.end_slot == expected_end_slot
+            for b in blocks
+        )
         if not exact:
             row = await db.get(IntentRow, ident)
             if row is not None:
