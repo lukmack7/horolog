@@ -1647,9 +1647,22 @@ async def daily_item_to_todo(
         deadline_date=deadline_date,
     )
     db.add(todo)
-    item.cancelled_at = datetime.now(UTC)
+    cancelled_at = datetime.now(UTC)
+    item.cancelled_at = cancelled_at
 
     if item.intent_id:
+        linked_rows = (
+            await db.execute(
+                select(DailyPlanItemRow).where(
+                    DailyPlanItemRow.intent_id == item.intent_id,
+                    DailyPlanItemRow.completed_at.is_(None),
+                    DailyPlanItemRow.cancelled_at.is_(None),
+                )
+            )
+        ).scalars().all()
+        for linked in linked_rows:
+            linked.cancelled_at = cancelled_at
+
         intent_row = await db.get(IntentRow, item.intent_id)
         if intent_row is not None:
             intent = Intent.model_validate(intent_row.payload)
