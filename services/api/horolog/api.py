@@ -35,11 +35,13 @@ from horolog.capture import capture, capture_daily_actions, to_payload
 from horolog.db import (
     BusyRow,
     DailyItemDecisionRow,
+    DailyItemMetaRow,
     DailyPlanItemRow,
     DailyPlanRow,
     DailyReviewRow,
     IntentRow,
     SyncedBlockRow,
+    TodoInboxRow,
     UserSettingsRow,
     init_db,
     load_intents,
@@ -190,6 +192,7 @@ class IntentIn(BaseModel):
     window_start_min: int | None = None
     window_end_min: int | None = None
     due: LocalDateTime | None = None
+    deadline_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     earliest: LocalDateTime | None = None
     latest: LocalDateTime | None = None
     preferred_start_min: int | None = None
@@ -275,6 +278,7 @@ class IntentIn(BaseModel):
             earliest_slot=to_slot(self.earliest, base) if self.earliest else None,
             latest_slot=to_slot(self.latest, base) if self.latest else None,
             due_slot=to_slot(self.due, base) if self.due else None,
+            deadline_date=self.deadline_date,
             preferred_start_min=self.preferred_start_min,
             blocked_slots=[
                 (to_slot(a.start, base), to_slot(a.end, base))
@@ -341,6 +345,40 @@ class BusyIn(BaseModel):
     source: str = "manual"
 
 
+class TodoInboxIn(BaseModel):
+    title: str = Field(min_length=1, max_length=300)
+    minutes: int = Field(default=30, gt=0, le=480)
+    category: WorkCategory | None = None
+    deadline_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+
+    @model_validator(mode="after")
+    def _validate_deadline(self) -> "TodoInboxIn":
+        if self.deadline_date is not None:
+            _daily_date(self.deadline_date)
+        self.minutes = max(SLOT_MINUTES, minutes_to_slots(self.minutes) * SLOT_MINUTES)
+        return self
+
+
+class TodoInboxPatch(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=300)
+    minutes: int | None = Field(default=None, gt=0, le=480)
+    category: WorkCategory | None = None
+    deadline_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+
+    @model_validator(mode="after")
+    def _validate_values(self) -> "TodoInboxPatch":
+        if self.deadline_date is not None:
+            _daily_date(self.deadline_date)
+        if self.minutes is not None:
+            self.minutes = max(SLOT_MINUTES, minutes_to_slots(self.minutes) * SLOT_MINUTES)
+        return self
+
+
+class TodoAssignIn(BaseModel):
+    date: str = Field(min_length=10, max_length=10)
+    quadrant: int = Field(ge=1, le=4)
+
+
 class DailyPlanIn(BaseModel):
     win_condition: str = Field(default="", max_length=1000)
     first_step: str = Field(default="", max_length=1000)
@@ -368,6 +406,7 @@ class DailyItemIn(BaseModel):
     minutes: int = Field(default=30, gt=0, le=480)
     priority: Priority = Priority.P3
     category: WorkCategory | None = None
+    deadline_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     schedule_enabled: bool = True
     intent_id: str | None = None
 
