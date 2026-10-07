@@ -85,6 +85,7 @@ services:
       HOROLOG_LLM_BASE_URL: ${HOROLOG_LLM_BASE_URL:-http://ollama:11434/v1}
       HOROLOG_LLM_MODEL: ${HOROLOG_LLM_MODEL:-qwen3:8b}
       HOROLOG_LLM_API_KEY: ${HOROLOG_LLM_API_KEY:-}
+      HOROLOG_LLM_TIMEOUT_S: ${HOROLOG_LLM_TIMEOUT_S:-180}
       HOROLOG_TIMEZONE: ${HOROLOG_TIMEZONE:-UTC}
       HOROLOG_HORIZON_DAYS: ${HOROLOG_HORIZON_DAYS:-21}
       HOROLOG_CORS_ORIGINS: '["http://localhost:3000"]'
@@ -121,6 +122,10 @@ services:
         HOROLOG_API_URL: http://api:8000
     depends_on:
       api: { condition: service_healthy }
+    environment:
+      # Used by server-side route handlers that need to wait longer than a
+      # generic rewrite proxy (notably the local LLM assistant).
+      HOROLOG_API_URL: http://api:8000
     ports:
       - "3000:3000"
     restart: unless-stopped
