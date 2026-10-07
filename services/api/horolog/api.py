@@ -1691,7 +1691,7 @@ async def _execute_assistant_action(
             ],
         }
 
-    if action.action in ("reschedule_task", "reschedule_break"):
+    if action.action in ("reschedule_task", "reschedule_break", "reschedule_meeting"):
         if not action.intent_id:
             raise HTTPException(status_code=422, detail=f"{action.action} needs intent_id")
 
@@ -1700,15 +1700,20 @@ async def _execute_assistant_action(
             raise HTTPException(status_code=404, detail=f"no intent {action.intent_id!r}")
 
         intent = Intent.model_validate(row.payload)
-        expected_kind = (
-            IntentKind.BUFFER if action.action == "reschedule_break" else IntentKind.TASK
-        )
+        expected_kind = {
+            "reschedule_task": IntentKind.TASK,
+            "reschedule_break": IntentKind.BUFFER,
+            "reschedule_meeting": IntentKind.MEETING,
+        }[action.action]
         if (
             intent.period_days is not None
             or intent.kind != expected_kind
             or intent.completed_at is not None
         ):
-            label = "break" if expected_kind == IntentKind.BUFFER else "task"
+            label = {
+                IntentKind.BUFFER: "break",
+                IntentKind.MEETING: "meeting",
+            }.get(expected_kind, "task")
             raise HTTPException(
                 status_code=422,
                 detail=f"only an active one-shot {label} can be rescheduled here",
@@ -1719,7 +1724,10 @@ async def _execute_assistant_action(
             block for block in current_plan.blocks if block.intent_id == intent.id
         ]
         if len(current_blocks) != 1:
-            label = "przerwę" if expected_kind == IntentKind.BUFFER else "zadanie"
+            label = {
+                IntentKind.BUFFER: "przerwę",
+                IntentKind.MEETING: "spotkanie",
+            }.get(expected_kind, "zadanie")
             raise HTTPException(
                 status_code=409,
                 detail=(
@@ -1759,7 +1767,7 @@ async def _execute_assistant_action(
         # Breaks are protected appointments, so even a date-only break move is
         # exact. Tasks retain the older flexible date-only semantics.
         exact = (
-            action.action == "reschedule_break"
+            action.action in ("reschedule_break", "reschedule_meeting")
             or action.start_min is not None
             or action.minutes is not None
         )
@@ -2124,7 +2132,19 @@ async def move_intent(
     start_min = start.hour * 60 + start.minute
 
     if intent.kind == IntentKind.MEETING:
-        meeting_minutes = intent.minutes_per_period
+        requested_seconds = int((end - start).total_seconds())
+        if requested_seconds % (SLOT_MINUTES * 60) != 0:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Duration must use {SLOT_MINUTES}-minute increments.",
+            )
+        if start.minute % SLOT_MINUTES != 0 or start.second != 0 or start.microsecond != 0:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Start time must use {SLOT_MINUTES}-minute increments.",
+            )
+
+        meeting_minutes = requested_seconds // 60
         meeting_end = start + timedelta(minutes=meeting_minutes)
         if meeting_end.date() != start.date():
             raise HTTPException(
@@ -2134,6 +2154,13 @@ async def move_intent(
 
         moved = intent.model_copy(
             update={
+                # Meeting edits are authoritative, just like Planner task/break
+                # edits. Preserve meeting-only metadata (blocked slots, Zoom)
+                # while updating the concrete requested span and duration.
+                "minutes_per_period": meeting_minutes,
+                "min_chunk_minutes": meeting_minutes,
+                "max_chunk_minutes": meeting_minutes,
+                "max_per_day": 1,
                 "earliest_slot": to_slot(start, base),
                 "latest_slot": to_slot(meeting_end, base),
                 "due_slot": to_slot(meeting_end, base),
@@ -2229,9 +2256,7 @@ async def move_intent(
 
     if intent.kind == IntentKind.MEETING:
         expected_start_slot = to_slot(start, base)
-        expected_end_slot = expected_start_slot + minutes_to_slots(
-            intent.minutes_per_period
-        )
+        expected_end_slot = to_slot(end, base)
         correctly_placed = (
             len(target_blocks) == 1
             and target_blocks[0].start_slot == expected_start_slot
