@@ -683,6 +683,126 @@ async def _roll_daily_intent(
     intent_row.payload = moved.model_dump(mode="json")
 
 
+def _todo_dict(row: TodoInboxRow) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "title": row.title,
+        "minutes": row.minutes,
+        "category": row.category,
+        "deadline_date": row.deadline_date,
+        "created_at": row.created_at.isoformat(),
+        "updated_at": row.updated_at.isoformat(),
+    }
+
+
+@app.get("/api/todos")
+async def list_todos(db: AsyncSession = Depends(session)) -> list[dict[str, Any]]:
+    rows = (
+        await db.execute(
+            select(TodoInboxRow).where(TodoInboxRow.assigned_at.is_(None))
+        )
+    ).scalars().all()
+    rows = sorted(
+        rows,
+        key=lambda row: (
+            row.deadline_date is None,
+            row.deadline_date or "9999-12-31",
+            row.created_at,
+        ),
+    )
+    return [_todo_dict(row) for row in rows]
+
+
+@app.post("/api/todos", status_code=201)
+async def create_todo(
+    body: TodoInboxIn,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    row = TodoInboxRow(
+        id=uuid.uuid4().hex[:16],
+        title=body.title.strip(),
+        minutes=body.minutes,
+        category=body.category.value if body.category is not None else None,
+        deadline_date=body.deadline_date,
+    )
+    db.add(row)
+    await db.commit()
+    return _todo_dict(row)
+
+
+@app.patch("/api/todos/{todo_id}")
+async def patch_todo(
+    todo_id: str,
+    body: TodoInboxPatch,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    row = await db.get(TodoInboxRow, todo_id)
+    if row is None or row.assigned_at is not None:
+        raise HTTPException(status_code=404, detail="todo item not found")
+
+    if body.title is not None:
+        row.title = body.title.strip()
+    if body.minutes is not None:
+        row.minutes = body.minutes
+    if "category" in body.model_fields_set:
+        row.category = body.category.value if body.category is not None else None
+    if "deadline_date" in body.model_fields_set:
+        row.deadline_date = body.deadline_date
+    row.updated_at = datetime.now(UTC)
+
+    await db.commit()
+    return _todo_dict(row)
+
+
+@app.delete("/api/todos/{todo_id}", status_code=204)
+async def delete_todo(todo_id: str, db: AsyncSession = Depends(session)) -> Response:
+    row = await db.get(TodoInboxRow, todo_id)
+    if row is None or row.assigned_at is not None:
+        raise HTTPException(status_code=404, detail="todo item not found")
+    await db.delete(row)
+    await db.commit()
+    return Response(status_code=204)
+
+
+@app.post("/api/todos/{todo_id}/assign", status_code=201)
+async def assign_todo_to_daily(
+    todo_id: str,
+    body: TodoAssignIn,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    row = await db.get(TodoInboxRow, todo_id)
+    if row is None or row.assigned_at is not None:
+        raise HTTPException(status_code=404, detail="todo item not found")
+
+    target = _daily_date(body.date)
+    if (
+        body.quadrant <= 2
+        and row.deadline_date is not None
+        and _deadline_end(row.deadline_date) <= target
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Maksymalny deadline tego zadania już minął. Zmień deadline przed dodaniem do planu.",
+        )
+
+    item = await create_daily_item(
+        body.date,
+        DailyItemIn(
+            title=row.title,
+            quadrant=body.quadrant,
+            minutes=row.minutes,
+            category=WorkCategory(row.category) if row.category else None,
+            deadline_date=row.deadline_date,
+            schedule_enabled=body.quadrant <= 2,
+        ),
+        db,
+    )
+    row.assigned_at = datetime.now(UTC)
+    row.updated_at = datetime.now(UTC)
+    await db.commit()
+    return item
+
+
 @app.get("/api/settings")
 async def get_user_preferences(
     db: AsyncSession = Depends(session),
@@ -947,6 +1067,17 @@ async def get_daily(date: str, db: AsyncSession = Depends(session)) -> dict[str,
     # them. In particular, opening tomorrow while planning ahead must not
     # silently move today's unfinished Planner tasks to tomorrow.
 
+    meta_rows = (
+        (
+            await db.execute(
+                select(DailyItemMetaRow).where(DailyItemMetaRow.item_id.in_(item_ids))
+            )
+        ).scalars().all()
+        if item_ids
+        else []
+    )
+    meta_map = {row.item_id: row for row in meta_rows}
+
     intent_ids = [row.intent_id for row in rows if row.intent_id]
     intent_map: dict[str, dict[str, Any]] = {}
     if intent_ids:
@@ -961,6 +1092,7 @@ async def get_daily(date: str, db: AsyncSession = Depends(session)) -> dict[str,
             date,
             intent_map.get(row.intent_id or ""),
             decision_map.get(row.id),
+            meta_map.get(row.id),
         )
         for row in rows
         if row.completed_at is None or row.plan_date == date
