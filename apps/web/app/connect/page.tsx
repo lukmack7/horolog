@@ -297,8 +297,7 @@ export default function Connect() {
           <div>
             <h2 className="text-[15px] font-bold text-fg">{t("Connect a calendar")}</h2>
             <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">
-              OAuth needs your own app credentials — self-hosting means there is no shared client
-              to hand out (see .env.example). The feed and server options below need none.
+              {t("OAuth needs your own app credentials — self-hosting means there is no shared client to hand out (see .env.example). The feed and server options below need none.")}
             </p>
           </div>
 
@@ -356,19 +355,18 @@ export default function Connect() {
             })}
             <p className="text-[12px] leading-relaxed text-fg-subtle">
               <UploadCloud size={12} className="mb-0.5 mr-1 inline" />
-              Push writes scheduled blocks onto a dedicated &quot;Horolog&quot; calendar as real
-              events — never your primary calendar. Off by default; enable with{" "}
+              {t("Push writes scheduled blocks onto a dedicated Horolog calendar as real events — never your primary calendar. Off by default; enable with")}{" "}
               <code className="rounded bg-sunk px-1 py-0.5 font-mono">
                 HOROLOG_CALENDAR_WRITEBACK_ENABLED=true
               </code>{" "}
-              and reconnect the account above once to grant write access.
+              {t("and reconnect the account above once to grant write access.")}
             </p>
           </div>
 
           <div className="border-t border-black/[0.06] pt-5">
             <div className="mb-2 flex items-center gap-2 text-[13.5px] font-semibold text-fg">
               <Calendar size={15} className="text-accent" />
-              Subscribe to a published iCal (.ics) feed
+              {t("Subscribe to a published iCal (.ics) feed")}
             </div>
             <div className="flex flex-wrap gap-2.5">
               <input
@@ -383,7 +381,7 @@ export default function Connect() {
                 disabled={!icsUrl.trim() || pending !== null}
                 className="inline-flex h-11 shrink-0 items-center gap-2 rounded-xl bg-accent px-5 text-[13.5px] font-semibold text-on-accent shadow-sm transition-all hover:bg-accent-hover disabled:opacity-40"
               >
-                {pending === "ics" ? "Syncing…" : "Sync Feed"}
+                {pending === "ics" ? t("Syncing…") : t("Sync Feed")}
               </button>
             </div>
           </div>
@@ -391,7 +389,7 @@ export default function Connect() {
           <div className="border-t border-black/[0.06] pt-5">
             <div className="mb-2 flex items-center gap-2 text-[13.5px] font-semibold text-fg">
               <Server size={15} className="text-accent" />
-              Connect a CalDAV server
+              {t("Connect a CalDAV server")}
             </div>
             <div className="grid gap-2.5 sm:grid-cols-3">
               <input
@@ -421,7 +419,7 @@ export default function Connect() {
                 disabled={!dav.url.trim() || pending !== null}
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-accent px-5 text-[13.5px] font-semibold text-on-accent shadow-sm transition-all hover:bg-accent-hover disabled:opacity-40"
               >
-                {pending === "caldav" ? "Connecting…" : "Connect"}
+                {pending === "caldav" ? t("Connecting…") : t("Connect")}
               </button>
             </div>
           </div>
@@ -432,8 +430,7 @@ export default function Connect() {
           <div>
             <h2 className="text-[15px] font-bold text-fg">{t("Connect a tracker")}</h2>
             <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">
-              Started issues and open tasks are scheduled as tasks, fluidly, around everything
-              else. A personal API key needs no OAuth app.
+              {t("Started issues and open tasks are scheduled as tasks, fluidly, around everything else. A personal API key needs no OAuth app.")}
             </p>
           </div>
           <div className="space-y-3">
