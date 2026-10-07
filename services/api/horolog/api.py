@@ -2578,6 +2578,268 @@ async def assistant_execute(
 
 
 
+def _time_entry_elapsed(row: TimeEntryRow, now: datetime | None = None) -> int:
+    elapsed = row.accumulated_seconds
+    if row.status == "running" and row.last_resumed_at is not None:
+        current = now or datetime.now(UTC)
+        elapsed += max(0, int((current - row.last_resumed_at).total_seconds()))
+    return elapsed
+
+
+async def _time_entry_dict(
+    db: AsyncSession,
+    row: TimeEntryRow,
+) -> dict[str, Any]:
+    intent_row = await db.get(IntentRow, row.intent_id)
+    title = (
+        Intent.model_validate(intent_row.payload).title
+        if intent_row is not None
+        else "Usunięte zadanie"
+    )
+    return {
+        "id": row.id,
+        "intent_id": row.intent_id,
+        "title": title,
+        "status": row.status,
+        "started_at": row.started_at.isoformat(),
+        "last_resumed_at": _iso_or_none(row.last_resumed_at),
+        "accumulated_seconds": row.accumulated_seconds,
+        "elapsed_seconds": _time_entry_elapsed(row),
+        "ended_at": _iso_or_none(row.ended_at),
+    }
+
+
+async def _save_history_event(
+    db: AsyncSession,
+    *,
+    source: str,
+    title: str,
+    summary: list[dict[str, Any]],
+) -> ChangeSetRow:
+    row = ChangeSetRow(
+        id=uuid.uuid4().hex[:16],
+        source=source,
+        title=title,
+        summary=summary,
+        before_state={},
+        after_state={},
+    )
+    db.add(row)
+    await db.commit()
+    return row
+
+
+@app.get("/api/time-tracking/active")
+async def active_time_tracking(
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any] | None:
+    row = (
+        await db.execute(
+            select(TimeEntryRow)
+            .where(TimeEntryRow.status.in_(["running", "paused"]))
+            .order_by(TimeEntryRow.started_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        return None
+    return await _time_entry_dict(db, row)
+
+
+@app.get("/api/time-tracking/{intent_id}/stats")
+async def time_tracking_stats(
+    intent_id: str,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    intent_row = await db.get(IntentRow, intent_id)
+    if intent_row is None:
+        raise HTTPException(status_code=404, detail=f"no intent {intent_id!r}")
+
+    rows = (
+        await db.execute(
+            select(TimeEntryRow)
+            .where(
+                TimeEntryRow.intent_id == intent_id,
+                TimeEntryRow.status == "stopped",
+            )
+            .order_by(TimeEntryRow.started_at.asc())
+        )
+    ).scalars().all()
+    total = sum(row.accumulated_seconds for row in rows)
+    intent = Intent.model_validate(intent_row.payload)
+    return {
+        "intent_id": intent_id,
+        "title": intent.title,
+        "planned_minutes": intent.minutes_per_period,
+        "sessions": len(rows),
+        "total_seconds": total,
+        "average_seconds": round(total / len(rows)) if rows else 0,
+    }
+
+
+@app.post("/api/time-tracking/{intent_id}/start", status_code=201)
+async def start_time_tracking(
+    intent_id: str,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    intent_row = await db.get(IntentRow, intent_id)
+    if intent_row is None:
+        raise HTTPException(status_code=404, detail=f"no intent {intent_id!r}")
+    intent = Intent.model_validate(intent_row.payload)
+    if intent.completed_at is not None:
+        raise HTTPException(status_code=422, detail="Nie można uruchomić timera dla zakończonego zadania.")
+
+    active = (
+        await db.execute(
+            select(TimeEntryRow)
+            .where(TimeEntryRow.status.in_(["running", "paused"]))
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if active is not None:
+        active_intent = await db.get(IntentRow, active.intent_id)
+        active_title = (
+            Intent.model_validate(active_intent.payload).title
+            if active_intent is not None
+            else "inne zadanie"
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=f"Timer działa już dla „{active_title}”. Najpierw go zakończ lub wstrzymaj.",
+        )
+
+    now = datetime.now(UTC)
+    row = TimeEntryRow(
+        id=uuid.uuid4().hex[:16],
+        intent_id=intent_id,
+        status="running",
+        started_at=now,
+        last_resumed_at=now,
+        accumulated_seconds=0,
+    )
+    db.add(row)
+    await db.commit()
+    await _save_history_event(
+        db,
+        source="timer",
+        title=f"Start · {intent.title}",
+        summary=[{"action": "timer_start", "intent_id": intent_id, "title": intent.title}],
+    )
+    return await _time_entry_dict(db, row)
+
+
+@app.post("/api/time-tracking/{intent_id}/pause")
+async def pause_time_tracking(
+    intent_id: str,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    row = (
+        await db.execute(
+            select(TimeEntryRow)
+            .where(
+                TimeEntryRow.intent_id == intent_id,
+                TimeEntryRow.status == "running",
+            )
+            .order_by(TimeEntryRow.started_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Brak uruchomionego timera dla tego zadania.")
+
+    now = datetime.now(UTC)
+    if row.last_resumed_at is not None:
+        row.accumulated_seconds += max(
+            0, int((now - row.last_resumed_at).total_seconds())
+        )
+    row.last_resumed_at = None
+    row.status = "paused"
+    await db.commit()
+    await _save_history_event(
+        db,
+        source="timer",
+        title=f"Pauza · {(await _time_entry_dict(db, row))['title']}",
+        summary=[{"action": "timer_pause", "intent_id": intent_id}],
+    )
+    return await _time_entry_dict(db, row)
+
+
+@app.post("/api/time-tracking/{intent_id}/resume")
+async def resume_time_tracking(
+    intent_id: str,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    row = (
+        await db.execute(
+            select(TimeEntryRow)
+            .where(
+                TimeEntryRow.intent_id == intent_id,
+                TimeEntryRow.status == "paused",
+            )
+            .order_by(TimeEntryRow.started_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Brak wstrzymanego timera dla tego zadania.")
+
+    row.status = "running"
+    row.last_resumed_at = datetime.now(UTC)
+    await db.commit()
+    await _save_history_event(
+        db,
+        source="timer",
+        title=f"Wznowiono · {(await _time_entry_dict(db, row))['title']}",
+        summary=[{"action": "timer_resume", "intent_id": intent_id}],
+    )
+    return await _time_entry_dict(db, row)
+
+
+@app.post("/api/time-tracking/{intent_id}/stop")
+async def stop_time_tracking(
+    intent_id: str,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    row = (
+        await db.execute(
+            select(TimeEntryRow)
+            .where(
+                TimeEntryRow.intent_id == intent_id,
+                TimeEntryRow.status.in_(["running", "paused"]),
+            )
+            .order_by(TimeEntryRow.started_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Brak aktywnego timera dla tego zadania.")
+
+    now = datetime.now(UTC)
+    if row.status == "running" and row.last_resumed_at is not None:
+        row.accumulated_seconds += max(
+            0, int((now - row.last_resumed_at).total_seconds())
+        )
+    row.last_resumed_at = None
+    row.status = "stopped"
+    row.ended_at = now
+    await db.commit()
+    payload = await _time_entry_dict(db, row)
+    await _save_history_event(
+        db,
+        source="timer",
+        title=f"Zakończono pomiar · {payload['title']}",
+        summary=[
+            {
+                "action": "timer_stop",
+                "intent_id": intent_id,
+                "title": payload["title"],
+                "elapsed_seconds": row.accumulated_seconds,
+            }
+        ],
+    )
+    return payload
+
+
 @app.get("/api/history")
 async def change_history(
     limit: int = 50,
@@ -2592,7 +2854,14 @@ async def change_history(
         )
     ).scalars().all()
 
-    latest_reversible = next((row for row in rows if row.undone_at is None), None)
+    latest_reversible = next(
+        (
+            row
+            for row in rows
+            if row.undone_at is None and row.source != "timer"
+        ),
+        None,
+    )
     return [
         {
             "id": row.id,
@@ -2625,7 +2894,10 @@ async def undo_change_set(
     latest = (
         await db.execute(
             select(ChangeSetRow)
-            .where(ChangeSetRow.undone_at.is_(None))
+            .where(
+                ChangeSetRow.undone_at.is_(None),
+                ChangeSetRow.source != "timer",
+            )
             .order_by(ChangeSetRow.created_at.desc())
             .limit(1)
         )
