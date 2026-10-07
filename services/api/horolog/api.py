@@ -1411,6 +1411,15 @@ async def move_daily_item(
     row.quadrant = body.quadrant
     row.priority = body.quadrant
 
+    meta = await db.get(DailyItemMetaRow, item_id)
+    deadline_date = meta.deadline_date if meta is not None else None
+    deadline_end = _deadline_end(deadline_date) if deadline_date else None
+    if body.quadrant <= 2 and deadline_end is not None and deadline_end <= target_day:
+        raise HTTPException(
+            status_code=422,
+            detail="Nie można zaplanować zadania po jego maksymalnym deadline.",
+        )
+
     # If this was a note-only Q3/Q4 item and it becomes actionable (Q1/Q2),
     # promote it to a real Planner task. Existing linked tasks keep their
     # identity in every quadrant; moving the card never creates duplicates.
@@ -1425,7 +1434,8 @@ async def move_daily_item(
             max_chunk_minutes=row.minutes,
             max_per_day=1,
             earliest=target_day,
-            due=target_day + timedelta(days=1) - timedelta(minutes=1),
+            due=deadline_end or (target_day + timedelta(days=1)),
+            deadline_date=deadline_date,
         )
         intent = wire.to_domain(intent_id, origin(), await _preferred_workday(db))
         db.add(IntentRow(id=intent_id, payload=intent.model_dump(mode="json")))
@@ -1448,7 +1458,7 @@ async def move_daily_item(
     if row.intent_id:
         intent_row = await db.get(IntentRow, row.intent_id)
         intent_payload = intent_row.payload if intent_row else None
-    return _daily_item_dict(row, body.date, intent_payload)
+    return _daily_item_dict(row, body.date, intent_payload, meta=meta)
 
 
 @app.post("/api/daily/items/{item_id}/keep")
