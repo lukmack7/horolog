@@ -1519,6 +1519,177 @@ async def _execute_assistant_action(
             "title": completed["title"],
         }
 
+    if action.action == "swap_tasks":
+        if not action.intent_id or not action.second_intent_id:
+            raise HTTPException(status_code=422, detail="swap_tasks needs two intent ids")
+        if action.intent_id == action.second_intent_id:
+            raise HTTPException(status_code=422, detail="swap_tasks needs two different tasks")
+
+        first_row = await db.get(IntentRow, action.intent_id)
+        second_row = await db.get(IntentRow, action.second_intent_id)
+        if first_row is None or second_row is None:
+            raise HTTPException(status_code=404, detail="one of the tasks no longer exists")
+
+        first = Intent.model_validate(first_row.payload)
+        second = Intent.model_validate(second_row.payload)
+        for candidate in (first, second):
+            if (
+                candidate.kind != IntentKind.TASK
+                or candidate.period_days is not None
+                or candidate.completed_at is not None
+            ):
+                raise HTTPException(
+                    status_code=422,
+                    detail="Only active one-shot tasks can be swapped.",
+                )
+
+        current_plan = await load_previous_plan(db) or await _replan(db)
+        first_blocks = [
+            block for block in current_plan.blocks if block.intent_id == first.id
+        ]
+        second_blocks = [
+            block for block in current_plan.blocks if block.intent_id == second.id
+        ]
+        if len(first_blocks) != 1 or len(second_blocks) != 1:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Mogę zamienić miejscami tylko dwa zadania, z których każde "
+                    "ma jeden aktualnie zaplanowany blok."
+                ),
+            )
+
+        base = origin()
+        zone = settings().zone
+        first_current_start = from_slot(first_blocks[0].start_slot, base).astimezone(zone)
+        second_current_start = from_slot(second_blocks[0].start_slot, base).astimezone(zone)
+
+        first_target_start = second_current_start
+        second_target_start = first_current_start
+        first_target_end = first_target_start + timedelta(minutes=first.minutes_per_period)
+        second_target_end = second_target_start + timedelta(minutes=second.minutes_per_period)
+
+        if (
+            first_target_end.date() != first_target_start.date()
+            or second_target_end.date() != second_target_start.date()
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Po zamianie jedno z zadań wychodziłoby poza wybrany dzień.",
+            )
+
+        first_original = dict(first_row.payload)
+        second_original = dict(second_row.payload)
+
+        def pinned_task(intent: Intent, start: datetime, end: datetime) -> Intent:
+            start_min = start.hour * 60 + start.minute
+            return intent.model_copy(
+                update={
+                    "earliest_slot": to_slot(start, base),
+                    "latest_slot": to_slot(end, base),
+                    "due_slot": to_slot(end, base),
+                    "preferred_start_min": start_min,
+                    "daily_windows": [
+                        DailyWindow(
+                            start_min=start_min,
+                            end_min=start_min + intent.minutes_per_period,
+                        )
+                    ],
+                    "allowed_weekdays": [],
+                }
+            )
+
+        first_row.payload = pinned_task(
+            first, first_target_start, first_target_end
+        ).model_dump(mode="json")
+        second_row.payload = pinned_task(
+            second, second_target_start, second_target_end
+        ).model_dump(mode="json")
+        await db.commit()
+
+        try:
+            swapped_plan = await _replan(db)
+        except Exception:
+            first_row.payload = first_original
+            second_row.payload = second_original
+            await db.commit()
+            await _replan(db)
+            raise
+
+        first_after = [
+            block for block in swapped_plan.blocks if block.intent_id == first.id
+        ]
+        second_after = [
+            block for block in swapped_plan.blocks if block.intent_id == second.id
+        ]
+
+        first_expected = (
+            to_slot(first_target_start, base),
+            to_slot(first_target_end, base),
+        )
+        second_expected = (
+            to_slot(second_target_start, base),
+            to_slot(second_target_end, base),
+        )
+        exact = (
+            len(first_after) == 1
+            and len(second_after) == 1
+            and (first_after[0].start_slot, first_after[0].end_slot) == first_expected
+            and (second_after[0].start_slot, second_after[0].end_slot) == second_expected
+        )
+        if not exact:
+            first_row.payload = first_original
+            second_row.payload = second_original
+            await db.commit()
+            await _replan(db)
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Nie mogę bezpiecznie zamienić miejscami „{first.title}” "
+                    f"oraz „{second.title}” bez naruszenia pozostałego planu."
+                ),
+            )
+
+        target_dates = {
+            first.id: first_target_start.date().isoformat(),
+            second.id: second_target_start.date().isoformat(),
+        }
+        linked_daily = (
+            await db.execute(
+                select(DailyPlanItemRow).where(
+                    DailyPlanItemRow.intent_id.in_([first.id, second.id]),
+                    DailyPlanItemRow.completed_at.is_(None),
+                    DailyPlanItemRow.cancelled_at.is_(None),
+                )
+            )
+        ).scalars().all()
+        for daily_row in linked_daily:
+            if daily_row.intent_id in target_dates:
+                daily_row.plan_date = target_dates[daily_row.intent_id]
+        if linked_daily:
+            await db.commit()
+
+        return {
+            "action": action.action,
+            "status": "done",
+            "title": first.title,
+            "other_title": second.title,
+            "intent_id": first.id,
+            "second_intent_id": second.id,
+            "scheduled": [
+                {
+                    "title": first.title,
+                    "start": from_slot(first_after[0].start_slot, base).isoformat(),
+                    "end": from_slot(first_after[0].end_slot, base).isoformat(),
+                },
+                {
+                    "title": second.title,
+                    "start": from_slot(second_after[0].start_slot, base).isoformat(),
+                    "end": from_slot(second_after[0].end_slot, base).isoformat(),
+                },
+            ],
+        }
+
     if action.action == "reschedule_task":
         if not action.intent_id or not action.date:
             raise HTTPException(status_code=422, detail="reschedule_task proposal is incomplete")
@@ -1600,6 +1771,8 @@ async def assistant_execute(
     # the proposal requested. This makes the assistant's confirmation factual.
     rendered = await get_plan(db)
     for result in results:
+        if result.get("scheduled"):
+            continue
         intent_id = result.get("intent_id")
         if not intent_id:
             continue
