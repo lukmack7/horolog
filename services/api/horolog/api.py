@@ -336,6 +336,7 @@ class IntentPatchIn(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     priority: Priority | None = None
     category: WorkCategory | None = None
+    deadline_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
 
 
 class BusyIn(BaseModel):
@@ -574,11 +575,17 @@ def _daily_date(value: str) -> datetime:
     return parsed.replace(tzinfo=settings().zone)
 
 
+def _deadline_end(value: str) -> datetime:
+    """Exclusive local end boundary for a user-facing deadline date."""
+    return _daily_date(value) + timedelta(days=1)
+
+
 def _daily_item_dict(
     row: DailyPlanItemRow,
     requested_date: str,
     intent_payload: dict[str, Any] | None,
     decision: DailyItemDecisionRow | None = None,
+    meta: DailyItemMetaRow | None = None,
 ) -> dict[str, Any]:
     completed_at = row.completed_at
     if completed_at is None and intent_payload and intent_payload.get("completed_at"):
@@ -600,6 +607,15 @@ def _daily_item_dict(
             )
         ),
         "intent_id": row.intent_id,
+        "deadline_date": (
+            meta.deadline_date
+            if meta is not None
+            else (
+                intent_payload.get("deadline_date")
+                if intent_payload
+                else None
+            )
+        ),
         "schedule_enabled": row.schedule_enabled,
         "completed_at": completed_at.isoformat() if completed_at else None,
         "cancelled_at": row.cancelled_at.isoformat() if row.cancelled_at else None,
@@ -636,7 +652,12 @@ async def _roll_daily_intent(
 
     day = _daily_date(target_date)
     earliest = day
-    due = day + timedelta(days=1) - timedelta(minutes=1)
+    due = _deadline_end(intent.deadline_date) if intent.deadline_date else day + timedelta(days=1)
+    if due <= earliest:
+        raise HTTPException(
+            status_code=422,
+            detail="Nie można przenieść zadania po jego maksymalnym deadline.",
+        )
     wire = IntentIn(
         title=intent.title,
         kind=intent.kind,
@@ -650,6 +671,7 @@ async def _roll_daily_intent(
         allowed_weekdays=[],
         earliest=earliest,
         due=due,
+        deadline_date=intent.deadline_date,
         preferred_start_min=intent.preferred_start_min,
     )
     moved = wire.to_domain(intent.id, origin(), await _preferred_workday(db)).model_copy(
