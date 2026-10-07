@@ -112,6 +112,17 @@ function timeToMinutes(value: string): number {
   return Number(hoursText) * 60 + Number(minutesText);
 }
 
+type HorologAndroidBridge = {
+  refreshNotifications?: () => void;
+  testNotification?: () => void;
+  notificationsAvailable?: () => boolean;
+};
+
+function androidBridge(): HorologAndroidBridge | undefined {
+  if (typeof window === "undefined") return undefined;
+  return (window as Window & { HorologAndroid?: HorologAndroidBridge }).HorologAndroid;
+}
+
 export default function SettingsPage() {
   const { t, language, setLanguage } = useLanguage();
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -233,7 +244,8 @@ export default function SettingsPage() {
     try {
       const saved = await api.saveNotificationSettings(notifications);
       setNotifications(saved);
-      setNotificationsMessage(t("Notification settings saved."));
+      androidBridge()?.refreshNotifications?.();
+      setNotificationsMessage(t("Notification settings saved and synced with Android."));
     } catch (caught) {
       setNotificationsMessage(
         caught instanceof Error
@@ -723,6 +735,25 @@ export default function SettingsPage() {
               className="inline-flex h-10 items-center rounded-xl bg-accent px-4 text-[12.5px] font-semibold text-on-accent shadow-sm transition-all hover:bg-accent-hover disabled:opacity-50"
             >
               {notificationsPending ? t("Saving...") : t("Save notification settings")}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const bridge = androidBridge();
+                if (!bridge?.testNotification) {
+                  setNotificationsMessage(t("Notification test is available in the Android app."));
+                  return;
+                }
+                if (bridge.notificationsAvailable && !bridge.notificationsAvailable()) {
+                  setNotificationsMessage(t("Android notification permission is disabled."));
+                  return;
+                }
+                bridge.testNotification();
+                setNotificationsMessage(t("Test notification sent."));
+              }}
+              className="inline-flex h-10 items-center rounded-xl border border-black/[0.08] bg-bg px-4 text-[12.5px] font-semibold text-fg transition-all hover:bg-sunk"
+            >
+              {t("Send test notification")}
             </button>
             {notificationsMessage && (
               <span className="text-[12px] font-medium text-fg-muted">{notificationsMessage}</span>
