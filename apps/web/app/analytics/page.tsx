@@ -232,6 +232,7 @@ function AnalyticsTabs({
   view: AnalyticsView;
   onChange: (view: AnalyticsView) => void;
 }) {
+  const { t } = useLanguage();
   return (
     <div className="mt-5 grid grid-cols-4 gap-1 rounded-2xl border border-black/[0.08] bg-surface p-1 shadow-sm">
       {VIEWS.map((item) => {
@@ -249,8 +250,8 @@ function AnalyticsTabs({
             }`}
           >
             <Icon size={15} />
-            <span className="hidden xs:inline sm:inline">{item.label}</span>
-            <span className="sm:hidden">{item.id === "priorities" ? "Priority" : item.id === "executive" ? "Exec" : item.label}</span>
+            <span className="hidden xs:inline sm:inline">{t(item.label)}</span>
+            <span className="sm:hidden">{t(item.id === "priorities" ? "Priority" : item.id === "executive" ? "Exec" : item.label)}</span>
           </button>
         );
       })}
