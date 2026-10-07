@@ -303,6 +303,24 @@ class MoveIntentIn(BaseModel):
     exact: bool = True
 
 
+class UserPreferencesIn(BaseModel):
+    preferred_workday_start_min: int = Field(ge=0, lt=24 * 60)
+    preferred_workday_end_min: int = Field(gt=0, le=24 * 60)
+
+    @model_validator(mode="after")
+    def _valid_workday(self) -> "UserPreferencesIn":
+        if self.preferred_workday_end_min <= self.preferred_workday_start_min:
+            raise ValueError("workday end must be after workday start")
+        if (
+            self.preferred_workday_start_min % SLOT_MINUTES
+            or self.preferred_workday_end_min % SLOT_MINUTES
+        ):
+            raise ValueError(
+                f"workday times must use {SLOT_MINUTES}-minute increments"
+            )
+        return self
+
+
 class IntentPatchIn(BaseModel):
     """Safe metadata-only intent edit.
 
@@ -582,13 +600,75 @@ async def _roll_daily_intent(
         due=due,
         preferred_start_min=intent.preferred_start_min,
     )
-    moved = wire.to_domain(intent.id, origin()).model_copy(
+    moved = wire.to_domain(intent.id, origin(), await _preferred_workday(db)).model_copy(
         update={
             "completed_at": intent.completed_at,
             "completed_blocks": intent.completed_blocks,
         }
     )
     intent_row.payload = moved.model_dump(mode="json")
+
+
+@app.get("/api/settings")
+async def get_user_preferences(
+    db: AsyncSession = Depends(session),
+) -> dict[str, int]:
+    start, end = await _preferred_workday(db)
+    return {
+        "preferred_workday_start_min": start,
+        "preferred_workday_end_min": end,
+    }
+
+
+@app.put("/api/settings")
+async def put_user_preferences(
+    body: UserPreferencesIn,
+    db: AsyncSession = Depends(session),
+) -> dict[str, int]:
+    old_start, old_end = await _preferred_workday(db)
+
+    row = await db.get(UserSettingsRow, USER_SETTINGS_ID)
+    if row is None:
+        row = UserSettingsRow(id=USER_SETTINGS_ID)
+        db.add(row)
+
+    row.preferred_workday_start_min = body.preferred_workday_start_min
+    row.preferred_workday_end_min = body.preferred_workday_end_min
+    row.updated_at = datetime.now(UTC)
+
+    # Existing flexible intents that still use the previous default window
+    # follow the new preference immediately. Exact/manual placements have a
+    # hard latest_slot and are deliberately left untouched.
+    intent_rows = (await db.execute(select(IntentRow))).scalars().all()
+    for intent_row in intent_rows:
+        intent = Intent.model_validate(intent_row.payload)
+        if (
+            intent.kind not in (IntentKind.TASK, IntentKind.HABIT, IntentKind.FOCUS)
+            or intent.latest_slot is not None
+            or len(intent.daily_windows) != 1
+        ):
+            continue
+        window = intent.daily_windows[0]
+        if window.start_min != old_start or window.end_min != old_end:
+            continue
+        updated = intent.model_copy(
+            update={
+                "daily_windows": [
+                    DailyWindow(
+                        start_min=body.preferred_workday_start_min,
+                        end_min=body.preferred_workday_end_min,
+                    )
+                ]
+            }
+        )
+        intent_row.payload = updated.model_dump(mode="json")
+
+    await db.commit()
+    await _replan(db)
+    return {
+        "preferred_workday_start_min": body.preferred_workday_start_min,
+        "preferred_workday_end_min": body.preferred_workday_end_min,
+    }
 
 
 @app.get("/api/daily-history")
@@ -977,7 +1057,7 @@ async def confirm_daily_meeting(
         window_start_min=start_min,
         window_end_min=start_min + minutes,
     )
-    intent = wire.to_domain(ident, origin())
+    intent = wire.to_domain(ident, origin(), await _preferred_workday(db))
     db.add(IntentRow(id=ident, payload=intent.model_dump(mode="json")))
     await db.commit()
     plan = await _replan(db)
@@ -1025,7 +1105,7 @@ async def create_daily_item(date: str, body: DailyItemIn, db: AsyncSession = Dep
             earliest=day,
             due=day + timedelta(days=1) - timedelta(minutes=1),
         )
-        intent = wire.to_domain(intent_id, origin())
+        intent = wire.to_domain(intent_id, origin(), await _preferred_workday(db))
         db.add(IntentRow(id=intent_id, payload=intent.model_dump(mode="json")))
 
     row = DailyPlanItemRow(
@@ -1119,7 +1199,7 @@ async def move_daily_item(
             earliest=target_day,
             due=target_day + timedelta(days=1) - timedelta(minutes=1),
         )
-        intent = wire.to_domain(intent_id, origin())
+        intent = wire.to_domain(intent_id, origin(), await _preferred_workday(db))
         db.add(IntentRow(id=intent_id, payload=intent.model_dump(mode="json")))
         row.intent_id = intent_id
         row.schedule_enabled = True
@@ -1227,7 +1307,7 @@ async def list_intents(db: AsyncSession = Depends(session)) -> list[dict[str, An
 async def create_intent(body: IntentIn, db: AsyncSession = Depends(session)) -> dict[str, Any]:
     ident = uuid.uuid4().hex[:12]
     try:
-        intent = body.to_domain(ident, origin())
+        intent = body.to_domain(ident, origin(), await _preferred_workday(db))
     except ValueError as exc:
         # Domain validation is the real gate; surface its message rather than a
         # generic 500, because it explains exactly why the intent is impossible.
@@ -1369,7 +1449,7 @@ async def _execute_assistant_action(
                 window_start_min=start_min,
                 window_end_min=start_min + minutes,
             )
-            intent = wire.to_domain(ident, origin())
+            intent = wire.to_domain(ident, origin(), await _preferred_workday(db))
             db.add(IntentRow(id=ident, payload=intent.model_dump(mode="json")))
             await db.commit()
             plan = await _replan(db)
@@ -1482,7 +1562,7 @@ async def _execute_assistant_action(
             window_start_min=start_min,
             window_end_min=start_min + minutes,
         )
-        intent = wire.to_domain(ident, origin())
+        intent = wire.to_domain(ident, origin(), await _preferred_workday(db))
         db.add(IntentRow(id=ident, payload=intent.model_dump(mode="json")))
         await db.commit()
         plan = await _replan(db)
@@ -2418,7 +2498,7 @@ async def update_intent(
     if row is None:
         raise HTTPException(status_code=404, detail=f"no intent {intent_id!r}")
     try:
-        intent = body.to_domain(intent_id, origin())
+        intent = body.to_domain(intent_id, origin(), await _preferred_workday(db))
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -2496,6 +2576,7 @@ async def resolve(db: AsyncSession = Depends(session)) -> PlanOut:
 async def analytics(db: AsyncSession = Depends(session)) -> Analytics:
     """How the plan actually spends the week."""
     cfg = settings()
+    workday_start_min, workday_end_min = await _preferred_workday(db)
     plan = await load_previous_plan(db) or await _replan(db)
     return analyse(
         plan,
@@ -2504,8 +2585,8 @@ async def analytics(db: AsyncSession = Depends(session)) -> Analytics:
         # same hour twice and report a meeting load above 100%.
         merge_busy(await _busy(db)),
         horizon_days=cfg.horizon_days,
-        workday_start_min=cfg.workday_start_min,
-        workday_end_min=cfg.workday_end_min,
+        workday_start_min=workday_start_min,
+        workday_end_min=workday_end_min,
     )
 
 
@@ -2605,7 +2686,7 @@ async def sync_linear(body: LinearSyncIn, db: AsyncSession = Depends(session)) -
             min_chunk_minutes=min(30, issue.minutes),
             max_chunk_minutes=max(min(body.max_chunk_minutes, issue.minutes), issue.minutes),
         )
-        intent = wire.to_domain(f"{LINEAR_PREFIX}{issue.id}", base)
+        intent = wire.to_domain(f"{LINEAR_PREFIX}{issue.id}", base, await _preferred_workday(db))
         db.add(IntentRow(id=intent.id, payload=intent.model_dump(mode="json")))
     await db.commit()
     plan = await _replan(db)
@@ -2636,7 +2717,7 @@ async def _sync_tasks(
             min_chunk_minutes=min(30, minutes),
             max_chunk_minutes=minutes,
         )
-        intent = wire.to_domain(f"{prefix}{task_id}", base)
+        intent = wire.to_domain(f"{prefix}{task_id}", base, await _preferred_workday(db))
         db.add(IntentRow(id=intent.id, payload=intent.model_dump(mode="json")))
     await db.commit()
     return len(tasks)
@@ -2821,7 +2902,7 @@ def _connect_redirect(web: str, **params: str) -> RedirectResponse:
     f-string let that value break out of the query string; `urlencode` is what
     keeps it confined to the `error` parameter's value.
     """
-    return RedirectResponse(url=f"{web}/connect?{urlencode(params)}")
+    return RedirectResponse(url=f"{web}/settings?{urlencode(params)}")
 
 
 @app.get("/api/auth/{provider}")
