@@ -34,6 +34,7 @@ from horolog.assistant import AssistantAction, AssistantMessage, converse
 from horolog.capture import capture, capture_daily_actions, to_payload
 from horolog.db import (
     BusyRow,
+    ChangeSetRow,
     DailyItemDecisionRow,
     DailyItemMetaRow,
     DailyPlanItemRow,
@@ -42,6 +43,7 @@ from horolog.db import (
     IntentRow,
     NotificationSettingsRow,
     SyncedBlockRow,
+    TimeEntryRow,
     TodoInboxRow,
     UserSettingsRow,
     init_db,
@@ -1643,6 +1645,227 @@ async def create_intent(body: IntentIn, db: AsyncSession = Depends(session)) -> 
     await db.commit()
     await _replan(db)
     return intent.model_dump(mode="json")
+
+
+def _iso_or_none(value: datetime | None) -> str | None:
+    return value.isoformat() if value is not None else None
+
+
+def _dt_or_none(value: str | None) -> datetime | None:
+    return datetime.fromisoformat(value) if value else None
+
+
+async def _planning_snapshot(db: AsyncSession) -> dict[str, Any]:
+    """Capture mutable user planning state for reversible change sets."""
+
+    intents = (await db.execute(select(IntentRow))).scalars().all()
+    daily_plans = (await db.execute(select(DailyPlanRow))).scalars().all()
+    daily_items = (await db.execute(select(DailyPlanItemRow))).scalars().all()
+    daily_meta = (await db.execute(select(DailyItemMetaRow))).scalars().all()
+    daily_decisions = (await db.execute(select(DailyItemDecisionRow))).scalars().all()
+    daily_reviews = (await db.execute(select(DailyReviewRow))).scalars().all()
+    todos = (await db.execute(select(TodoInboxRow))).scalars().all()
+
+    return {
+        "intents": [
+            {
+                "id": row.id,
+                "payload": row.payload,
+                "created_at": row.created_at.isoformat(),
+            }
+            for row in intents
+        ],
+        "daily_plans": [
+            {
+                "date": row.date,
+                "win_condition": row.win_condition,
+                "first_step": row.first_step,
+                "closed_at": _iso_or_none(row.closed_at),
+                "created_at": row.created_at.isoformat(),
+                "updated_at": row.updated_at.isoformat(),
+            }
+            for row in daily_plans
+        ],
+        "daily_items": [
+            {
+                "id": row.id,
+                "plan_date": row.plan_date,
+                "title": row.title,
+                "quadrant": row.quadrant,
+                "minutes": row.minutes,
+                "priority": row.priority,
+                "category": row.category,
+                "intent_id": row.intent_id,
+                "schedule_enabled": row.schedule_enabled,
+                "completed_at": _iso_or_none(row.completed_at),
+                "cancelled_at": _iso_or_none(row.cancelled_at),
+                "created_at": row.created_at.isoformat(),
+            }
+            for row in daily_items
+        ],
+        "daily_meta": [
+            {
+                "item_id": row.item_id,
+                "deadline_date": row.deadline_date,
+            }
+            for row in daily_meta
+        ],
+        "daily_decisions": [
+            {
+                "item_id": row.item_id,
+                "defer_until": row.defer_until,
+                "acknowledged_date": row.acknowledged_date,
+                "updated_at": row.updated_at.isoformat(),
+            }
+            for row in daily_decisions
+        ],
+        "daily_reviews": [
+            {
+                "date": row.date,
+                "did_well": row.did_well,
+                "grateful_for": row.grateful_for,
+                "would_change": row.would_change,
+                "learned": row.learned,
+                "improve_tomorrow": row.improve_tomorrow,
+                "first_step_morning": row.first_step_morning,
+                "updated_at": row.updated_at.isoformat(),
+            }
+            for row in daily_reviews
+        ],
+        "todos": [
+            {
+                "id": row.id,
+                "title": row.title,
+                "minutes": row.minutes,
+                "category": row.category,
+                "deadline_date": row.deadline_date,
+                "assigned_at": _iso_or_none(row.assigned_at),
+                "created_at": row.created_at.isoformat(),
+                "updated_at": row.updated_at.isoformat(),
+            }
+            for row in todos
+        ],
+    }
+
+
+async def _restore_planning_snapshot(
+    db: AsyncSession,
+    snapshot: dict[str, Any],
+) -> None:
+    """Restore planning state captured by _planning_snapshot."""
+
+    # Dependent rows first; intents last.
+    await db.execute(delete(DailyItemMetaRow))
+    await db.execute(delete(DailyItemDecisionRow))
+    await db.execute(delete(DailyPlanItemRow))
+    await db.execute(delete(DailyReviewRow))
+    await db.execute(delete(DailyPlanRow))
+    await db.execute(delete(TodoInboxRow))
+    await db.execute(delete(IntentRow))
+
+    for item in snapshot.get("intents", []):
+        db.add(
+            IntentRow(
+                id=item["id"],
+                payload=item["payload"],
+                created_at=datetime.fromisoformat(item["created_at"]),
+            )
+        )
+    for item in snapshot.get("daily_plans", []):
+        db.add(
+            DailyPlanRow(
+                date=item["date"],
+                win_condition=item.get("win_condition", ""),
+                first_step=item.get("first_step", ""),
+                closed_at=_dt_or_none(item.get("closed_at")),
+                created_at=datetime.fromisoformat(item["created_at"]),
+                updated_at=datetime.fromisoformat(item["updated_at"]),
+            )
+        )
+    for item in snapshot.get("daily_items", []):
+        db.add(
+            DailyPlanItemRow(
+                id=item["id"],
+                plan_date=item["plan_date"],
+                title=item["title"],
+                quadrant=item["quadrant"],
+                minutes=item["minutes"],
+                priority=item["priority"],
+                category=item.get("category"),
+                intent_id=item.get("intent_id"),
+                schedule_enabled=item["schedule_enabled"],
+                completed_at=_dt_or_none(item.get("completed_at")),
+                cancelled_at=_dt_or_none(item.get("cancelled_at")),
+                created_at=datetime.fromisoformat(item["created_at"]),
+            )
+        )
+    for item in snapshot.get("daily_meta", []):
+        db.add(
+            DailyItemMetaRow(
+                item_id=item["item_id"],
+                deadline_date=item.get("deadline_date"),
+            )
+        )
+    for item in snapshot.get("daily_decisions", []):
+        db.add(
+            DailyItemDecisionRow(
+                item_id=item["item_id"],
+                defer_until=item.get("defer_until"),
+                acknowledged_date=item.get("acknowledged_date"),
+                updated_at=datetime.fromisoformat(item["updated_at"]),
+            )
+        )
+    for item in snapshot.get("daily_reviews", []):
+        db.add(
+            DailyReviewRow(
+                date=item["date"],
+                did_well=item.get("did_well", ""),
+                grateful_for=item.get("grateful_for", ""),
+                would_change=item.get("would_change", ""),
+                learned=item.get("learned", ""),
+                improve_tomorrow=item.get("improve_tomorrow", ""),
+                first_step_morning=item.get("first_step_morning", ""),
+                updated_at=datetime.fromisoformat(item["updated_at"]),
+            )
+        )
+    for item in snapshot.get("todos", []):
+        db.add(
+            TodoInboxRow(
+                id=item["id"],
+                title=item["title"],
+                minutes=item["minutes"],
+                category=item.get("category"),
+                deadline_date=item.get("deadline_date"),
+                assigned_at=_dt_or_none(item.get("assigned_at")),
+                created_at=datetime.fromisoformat(item["created_at"]),
+                updated_at=datetime.fromisoformat(item["updated_at"]),
+            )
+        )
+
+    await db.commit()
+    await _replan(db)
+
+
+async def _save_change_set(
+    db: AsyncSession,
+    *,
+    source: str,
+    title: str,
+    summary: list[dict[str, Any]],
+    before: dict[str, Any],
+    after: dict[str, Any],
+) -> ChangeSetRow:
+    row = ChangeSetRow(
+        id=uuid.uuid4().hex[:16],
+        source=source,
+        title=title,
+        summary=summary,
+        before_state=before,
+        after_state=after,
+    )
+    db.add(row)
+    await db.commit()
+    return row
 
 
 class AssistantChatIn(BaseModel):
