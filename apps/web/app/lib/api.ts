@@ -323,7 +323,7 @@ export const api = {
   remove: (id: string) => request<void>(`/api/intents/${id}`, { method: "DELETE" }),
   update: (id: string, body: Record<string, unknown>) =>
     request<Intent>(`/api/intents/${id}`, { method: "PUT", body: JSON.stringify(body) }),
-  patchIntent: (id: string, body: { title?: string; priority?: Priority; category?: WorkCategory }) =>
+  patchIntent: (id: string, body: { title?: string; priority?: Priority; category?: WorkCategory | null }) =>
     request<Intent>(`/api/intents/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   complete: (id: string) => request<Intent>(`/api/intents/${id}/complete`, { method: "POST" }),
   uncomplete: (id: string) =>
