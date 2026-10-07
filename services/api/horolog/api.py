@@ -40,6 +40,7 @@ from horolog.db import (
     DailyPlanRow,
     DailyReviewRow,
     IntentRow,
+    NotificationSettingsRow,
     SyncedBlockRow,
     TodoInboxRow,
     UserSettingsRow,
@@ -321,6 +322,35 @@ class UserPreferencesIn(BaseModel):
         ):
             raise ValueError(
                 f"workday times must use {SLOT_MINUTES}-minute increments"
+            )
+        return self
+
+
+class NotificationPreferencesIn(BaseModel):
+    task_enabled: bool = True
+    task_minutes_before: int = Field(default=15, ge=0, le=240)
+    task_at_start: bool = True
+
+    meeting_enabled: bool = True
+    meeting_minutes_before: int = Field(default=15, ge=0, le=240)
+    meeting_at_start: bool = True
+
+    deadline_enabled: bool = True
+    deadline_days_before: int = Field(default=1, ge=0, le=30)
+    deadline_time_min: int = Field(default=9 * 60, ge=0, lt=24 * 60)
+
+    end_of_day_enabled: bool = True
+    end_of_day_time_min: int = Field(default=20 * 60 + 30, ge=0, lt=24 * 60)
+
+    @model_validator(mode="after")
+    def _valid_notification_times(self) -> "NotificationPreferencesIn":
+        if self.deadline_time_min % SLOT_MINUTES:
+            raise ValueError(
+                f"deadline reminder time must use {SLOT_MINUTES}-minute increments"
+            )
+        if self.end_of_day_time_min % SLOT_MINUTES:
+            raise ValueError(
+                f"end-of-day reminder time must use {SLOT_MINUTES}-minute increments"
             )
         return self
 
@@ -802,6 +832,55 @@ async def assign_todo_to_daily(
     row.updated_at = datetime.now(UTC)
     await db.commit()
     return item
+
+
+NOTIFICATION_SETTINGS_ID = 1
+
+
+def _notification_settings_dict(
+    row: NotificationSettingsRow | None,
+) -> dict[str, int | bool]:
+    return {
+        "task_enabled": row.task_enabled if row is not None else True,
+        "task_minutes_before": row.task_minutes_before if row is not None else 15,
+        "task_at_start": row.task_at_start if row is not None else True,
+        "meeting_enabled": row.meeting_enabled if row is not None else True,
+        "meeting_minutes_before": row.meeting_minutes_before if row is not None else 15,
+        "meeting_at_start": row.meeting_at_start if row is not None else True,
+        "deadline_enabled": row.deadline_enabled if row is not None else True,
+        "deadline_days_before": row.deadline_days_before if row is not None else 1,
+        "deadline_time_min": row.deadline_time_min if row is not None else 9 * 60,
+        "end_of_day_enabled": row.end_of_day_enabled if row is not None else True,
+        "end_of_day_time_min": (
+            row.end_of_day_time_min if row is not None else 20 * 60 + 30
+        ),
+    }
+
+
+@app.get("/api/settings/notifications")
+async def get_notification_preferences(
+    db: AsyncSession = Depends(session),
+) -> dict[str, int | bool]:
+    row = await db.get(NotificationSettingsRow, NOTIFICATION_SETTINGS_ID)
+    return _notification_settings_dict(row)
+
+
+@app.put("/api/settings/notifications")
+async def put_notification_preferences(
+    body: NotificationPreferencesIn,
+    db: AsyncSession = Depends(session),
+) -> dict[str, int | bool]:
+    row = await db.get(NotificationSettingsRow, NOTIFICATION_SETTINGS_ID)
+    if row is None:
+        row = NotificationSettingsRow(id=NOTIFICATION_SETTINGS_ID)
+        db.add(row)
+
+    for field, value in body.model_dump().items():
+        setattr(row, field, value)
+    row.updated_at = datetime.now(UTC)
+
+    await db.commit()
+    return _notification_settings_dict(row)
 
 
 @app.get("/api/settings")
