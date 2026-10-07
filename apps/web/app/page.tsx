@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation"
 import { Marquee } from "@/app/components/Marquee"
 import { CheckCircle2, Hexagon } from "lucide-react"
 
@@ -44,6 +45,13 @@ const LANDING_ONLY = process.env.VERCEL === "1"
 const appHref = LANDING_ONLY ? GITHUB_URL : "/login"
 
 export default function Landing() {
+  // Self-hosted Horolog is an application first: entering the server root
+  // should take the user straight to the primary Planner. Keep the public
+  // Vercel deployment as the project landing page.
+  if (!LANDING_ONLY) {
+    redirect("/planner")
+  }
+
   return (
     <div id="main" className="bg-background text-foreground min-h-screen">
       <Navbar signInHref={appHref} />
