@@ -273,6 +273,7 @@ class CompletedBlockIn(BaseModel):
 class MoveIntentIn(BaseModel):
     start: LocalDateTime
     end: LocalDateTime
+    exact: bool = True
 
 
 class IntentPatchIn(BaseModel):
@@ -1718,7 +1719,11 @@ async def _execute_assistant_action(
         end = start + timedelta(minutes=intent.minutes_per_period)
         moved = await move_intent(
             action.intent_id,
-            MoveIntentIn(start=start, end=end),
+            MoveIntentIn(
+                start=start,
+                end=end,
+                exact=action.start_min is not None,
+            ),
             db,
         )
         return {"action": action.action, "status": "done", **moved}
@@ -2091,36 +2096,77 @@ async def move_intent(
             }
         )
     else:
-        dragged_minutes = max(
-            SLOT_MINUTES,
-            int((end - start).total_seconds() // 60),
-        )
-        required_window = max(
-            dragged_minutes,
-            intent.minutes_per_period,
-            intent.max_chunk_minutes,
-        )
-        window_end = min(24 * 60, start_min + required_window)
-        if window_end - start_min < intent.min_chunk_minutes:
+        requested_seconds = int((end - start).total_seconds())
+        if requested_seconds % (SLOT_MINUTES * 60) != 0:
             raise HTTPException(
-                status_code=409,
-                detail="There is not enough time left on that day for this task.",
+                status_code=422,
+                detail=f"Task duration must use {SLOT_MINUTES}-minute increments.",
+            )
+        if start.minute % SLOT_MINUTES != 0 or start.second != 0 or start.microsecond != 0:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Task start must use {SLOT_MINUTES}-minute increments.",
             )
 
-        moved = intent.model_copy(
-            update={
-                "earliest_slot": to_slot(start, base),
-                # Refresh the hard upper bound on every explicit move. Without
-                # this, a stale latest_slot can keep an item pinned to its old day.
-                "latest_slot": to_slot(target_day_end, base),
-                "due_slot": to_slot(target_day_end, base) - 1,
-                "preferred_start_min": start_min,
-                "daily_windows": [
-                    DailyWindow(start_min=start_min, end_min=window_end)
-                ],
-                "allowed_weekdays": [],
-            }
-        )
+        dragged_minutes = requested_seconds // 60
+
+        if body.exact:
+            task_minutes = dragged_minutes
+            task_end = start + timedelta(minutes=task_minutes)
+            if task_end.date() != start.date():
+                raise HTTPException(
+                    status_code=409,
+                    detail="The task would extend beyond the selected day.",
+                )
+
+            moved = intent.model_copy(
+                update={
+                    # A Planner edit is authoritative: resize the task itself,
+                    # then pin the resulting single block to exactly this span.
+                    "minutes_per_period": task_minutes,
+                    "min_chunk_minutes": task_minutes,
+                    "max_chunk_minutes": task_minutes,
+                    "max_per_day": 1,
+                    "earliest_slot": to_slot(start, base),
+                    "latest_slot": to_slot(task_end, base),
+                    "due_slot": to_slot(task_end, base),
+                    "preferred_start_min": start_min,
+                    "daily_windows": [
+                        DailyWindow(
+                            start_min=start_min,
+                            end_min=start_min + task_minutes,
+                        )
+                    ],
+                    "allowed_weekdays": [],
+                }
+            )
+        else:
+            # Date-only assistant reschedules keep the task's duration and may
+            # let the solver choose a later free slot on the selected day.
+            required_window = max(
+                dragged_minutes,
+                intent.minutes_per_period,
+                intent.max_chunk_minutes,
+            )
+            window_end = min(24 * 60, start_min + required_window)
+            if window_end - start_min < intent.min_chunk_minutes:
+                raise HTTPException(
+                    status_code=409,
+                    detail="There is not enough time left on that day for this task.",
+                )
+
+            moved = intent.model_copy(
+                update={
+                    "earliest_slot": to_slot(start, base),
+                    "latest_slot": to_slot(target_day_end, base),
+                    "due_slot": to_slot(target_day_end, base) - 1,
+                    "preferred_start_min": start_min,
+                    "daily_windows": [
+                        DailyWindow(start_min=start_min, end_min=window_end)
+                    ],
+                    "allowed_weekdays": [],
+                }
+            )
 
     row.payload = moved.model_dump(mode="json")
     await db.commit()
@@ -2151,27 +2197,47 @@ async def move_intent(
                 ),
             )
     else:
-        all_on_target_day = bool(target_blocks) and all(
-            from_slot(block.start_slot, base).astimezone(settings().zone).date()
-            == target_date
-            for block in target_blocks
-        )
-        placed_slots = sum(
-            block.end_slot - block.start_slot for block in target_blocks
-        )
-        required_slots = minutes_to_slots(intent.minutes_per_period)
-
-        if not all_on_target_day or placed_slots < required_slots:
-            row.payload = original_payload
-            await db.commit()
-            await _replan(db)
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "This task does not fully fit on the selected day. "
-                    "Choose another day or free more time."
-                ),
+        if body.exact:
+            expected_start_slot = to_slot(start, base)
+            expected_end_slot = to_slot(end, base)
+            correctly_placed = (
+                len(target_blocks) == 1
+                and target_blocks[0].start_slot == expected_start_slot
+                and target_blocks[0].end_slot == expected_end_slot
             )
+            if not correctly_placed:
+                row.payload = original_payload
+                await db.commit()
+                await _replan(db)
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "This task cannot be placed at the selected time. "
+                        "Choose another time or free that slot."
+                    ),
+                )
+        else:
+            all_on_target_day = bool(target_blocks) and all(
+                from_slot(block.start_slot, base).astimezone(settings().zone).date()
+                == target_date
+                for block in target_blocks
+            )
+            placed_slots = sum(
+                block.end_slot - block.start_slot for block in target_blocks
+            )
+            required_slots = minutes_to_slots(intent.minutes_per_period)
+
+            if not all_on_target_day or placed_slots < required_slots:
+                row.payload = original_payload
+                await db.commit()
+                await _replan(db)
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "This task does not fully fit on the selected day. "
+                        "Choose another day or free more time."
+                    ),
+                )
 
     linked_daily = (
         await db.execute(
@@ -2185,6 +2251,8 @@ async def move_intent(
     target_key = target_date.isoformat()
     for daily_row in linked_daily:
         daily_row.plan_date = target_key
+        if intent.kind == IntentKind.TASK and body.exact:
+            daily_row.minutes = dragged_minutes
     if linked_daily:
         await db.commit()
 
