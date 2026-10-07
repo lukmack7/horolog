@@ -240,6 +240,9 @@ export function CommandBar({
     },
   ]);
   const [input, setInput] = useState("");
+  const [inputReferences, setInputReferences] = useState<AssistantReference[]>([]);
+  const [mentionBlocks, setMentionBlocks] = useState<Block[]>([]);
+  const [mentionIndex, setMentionIndex] = useState(0);
   const [pendingActions, setPendingActions] = useState<AssistantAction[]>([]);
   const [busy, setBusy] = useState(false);
   const [executing, setExecuting] = useState(false);
@@ -249,6 +252,163 @@ export function CommandBar({
   const executingRef = useRef(false);
 
   const hasProposal = pendingActions.length > 0;
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void api
+      .plan()
+      .then((plan) => {
+        if (!cancelled) setMentionBlocks(plan.blocks);
+      })
+      .catch(() => {
+        if (!cancelled) setMentionBlocks([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  const mentionTrigger = useMemo(() => detectMentionTrigger(input), [input]);
+
+  const mentionOptions = useMemo<MentionOption[]>(() => {
+    if (!mentionTrigger) return [];
+
+    const query = normalizeSearch(mentionTrigger.query);
+
+    if (mentionTrigger.kind === "category") {
+      return WORK_CATEGORIES.map((category) => {
+        const label = WORK_CATEGORY_LABEL[category];
+        const token = `#[${safeTokenLabel(label)}]`;
+        return {
+          key: `category:${category}`,
+          label,
+          meta: "Kategoria",
+          reference: {
+            kind: "category" as const,
+            token,
+            category,
+          },
+        };
+      })
+        .filter((option) => normalizeSearch(option.label).includes(query))
+        .slice(0, 8);
+    }
+
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const allowedDays = new Set([localDayKey(now), localDayKey(tomorrow)]);
+
+    const candidates = mentionBlocks
+      .filter((block) => {
+        if (block.completed || block.recurring) return false;
+        if (!["task", "meeting", "buffer"].includes(block.kind)) return false;
+        return allowedDays.has(localDayKey(new Date(block.start)));
+      })
+      .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+
+    const duplicateTitles = new Map<string, number>();
+    for (const block of candidates) {
+      const key = normalizeSearch(block.title);
+      duplicateTitles.set(key, (duplicateTitles.get(key) ?? 0) + 1);
+    }
+
+    return candidates
+      .map((block) => {
+        const start = new Date(block.start);
+        const dateLabel =
+          localDayKey(start) === localDayKey(now) ? "Dzisiaj" : "Jutro";
+        const categoryLabel = block.category
+          ? WORK_CATEGORY_LABEL[block.category]
+          : null;
+        const typeLabel =
+          block.kind === "meeting"
+            ? "Spotkanie"
+            : block.kind === "buffer"
+              ? "Przerwa"
+              : "Zadanie";
+        const searchable = normalizeSearch(
+          [
+            block.title,
+            categoryLabel ?? "",
+            typeLabel,
+            dateLabel,
+            blockTime(block),
+          ].join(" "),
+        );
+        const needsTime =
+          (duplicateTitles.get(normalizeSearch(block.title)) ?? 0) > 1;
+        const tokenLabel = needsTime
+          ? `${block.title} · ${blockTime(block).split("–")[0]}`
+          : block.title;
+        const token = `@[${safeTokenLabel(tokenLabel)}]`;
+
+        return {
+          key: `intent:${block.intent_id}:${block.start}`,
+          label: block.title,
+          meta: [
+            dateLabel,
+            blockTime(block),
+            typeLabel,
+            categoryLabel,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+          searchable,
+          reference: {
+            kind: "intent" as const,
+            token,
+            intent_id: block.intent_id,
+          },
+        };
+      })
+      .filter((option) => !query || option.searchable.includes(query))
+      .slice(0, 8)
+      .map(({ searchable: _searchable, ...option }) => option);
+  }, [mentionBlocks, mentionTrigger]);
+
+  useEffect(() => {
+    setMentionIndex(0);
+  }, [mentionTrigger?.kind, mentionTrigger?.query]);
+
+  const selectMention = (option: MentionOption) => {
+    const trigger = mentionTrigger;
+    if (!trigger) return;
+    const next = `${input.slice(0, trigger.start)}${option.reference.token} `;
+    setInput(next);
+    setInputReferences((current) => [
+      ...current.filter(
+        (reference) =>
+          reference.token !== option.reference.token &&
+          !(
+            reference.kind === "intent" &&
+            option.reference.kind === "intent" &&
+            reference.intent_id === option.reference.intent_id
+          ) &&
+          !(
+            reference.kind === "category" &&
+            option.reference.kind === "category" &&
+            reference.category === option.reference.category
+          ),
+      ),
+      option.reference,
+    ]);
+    requestAnimationFrame(() => {
+      const element = document.getElementById("horolog-assistant-input");
+      if (element instanceof HTMLTextAreaElement) {
+        element.focus();
+        element.setSelectionRange(next.length, next.length);
+      }
+    });
+  };
+
+  const updateInput = (value: string) => {
+    setInput(value);
+    setInputReferences((current) =>
+      current.filter((reference) => value.includes(reference.token)),
+    );
+  };
 
   const scrollDown = () => {
     requestAnimationFrame(() => {
@@ -262,12 +422,20 @@ export function CommandBar({
     if (!text || sendingRef.current || executingRef.current || busy || executing) return;
 
     sendingRef.current = true;
+    const references = inputReferences.filter((reference) =>
+      text.includes(reference.token),
+    );
     const nextMessages: AssistantMessage[] = [
       ...messages,
-      { role: "user", content: text },
+      {
+        role: "user",
+        content: text,
+        references,
+      },
     ];
     setMessages(nextMessages);
     setInput("");
+    setInputReferences([]);
     setBusy(true);
     setError(null);
     scrollDown();
@@ -296,6 +464,7 @@ export function CommandBar({
         return current;
       });
       setInput(text);
+      setInputReferences(references);
       setError(
         caught instanceof Error
           ? caught.message
@@ -346,6 +515,7 @@ export function CommandBar({
     ]);
     setPendingActions([]);
     setInput("");
+    setInputReferences([]);
     setError(null);
   };
 
