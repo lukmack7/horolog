@@ -366,6 +366,7 @@ class DailyItemIn(BaseModel):
     quadrant: int = Field(ge=1, le=4)
     minutes: int = Field(default=30, gt=0, le=480)
     priority: Priority = Priority.P3
+    category: WorkCategory | None = None
     schedule_enabled: bool = True
     intent_id: str | None = None
 
@@ -549,6 +550,11 @@ def _daily_item_dict(
         "quadrant": row.quadrant,
         "minutes": row.minutes,
         "priority": row.priority,
+        "category": (
+            intent_payload.get("category")
+            if intent_payload and intent_payload.get("category") is not None
+            else row.category
+        ),
         "intent_id": row.intent_id,
         "schedule_enabled": row.schedule_enabled,
         "completed_at": completed_at.isoformat() if completed_at else None,
@@ -1106,6 +1112,7 @@ async def create_daily_item(date: str, body: DailyItemIn, db: AsyncSession = Dep
             title=body.title,
             kind=IntentKind.TASK,
             priority=matrix_priority,
+            category=body.category,
             minutes_per_period=body.minutes,
             min_chunk_minutes=min(30, body.minutes),
             max_chunk_minutes=body.minutes,
@@ -1123,6 +1130,7 @@ async def create_daily_item(date: str, body: DailyItemIn, db: AsyncSession = Dep
         quadrant=body.quadrant,
         minutes=body.minutes,
         priority=int(matrix_priority),
+        category=body.category.value if body.category is not None else None,
         intent_id=intent_id,
         schedule_enabled=body.schedule_enabled,
     )
@@ -1514,6 +1522,7 @@ async def _execute_assistant_action(
                 title=action.title,
                 quadrant=action.quadrant,
                 minutes=action.minutes,
+                category=action.category,
                 schedule_enabled=action.quadrant <= 2,
             ),
             db,
