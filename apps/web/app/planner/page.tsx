@@ -368,7 +368,7 @@ export default function Planner() {
 
         {/* Calendar + Sidebar */}
         <div className="grid gap-6 lg:grid-cols-[1fr_270px]">
-          <section aria-label="Calendar view" className="min-w-0">
+          <section aria-label={t("Calendar view")} className="min-w-0">
             <EventManager
               events={calendarEvents}
               onEventCreate={handleEventCreate}
@@ -385,7 +385,7 @@ export default function Planner() {
 
           <aside className="hidden space-y-4 lg:block">
             {movedCount > 0 && (
-              <Panel title="Shift Stability">
+              <Panel title={t("Shift Stability")}>
                 <div className="flex items-start gap-2.5">
                   <Sparkles size={16} className="mt-0.5 shrink-0 text-accent" />
                   <p className="text-[13px] leading-relaxed text-fg-muted">
@@ -396,7 +396,7 @@ export default function Planner() {
             )}
 
             {plan && !plan.complete && (
-              <Panel title="Unmet Demand">
+              <Panel title={t("Unmet Demand")}>
                 <ul className="space-y-3">
                   {plan.unmet.map((item) => (
                     <li key={`${item.intent_id}-${item.title}`} className="flex gap-2.5">
@@ -420,7 +420,7 @@ export default function Planner() {
               </Panel>
             )}
 
-            <Panel title="Legend">
+            <Panel title={t("Legend")}>
               <ul className="space-y-2.5">
                 {(["task", "habit", "focus", "buffer", "meeting"] as const).map((kind) => (
                   <li key={kind} className="flex items-center gap-2.5 text-[13px] text-fg font-medium">
