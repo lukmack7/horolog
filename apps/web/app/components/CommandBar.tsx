@@ -704,11 +704,82 @@ export function CommandBar({
 
             <footer className="border-t border-black/[0.06] bg-white p-3 sm:p-4">
               <div className="rounded-2xl border border-black/[0.08] bg-sunk/20 p-2 focus-within:border-black/20">
+                {mentionTrigger && mentionOptions.length > 0 && (
+                  <div className="mb-2 max-h-56 overflow-y-auto rounded-xl border border-black/[0.08] bg-white p-1.5 shadow-lg">
+                    <div className="flex items-center gap-1.5 px-2 py-1 text-[9.5px] font-bold uppercase tracking-[0.1em] text-fg-subtle">
+                      {mentionTrigger.kind === "intent" ? (
+                        <AtSign size={11} />
+                      ) : (
+                        <Hash size={11} />
+                      )}
+                      {mentionTrigger.kind === "intent"
+                        ? "Wpisy z dzisiaj i jutra"
+                        : "Kategorie"}
+                    </div>
+                    <div className="space-y-0.5">
+                      {mentionOptions.map((option, index) => (
+                        <button
+                          key={option.key}
+                          type="button"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => selectMention(option)}
+                          className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors ${
+                            index === mentionIndex
+                              ? "bg-sunk text-fg"
+                              : "text-fg hover:bg-sunk/60"
+                          }`}
+                        >
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-sunk text-fg-muted">
+                            {option.reference.kind === "intent" ? (
+                              <AtSign size={13} />
+                            ) : (
+                              <Hash size={13} />
+                            )}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[11.5px] font-semibold">
+                              {option.label}
+                            </span>
+                            <span className="block truncate text-[9.5px] text-fg-muted">
+                              {option.meta}
+                            </span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <textarea
                   id="horolog-assistant-input"
                   value={input}
-                  onChange={(event) => setInput(event.target.value)}
+                  onChange={(event) => updateInput(event.target.value)}
                   onKeyDown={(event) => {
+                    if (mentionTrigger && mentionOptions.length > 0) {
+                      if (event.key === "ArrowDown") {
+                        event.preventDefault();
+                        setMentionIndex((current) =>
+                          (current + 1) % mentionOptions.length,
+                        );
+                        return;
+                      }
+                      if (event.key === "ArrowUp") {
+                        event.preventDefault();
+                        setMentionIndex((current) =>
+                          (current - 1 + mentionOptions.length) %
+                          mentionOptions.length,
+                        );
+                        return;
+                      }
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        selectMention(
+                          mentionOptions[
+                            Math.min(mentionIndex, mentionOptions.length - 1)
+                          ],
+                        );
+                        return;
+                      }
+                    }
                     if (event.key === "Enter" && !event.shiftKey) {
                       event.preventDefault();
                       void send();
@@ -725,7 +796,7 @@ export function CommandBar({
                 />
                 <div className="flex items-center justify-between gap-2 px-1 pb-0.5">
                   <span className="text-[9.5px] text-fg-subtle">
-                    Enter wysyła · Shift+Enter nowa linia
+                    @ wpis z planu · # kategoria · Enter wysyła
                   </span>
                   <button
                     type="button"
