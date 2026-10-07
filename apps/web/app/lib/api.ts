@@ -14,6 +14,7 @@ export type AssistantActionKind =
   | "create_task"
   | "create_meeting"
   | "create_break"
+  | "swap_tasks"
   | "reschedule_task"
   | "complete_task"
   | "update_daily_plan";
@@ -27,6 +28,7 @@ export interface AssistantAction {
   action: AssistantActionKind;
   title?: string | null;
   intent_id?: string | null;
+  second_intent_id?: string | null;
   date?: string | null;
   minutes?: number | null;
   quadrant?: 1 | 2 | 3 | 4 | null;
