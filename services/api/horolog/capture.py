@@ -119,6 +119,8 @@ Fields:
 - preferred_start_min: explicit start time as minutes from midnight, otherwise
   null. Never guess a clock time.
 - title: short natural action/meeting title preserving names and business terms.
+- category: use "cmr", "macheta_data" or "private" only when the text clearly
+  identifies CMR, Macheta Data or a personal/private matter. Otherwise null.
 
 For a preparation task whose sentence mentions a future meeting, keep the task
 on the selected Daily date unless the task itself is explicitly assigned to a
@@ -130,6 +132,7 @@ class DailyActionDraft(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     day_offset: int = 0
     minutes: int | None = None
+    category: WorkCategory | None = None
 
     @model_validator(mode="after")
     def _daily_sane(self) -> DailyActionDraft:
