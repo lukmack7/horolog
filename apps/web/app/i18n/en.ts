@@ -263,6 +263,21 @@ export const en = {
   "Push failed.": "Push failed.",
   "Connecting…": "Connecting…",
   "paste a personal API key": "paste a personal API key",
+  "Routine Title": "Routine Title",
+  "Clear": "Clear",
+  "Active Routines": "Active Routines",
+  "Window is shorter than session duration.": "Window is shorter than session duration.",
+  "High energy": "High energy",
+  "Medium energy": "Medium energy",
+  "Low energy": "Low energy",
+  "Meeting Title": "Meeting Title",
+  "Push writes scheduled blocks onto a dedicated Horolog calendar as real events — never your primary calendar. Off by default; enable with": "Push writes scheduled blocks onto a dedicated Horolog calendar as real events — never your primary calendar. Off by default; enable with",
+  "and reconnect the account above once to grant write access.": "and reconnect the account above once to grant write access.",
+  "Started issues and open tasks are scheduled as tasks, fluidly, around everything else. A personal API key needs no OAuth app.": "Started issues and open tasks are scheduled as tasks, fluidly, around everything else. A personal API key needs no OAuth app.",
+  "Re-sync": "Re-sync",
+  "Push the plan to": "Push the plan to",
+  "scheduled": "scheduled",
+  "open": "open",
 } as const;
 
 export type TranslationKey = keyof typeof en;
