@@ -480,7 +480,14 @@ export default function Habits() {
                     <Glyph kind={habit.kind} size={18} />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[15px] font-semibold text-fg">{habit.title}</div>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <div className="truncate text-[15px] font-semibold text-fg">{habit.title}</div>
+                      {habit.category && (
+                        <span className="shrink-0 rounded-full bg-sunk px-2 py-0.5 text-[10.5px] font-semibold text-fg-muted">
+                          {WORK_CATEGORY_LABEL[habit.category]}
+                        </span>
+                      )}
+                    </div>
                     <div className="tabular mt-1 text-[12.5px] font-medium text-fg-muted">
                       {cadence} · <span className="text-accent font-semibold">{blocks.length} placed</span>
                     </div>
