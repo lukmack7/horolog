@@ -969,6 +969,65 @@ async def test_assistant_create_break_returns_success_after_exact_placement(clie
 
 
 @pytest.mark.asyncio
+async def test_assistant_swaps_two_scheduled_tasks_atomically(client: AsyncClient) -> None:
+    target = origin() + timedelta(days=1)
+    first_start = target.replace(hour=9, minute=0, second=0, microsecond=0)
+    second_start = target.replace(hour=11, minute=0, second=0, microsecond=0)
+
+    async def create_fixed(title: str, start: datetime) -> dict[str, object]:
+        end = start + timedelta(minutes=60)
+        response = await client.post(
+            "/api/intents",
+            json={
+                "title": title,
+                "kind": "task",
+                "priority": 2,
+                "minutes_per_period": 60,
+                "min_chunk_minutes": 60,
+                "max_chunk_minutes": 60,
+                "max_per_day": 1,
+                "earliest": start.isoformat(),
+                "latest": end.isoformat(),
+                "due": end.isoformat(),
+                "preferred_start_min": start.hour * 60 + start.minute,
+                "window_start_min": start.hour * 60 + start.minute,
+                "window_end_min": end.hour * 60 + end.minute,
+            },
+        )
+        assert response.status_code == 201
+        return response.json()
+
+    first = await create_fixed("First swap task", first_start)
+    second = await create_fixed("Second swap task", second_start)
+
+    response = await client.post(
+        "/api/assistant/execute",
+        json={
+            "actions": [
+                {
+                    "action": "swap_tasks",
+                    "intent_id": first["id"],
+                    "second_intent_id": second["id"],
+                }
+            ]
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success_count"] == 1
+    assert body["results"][0]["status"] == "done"
+
+    plan = (await client.get("/api/plan")).json()
+    first_block = next(b for b in plan["blocks"] if b["title"] == "First swap task")
+    second_block = next(b for b in plan["blocks"] if b["title"] == "Second swap task")
+
+    first_after = datetime.fromisoformat(first_block["start"])
+    second_after = datetime.fromisoformat(second_block["start"])
+    assert (first_after.hour, first_after.minute) == (11, 0)
+    assert (second_after.hour, second_after.minute) == (9, 0)
+
+
+@pytest.mark.asyncio
 async def test_assistant_confirmed_meeting_stays_on_requested_day(client: AsyncClient) -> None:
     target = origin().date() + timedelta(days=2)
     response = await client.post(
