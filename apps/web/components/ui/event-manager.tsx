@@ -773,7 +773,7 @@ export function EventManager({
                     ? setNewEvent((prev) => ({ ...prev, title: e.target.value }))
                     : setSelectedEvent((prev) => (prev ? { ...prev, title: e.target.value } : null))
                 }
-                placeholder="Event title"
+                placeholder={t("Event title")}
               />
             </div>
 
@@ -790,7 +790,7 @@ export function EventManager({
                       }))
                     : setSelectedEvent((prev) => (prev ? { ...prev, description: e.target.value } : null))
                 }
-                placeholder="Event description"
+                placeholder={t("Event description")}
                 rows={3}
               />
             </div>
@@ -867,7 +867,7 @@ export function EventManager({
                   }
                 >
                   <SelectTrigger id="category" className="bg-white">
-                    <SelectValue placeholder="Select category" />
+                    <SelectValue placeholder={t("Select category")} />
                   </SelectTrigger>
                   <SelectContent className="bg-white z-[999]">
                     {categories.map((cat) => (
@@ -890,7 +890,7 @@ export function EventManager({
                   }
                 >
                   <SelectTrigger id="color" className="bg-white">
-                    <SelectValue placeholder="Select color" />
+                    <SelectValue placeholder={t("Select color")} />
                   </SelectTrigger>
                   <SelectContent className="bg-white z-[999]">
                     {colors.map((color) => (
@@ -1067,7 +1067,7 @@ function EventCard({
           )}
         >
           {event.completed && (
-            <span className="shrink-0 font-bold" aria-label="Completed">✓</span>
+            <span className="shrink-0 font-bold" aria-label={t("Completed")}>✓</span>
           )}
           {kindGlyph(10)}
           <span className={cn("truncate", event.completed && "line-through opacity-60")}>
@@ -1196,7 +1196,7 @@ function EventCard({
         )}
       >
         {event.completed && (
-          <span className="shrink-0 font-bold" aria-label="Completed">✓</span>
+          <span className="shrink-0 font-bold" aria-label={t("Completed")}>✓</span>
         )}
         {kindGlyph(12)}
         <div className={cn("truncate", event.completed && "line-through opacity-60")}>
@@ -1665,6 +1665,7 @@ function DayView({
   onDrop: (date: Date, hour: number, eventId?: string) => void
   getColorClasses: (color: string) => { bg: string; text: string }
 }) {
+  const { t, language } = useLanguage();
   const hours = Array.from({ length: 24 }, (_, i) => i)
 
   const getEventsForHour = (hour: number) => {
