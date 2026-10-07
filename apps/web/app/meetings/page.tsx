@@ -8,12 +8,15 @@ import { Shell } from "@/app/components/Shell";
 import { Skeleton } from "@/app/components/Skeleton";
 import {
   PRIORITY_TINT,
+  WORK_CATEGORIES,
+  WORK_CATEGORY_LABEL,
   api,
   createIntent,
   formatDuration,
   type AttendeeBusy,
   type Intent,
   type Priority,
+  type WorkCategory,
 } from "@/app/lib/api";
 import { Plus, Trash2, AlertTriangle, Video, Pencil, Check, X } from "lucide-react";
 
@@ -37,11 +40,13 @@ export default function Meetings() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editPriority, setEditPriority] = useState<Priority>(2);
+  const [editCategory, setEditCategory] = useState<WorkCategory | "">("");
   const [editSaving, setEditSaving] = useState(false);
 
   const [title, setTitle] = useState("");
   const [minutes, setMinutes] = useState(30);
   const [priority, setPriority] = useState<Priority>(2);
+  const [category, setCategory] = useState<WorkCategory | "">("");
   const [meetingDate, setMeetingDate] = useState(() => {
     const next = new Date();
     next.setDate(next.getDate() + 1);
@@ -93,6 +98,7 @@ export default function Meetings() {
         title: title.trim(),
         kind: "meeting",
         priority,
+        category: category || undefined,
         minutes_per_period: minutes,
         min_chunk_minutes: minutes,
         max_chunk_minutes: minutes,
@@ -102,6 +108,7 @@ export default function Meetings() {
         attendee_busy,
       });
       setTitle("");
+      setCategory("");
       setPreferredTime("");
       setRows([{ ...EMPTY_ROW }]);
       await load();
@@ -120,6 +127,7 @@ export default function Meetings() {
     setEditingId(meeting.id);
     setEditTitle(meeting.title);
     setEditPriority(meeting.priority as Priority);
+    setEditCategory(meeting.category ?? "");
     setError(null);
   }
 
@@ -133,6 +141,7 @@ export default function Meetings() {
       await api.patchIntent(meeting.id, {
         title: nextTitle,
         priority: editPriority,
+        ...(editCategory ? { category: editCategory } : {}),
       });
       setEditingId(null);
       await load();
@@ -272,7 +281,22 @@ export default function Meetings() {
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-4 border-t border-black/[0.06] bg-sunk/40 px-6 py-3.5">
-            <PriorityPicker value={priority} onChange={setPriority} />
+            <div className="flex flex-wrap items-center gap-2">
+              <PriorityPicker value={priority} onChange={setPriority} />
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value as WorkCategory | "")}
+                aria-label={t("Category")}
+                className="h-9 rounded-lg border border-black/[0.08] bg-surface px-2.5 text-[12px] font-semibold text-fg outline-none focus:border-accent"
+              >
+                <option value="">{t("No category")}</option>
+                {WORK_CATEGORIES.map((value) => (
+                  <option key={value} value={value}>
+                    {WORK_CATEGORY_LABEL[value]}
+                  </option>
+                ))}
+              </select>
+            </div>
             <button
               type="submit"
               disabled={!title.trim() || saving}
@@ -336,7 +360,22 @@ export default function Meetings() {
                           aria-label={t("Meeting Title")}
                           autoFocus
                         />
-                        <PriorityPicker value={editPriority} onChange={setEditPriority} />
+                        <div className="flex flex-wrap items-center gap-2">
+                          <PriorityPicker value={editPriority} onChange={setEditPriority} />
+                          <select
+                            value={editCategory}
+                            onChange={(e) => setEditCategory(e.target.value as WorkCategory | "")}
+                            aria-label={t("Category")}
+                            className="h-9 rounded-lg border border-black/[0.08] bg-bg px-2.5 text-[12px] font-semibold text-fg outline-none focus:border-accent"
+                          >
+                            <option value="">{t("No category")}</option>
+                            {WORK_CATEGORIES.map((value) => (
+                              <option key={value} value={value}>
+                                {WORK_CATEGORY_LABEL[value]}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
                       <div className="flex shrink-0 items-center gap-1">
                         <button
@@ -362,7 +401,14 @@ export default function Meetings() {
                   ) : (
                     <>
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-[15px] font-semibold text-fg">{meeting.title}</div>
+                        <div className="flex min-w-0 items-center gap-2">
+                          <div className="truncate text-[15px] font-semibold text-fg">{meeting.title}</div>
+                          {meeting.category && (
+                            <span className="shrink-0 rounded-full bg-sunk px-2 py-0.5 text-[10.5px] font-semibold text-fg-muted">
+                              {WORK_CATEGORY_LABEL[meeting.category]}
+                            </span>
+                          )}
+                        </div>
                         <div className="tabular mt-1 text-[12.5px] font-medium text-fg-muted">
                           {formatDuration(meeting.minutes_per_period)} ·{" "}
                           {ranges > 0 ? `${ranges} attendee range${ranges === 1 ? "" : "s"} avoided` : "no attendee ranges"}
