@@ -16,6 +16,7 @@ export type AssistantActionKind =
   | "create_break"
   | "swap_tasks"
   | "reschedule_task"
+  | "reschedule_break"
   | "complete_task"
   | "update_daily_plan";
 
