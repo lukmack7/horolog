@@ -1651,7 +1651,11 @@ class AssistantChatIn(BaseModel):
     context_page: str | None = Field(default=None, max_length=100)
 
 
-async def _assistant_context(db: AsyncSession, context_page: str | None) -> dict[str, Any]:
+async def _assistant_context(
+    db: AsyncSession,
+    context_page: str | None,
+    messages: list[AssistantMessage] | None = None,
+) -> dict[str, Any]:
     rendered = await get_plan(db)
     rows = (await db.execute(select(IntentRow))).scalars().all()
     base = origin()
@@ -1679,6 +1683,35 @@ async def _assistant_context(db: AsyncSession, context_page: str | None) -> dict
             "scheduled": scheduled.get(intent.id, []),
         })
 
+    active_by_id = {item["id"]: item for item in active}
+    explicit_references: list[dict[str, Any]] = []
+    for message in messages or []:
+        for reference in message.references:
+            if reference.kind == "intent":
+                item = active_by_id.get(reference.intent_id or "")
+                explicit_references.append(
+                    {
+                        "token": reference.token,
+                        "kind": "intent",
+                        "intent_id": reference.intent_id,
+                        "resolved": item is not None,
+                        "item": item,
+                    }
+                )
+            else:
+                explicit_references.append(
+                    {
+                        "token": reference.token,
+                        "kind": "category",
+                        "category": (
+                            reference.category.value
+                            if reference.category is not None
+                            else None
+                        ),
+                        "resolved": reference.category is not None,
+                    }
+                )
+
     workday_start_min, workday_end_min = await _preferred_workday(db)
     return {
         "page": context_page,
@@ -1686,6 +1719,7 @@ async def _assistant_context(db: AsyncSession, context_page: str | None) -> dict
         "workday_start_min": workday_start_min,
         "workday_end_min": workday_end_min,
         "active_items": active[:80],
+        "explicit_references": explicit_references[-24:],
         "unmet": [
             {
                 "intent_id": item.intent_id,
@@ -1705,7 +1739,7 @@ async def assistant_chat(
     try:
         decision = await converse(
             body.messages,
-            await _assistant_context(db, body.context_page),
+            await _assistant_context(db, body.context_page, body.messages),
             pending_actions=body.pending_actions,
         )
     except ExtractionFailed as exc:
