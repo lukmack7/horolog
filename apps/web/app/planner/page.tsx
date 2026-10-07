@@ -254,10 +254,9 @@ export default function Planner() {
       }
 
       try {
-        // Editing the event dialog is an explicit move. Keep the duration from
-        // the original task when only one edge was changed (common with native
-        // datetime-local controls), so changing the day cannot create an
-        // accidental 23/25-hour task or a reversed interval.
+        // Editing the event dialog may change both scheduling and safe
+        // metadata. Move first so a rejected time change does not leave a
+        // partially-applied title/priority edit behind.
         let start = event.startTime;
         let end = event.endTime;
         const originalDuration = source.endTime.getTime() - source.startTime.getTime();
@@ -270,16 +269,36 @@ export default function Planner() {
           start = new Date(end.getTime() - originalDuration);
         }
 
-        await api.moveIntent(
-          source.intentId,
-          start.toISOString(),
-          end.toISOString(),
-        );
+        if (startChanged || endChanged) {
+          await api.moveIntent(
+            source.intentId,
+            start.toISOString(),
+            end.toISOString(),
+          );
+        }
+
+        const priorityByColor: Record<string, Priority> = {
+          p1: 1,
+          p2: 2,
+          p3: 3,
+          p4: 4,
+        };
+        const nextPriority =
+          priorityByColor[event.color ?? ""] ??
+          event.priority ??
+          source.priority;
+        const nextTitle = event.title?.trim() || source.title;
+
+        if (nextTitle !== source.title || nextPriority !== source.priority) {
+          await api.patchIntent(source.intentId, {
+            title: nextTitle,
+            priority: nextPriority,
+          });
+        }
+
         await load();
       } catch (caught) {
-        setError(caught instanceof Error ? caught.message : "Could not move that task.");
-        // EventManager updates its local drag state optimistically; reloading
-        // restores the server-authoritative placement after a rejected move.
+        setError(caught instanceof Error ? caught.message : "Could not update that event.");
         await load();
       }
     },
