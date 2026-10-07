@@ -25,3 +25,7 @@ shot.mjs
 .ruff_cache/
 .nerd
 CLAUDE.md
+# Android
+apps/android/.gradle/
+apps/android/local.properties
+apps/android/**/build/
