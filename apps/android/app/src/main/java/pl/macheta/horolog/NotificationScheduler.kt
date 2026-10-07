@@ -37,10 +37,15 @@ object NotificationScheduler {
 
             val manager = context.getSystemService(AlarmManager::class.java)
             val exactAllowed = AlarmPermissionHelper.canScheduleExact(context)
-            if (alarm.fullScreen && exactAllowed && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                manager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    alarm.triggerAtMillis,
+            if (alarm.fullScreen && exactAllowed) {
+                val showIntent = PendingIntent.getActivity(
+                    context,
+                    requestCode xor 0x5A5A,
+                    Intent(context, MainActivity::class.java),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+                manager.setAlarmClock(
+                    AlarmManager.AlarmClockInfo(alarm.triggerAtMillis, showIntent),
                     pendingIntent,
                 )
             } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -98,13 +103,15 @@ object NotificationScheduler {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val manager = context.getSystemService(AlarmManager::class.java)
-        if (
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
-            AlarmPermissionHelper.canScheduleExact(context)
-        ) {
-            manager.setExactAndAllowWhileIdle(
-                AlarmManager.RTC_WAKEUP,
-                alarm.triggerAtMillis,
+        if (AlarmPermissionHelper.canScheduleExact(context)) {
+            val showIntent = PendingIntent.getActivity(
+                context,
+                requestCode xor 0x5A5A,
+                Intent(context, MainActivity::class.java),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            manager.setAlarmClock(
+                AlarmManager.AlarmClockInfo(alarm.triggerAtMillis, showIntent),
                 pendingIntent,
             )
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
