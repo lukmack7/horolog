@@ -29,7 +29,13 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Glyph } from "@/app/components/Glyph"
 import { FILL, RULE } from "@/app/components/Grid"
-import type { IntentKind, Priority } from "@/app/lib/api"
+import {
+  WORK_CATEGORIES,
+  WORK_CATEGORY_LABEL,
+  type IntentKind,
+  type Priority,
+  type WorkCategory,
+} from "@/app/lib/api"
 
 export interface Event {
   id: string
@@ -40,6 +46,7 @@ export interface Event {
   endTime: Date
   color: string
   category?: string
+  workCategory?: WorkCategory
   attendees?: string[]
   tags?: string[]
   /** When set, the card renders the same Glyph + accent-tint left-rule
@@ -108,6 +115,7 @@ export function EventManager({
     description: "",
     color: defaultColor,
     category: defaultCategory,
+    workCategory: undefined,
     tags: [],
   })
 
@@ -170,6 +178,7 @@ export function EventManager({
       endTime: newEvent.endTime,
       color: newEvent.color || defaultColor,
       category: newEvent.category,
+      workCategory: newEvent.workCategory,
       attendees: newEvent.attendees,
       tags: newEvent.tags || [],
     }
@@ -182,6 +191,7 @@ export function EventManager({
       description: "",
       color: defaultColor,
       category: defaultCategory,
+      workCategory: undefined,
       tags: [],
     })
   }, [newEvent, defaultColor, defaultCategory, onEventCreate])
@@ -852,9 +862,9 @@ export function EventManager({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div className="space-y-2">
-                <Label htmlFor="category">{t("Category")}</Label>
+                <Label htmlFor="category">{t("Type")}</Label>
                 <Select
                   value={isCreating ? newEvent.category : selectedEvent?.category}
                   onValueChange={(value) =>
@@ -864,12 +874,37 @@ export function EventManager({
                   }
                 >
                   <SelectTrigger id="category" className="bg-white">
-                    <SelectValue placeholder={t("Select category")} />
+                    <SelectValue placeholder={t("Select type")} />
                   </SelectTrigger>
                   <SelectContent className="bg-white z-[999]">
                     {categories.map((cat) => (
                       <SelectItem key={cat} value={cat}>
                         {cat}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="work-category">{t("Category")}</Label>
+                <Select
+                  value={isCreating ? newEvent.workCategory : selectedEvent?.workCategory}
+                  onValueChange={(value) =>
+                    isCreating
+                      ? setNewEvent((prev) => ({ ...prev, workCategory: value as WorkCategory }))
+                      : setSelectedEvent((prev) =>
+                          prev ? { ...prev, workCategory: value as WorkCategory } : null,
+                        )
+                  }
+                >
+                  <SelectTrigger id="work-category" className="bg-white">
+                    <SelectValue placeholder={t("Select category")} />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white z-[999]">
+                    {WORK_CATEGORIES.map((category) => (
+                      <SelectItem key={category} value={category}>
+                        {WORK_CATEGORY_LABEL[category]}
                       </SelectItem>
                     ))}
                   </SelectContent>
