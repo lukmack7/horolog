@@ -12,6 +12,7 @@ import {
   type DailyHistoryEntry,
   type DailyReview,
   type DailyWeekly,
+  type TodoInboxItem,
   type WorkCategory,
 } from "@/app/lib/api";
 import {
@@ -105,6 +106,7 @@ export default function DailyPage() {
   });
   const [mode, setMode] = useState<DailyMode>("plan");
   const [data, setData] = useState<DailyData | null>(null);
+  const [todos, setTodos] = useState<TodoInboxItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
 
@@ -112,7 +114,9 @@ export default function DailyPage() {
 
   const load = useCallback(async () => {
     try {
-      setData(await api.daily(key));
+      const [daily, todoItems] = await Promise.all([api.daily(key), api.todos()]);
+      setData(daily);
+      setTodos(todoItems);
       setError(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Nie udało się wczytać Daily.");
@@ -265,6 +269,7 @@ export default function DailyPage() {
             dateKey={key}
             savePlan={savePlan}
             reload={load}
+            todos={todos}
           />
         )}
 
@@ -301,12 +306,14 @@ function PlanView({
   dateKey,
   savePlan,
   reload,
+  todos,
 }: {
   data: DailyData;
   setData: (data: DailyData) => void;
   dateKey: string;
   savePlan: (patch: Partial<DailyData["plan"]>) => Promise<void>;
   reload: () => Promise<void>;
+  todos: TodoInboxItem[];
 }) {
   const { t } = useLanguage();
   const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
@@ -327,6 +334,14 @@ function PlanView({
       intent_id: suggestion.intent_id,
     });
     setDraggingSuggestionId(null);
+    await reload();
+  };
+
+  const assignTodo = async (
+    todoId: string,
+    quadrant: 1 | 2 | 3 | 4,
+  ) => {
+    await api.assignTodo(todoId, { date: dateKey, quadrant });
     await reload();
   };
 
@@ -417,6 +432,8 @@ function PlanView({
             draggingSuggestionId={draggingSuggestionId}
             setDraggingSuggestionId={setDraggingSuggestionId}
             onSuggestionDrop={attachSuggestion}
+            todos={todos}
+            onTodoAssign={assignTodo}
           />
         ))}
       </div>
