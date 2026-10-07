@@ -289,19 +289,16 @@ export default function Planner() {
           event.priority ??
           source.priority;
         const nextTitle = event.title?.trim() || source.title;
-        const nextCategory = event.workCategory ?? source.workCategory;
 
-        if (
-          nextTitle !== source.title ||
-          nextPriority !== source.priority ||
-          nextCategory !== source.workCategory
-        ) {
-          await api.patchIntent(source.intentId, {
-            title: nextTitle,
-            priority: nextPriority,
-            ...(nextCategory ? { category: nextCategory } : {}),
-          });
-        }
+        // Metadata edits are cheap and safe. Always persist the dialog state
+        // instead of relying on old/new equality checks: the EventManager keeps
+        // its own draft object and category changes must never be lost because
+        // the source event happened to refresh underneath the dialog.
+        await api.patchIntent(source.intentId, {
+          title: nextTitle,
+          priority: nextPriority,
+          category: event.workCategory ?? null,
+        });
 
         await load();
       } catch (caught) {
