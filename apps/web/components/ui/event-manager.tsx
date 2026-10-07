@@ -66,6 +66,13 @@ export interface EventManagerProps {
   availableTags?: string[]
 }
 
+const toDateTimeLocalValue = (date?: Date) => {
+  if (!date || Number.isNaN(date.getTime())) return ""
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 16)
+}
+
 const defaultColors = [
   { name: "Blue", value: "blue", bg: "bg-blue-500", text: "text-blue-700" },
   { name: "Green", value: "green", bg: "bg-green-500", text: "text-green-700" },
@@ -799,26 +806,22 @@ export function EventManager({
               <div className="space-y-2">
                 <Label htmlFor="startTime">{t("Start Time")}</Label>
                 <Input
+                  key={`start-${isCreating ? "new" : selectedEvent?.id ?? "none"}`}
                   id="startTime"
                   type="datetime-local"
                   step={900}
-                  value={
-                    isCreating
-                      ? newEvent.startTime
-                        ? new Date(newEvent.startTime.getTime() - newEvent.startTime.getTimezoneOffset() * 60000)
-                            .toISOString()
-                            .slice(0, 16)
-                        : ""
-                      : selectedEvent?.startTime
-                        ? new Date(
-                            selectedEvent.startTime.getTime() - selectedEvent.startTime.getTimezoneOffset() * 60000,
-                          )
-                            .toISOString()
-                            .slice(0, 16)
-                        : ""
-                  }
+                  defaultValue={toDateTimeLocalValue(
+                    isCreating ? newEvent.startTime : selectedEvent?.startTime,
+                  )}
                   onChange={(e) => {
-                    const date = new Date(e.target.value)
+                    // While a datetime-local value is being typed, browsers can
+                    // temporarily expose an empty/invalid value. Never put an
+                    // Invalid Date into React state: the next render would call
+                    // toISOString() on it and crash the whole Planner.
+                    if (!e.currentTarget.value) return
+                    const date = new Date(e.currentTarget.value)
+                    if (Number.isNaN(date.getTime())) return
+
                     isCreating
                       ? setNewEvent((prev) => ({ ...prev, startTime: date }))
                       : setSelectedEvent((prev) => (prev ? { ...prev, startTime: date } : null))
@@ -829,24 +832,18 @@ export function EventManager({
               <div className="space-y-2">
                 <Label htmlFor="endTime">{t("End Time")}</Label>
                 <Input
+                  key={`end-${isCreating ? "new" : selectedEvent?.id ?? "none"}`}
                   id="endTime"
                   type="datetime-local"
                   step={900}
-                  value={
-                    isCreating
-                      ? newEvent.endTime
-                        ? new Date(newEvent.endTime.getTime() - newEvent.endTime.getTimezoneOffset() * 60000)
-                            .toISOString()
-                            .slice(0, 16)
-                        : ""
-                      : selectedEvent?.endTime
-                        ? new Date(selectedEvent.endTime.getTime() - selectedEvent.endTime.getTimezoneOffset() * 60000)
-                            .toISOString()
-                            .slice(0, 16)
-                        : ""
-                  }
+                  defaultValue={toDateTimeLocalValue(
+                    isCreating ? newEvent.endTime : selectedEvent?.endTime,
+                  )}
                   onChange={(e) => {
-                    const date = new Date(e.target.value)
+                    if (!e.currentTarget.value) return
+                    const date = new Date(e.currentTarget.value)
+                    if (Number.isNaN(date.getTime())) return
+
                     isCreating
                       ? setNewEvent((prev) => ({ ...prev, endTime: date }))
                       : setSelectedEvent((prev) => (prev ? { ...prev, endTime: date } : null))
