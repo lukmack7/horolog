@@ -938,6 +938,7 @@ function DonutSummary({
 }
 
 function InsightStrip({ data, derived, plan }: { data: Analytics; derived: Derived; plan: Plan }) {
+  const { t } = useLanguage();
   const busiestIndex = derived.dayKind
     .map((row) => KIND_ORDER.reduce((sum, kind) => sum + row[kind], 0))
     .reduce((best, value, index, values) => (value > values[best]! ? index : best), 0);
