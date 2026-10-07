@@ -404,6 +404,7 @@ export const api = {
       text: string;
       quadrant: 1 | 2 | 3 | 4;
       default_minutes: number;
+      category?: WorkCategory;
     },
   ) =>
     request<{
