@@ -276,7 +276,9 @@ export default function DailyPage() {
         {data && mode === "review" && (
           <ReviewView
             data={data}
+            dateKey={key}
             saveReview={saveReview}
+            reload={load}
           />
         )}
 
@@ -975,57 +977,248 @@ function MeetingSuggestionCard({
 
 function ReviewView({
   data,
+  dateKey,
   saveReview,
+  reload,
 }: {
   data: DailyData;
+  dateKey: string;
   saveReview: (review: DailyReview) => Promise<void>;
+  reload: () => Promise<void>;
 }) {
   const { t } = useLanguage();
+  const [decisionPending, setDecisionPending] = useState<string | null>(null);
+  const [closing, setClosing] = useState(false);
+  const [tomorrow, setTomorrow] = useState<DailyData | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
   const filled = REVIEW_FIELDS.filter((field) => data.review[field.key].trim()).length;
+
+  const tomorrowKey = (() => {
+    const next = new Date(`${dateKey}T12:00:00`);
+    next.setDate(next.getDate() + 1);
+    return dateKeyFromDate(next);
+  })();
+
+  const unfinished = data.items.filter(
+    (item) => !item.completed_at && !item.cancelled_at,
+  );
+
+  useEffect(() => {
+    let alive = true;
+    void api
+      .daily(tomorrowKey)
+      .then((next) => {
+        if (alive) setTomorrow(next);
+      })
+      .catch(() => {
+        if (alive) setTomorrow(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tomorrowKey, data.plan.closed_at]);
+
+  const decide = async (
+    item: DailyData["items"][number],
+    action: "tomorrow" | "todo" | "remove" | "keep",
+  ) => {
+    setDecisionPending(`${item.id}-${action}`);
+    setLocalError(null);
+    try {
+      if (action === "tomorrow") {
+        await api.deferDailyItem(item.id, tomorrowKey);
+      } else if (action === "todo") {
+        await api.moveDailyItemToTodo(item.id);
+      } else if (action === "remove") {
+        await api.cancelDailyItem(item.id);
+      } else {
+        await api.keepDailyItem(item.id, dateKey);
+      }
+      await reload();
+    } catch (caught) {
+      setLocalError(
+        caught instanceof Error ? caught.message : "Nie udało się zapisać decyzji.",
+      );
+    } finally {
+      setDecisionPending(null);
+    }
+  };
+
+  const closeDay = async () => {
+    setClosing(true);
+    setLocalError(null);
+    try {
+      await api.closeDaily(dateKey);
+      await reload();
+    } catch (caught) {
+      setLocalError(
+        caught instanceof Error ? caught.message : "Nie udało się zamknąć dnia.",
+      );
+    } finally {
+      setClosing(false);
+    }
+  };
 
   return (
     <div className="space-y-5">
       <section className="rounded-2xl border bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-fg-muted">{t("🌙 Koniec dnia")}</div>
-            <h2 className="mt-1 font-serif text-[22px] font-bold">{t("Zamknij dzień, nie oceniaj siebie.")}</h2>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-fg-muted">
+              {t("🌙 Koniec dnia")}
+            </div>
+            <h2 className="mt-1 font-serif text-[22px] font-bold">
+              {t("Zamknij dzień, nie oceniaj siebie.")}
+            </h2>
           </div>
           <span className="rounded-full bg-sunk px-3 py-1.5 text-[10.5px] font-semibold text-fg-muted">
-            {filled}/6 odpowiedzi
+            {data.plan.closed_at ? "dzień zamknięty" : `${filled}/6 odpowiedzi`}
           </span>
         </div>
 
         <div className="mt-4 grid gap-2 sm:grid-cols-3">
           <MiniFact label="Wykonane bloki" value={`${data.summary.completed_blocks}/${data.summary.total_blocks}`} />
-          <MiniFact label="Przechodzi dalej" value={String(data.summary.carry_over)} />
+          <MiniFact label="Niewykonane" value={String(unfinished.length)} />
           <MiniFact label="Plan na rano" value={data.plan.first_step ? "gotowy" : "brak"} />
         </div>
       </section>
 
-      {data.summary.carry_over > 0 && (
-        <section className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
-          <div className="flex items-start gap-3">
-            <Lightbulb size={16} className="mt-0.5 shrink-0 text-amber-700" />
-            <p className="text-[12px] leading-relaxed text-amber-900">
-              {data.summary.carry_over} {data.summary.carry_over === 1 ? "zadanie przechodzi" : "zadania przechodzą"} na kolejny dzień.
-              To dobry kontekst do odpowiedzi „co zrobiłbym inaczej?” — bez automatycznego pisania refleksji za Ciebie.
-            </p>
-          </div>
-        </section>
+      {localError && (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-[12px] text-red-700">
+          {localError}
+        </div>
       )}
 
-      <div className="grid gap-3 lg:grid-cols-2">
-        {REVIEW_FIELDS.map((field) => (
-          <ReviewCard
-            key={field.key}
-            field={field}
-            value={data.review[field.key]}
-            review={data.review}
-            saveReview={saveReview}
-          />
-        ))}
-      </div>
+      <section className="rounded-2xl border bg-white p-4 shadow-sm">
+        <div className="mb-3">
+          <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-fg-subtle">
+            Krok 1
+          </div>
+          <h3 className="mt-1 text-[15px] font-bold text-fg">
+            Co zrobić z niewykonanymi?
+          </h3>
+          <p className="mt-1 text-[11.5px] text-fg-muted">
+            Horolog niczego nie przenosi automatycznie. Każda decyzja jest świadoma.
+          </p>
+        </div>
+
+        {unfinished.length === 0 ? (
+          <div className="rounded-xl bg-emerald-50 p-3 text-[12px] font-medium text-emerald-800">
+            Brak niewykonanych pozycji wymagających decyzji.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {unfinished.map((item) => (
+              <div key={item.id} className="rounded-xl border border-black/[0.07] bg-bg p-3">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-[12.5px] font-semibold text-fg">{item.title}</div>
+                    <div className="mt-1 text-[10px] text-fg-muted">
+                      Q{item.quadrant} · {formatDuration(item.minutes)}
+                      {item.category ? ` · ${WORK_CATEGORY_LABEL[item.category]}` : ""}
+                      {item.deadline_date ? ` · max ${item.deadline_date}` : ""}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => void decide(item, "tomorrow")}
+                      disabled={decisionPending !== null}
+                      className="rounded-lg bg-primary px-2.5 py-1.5 text-[10px] font-semibold text-white disabled:opacity-40"
+                    >
+                      Jutro
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void decide(item, "todo")}
+                      disabled={decisionPending !== null}
+                      className="rounded-lg border bg-white px-2.5 py-1.5 text-[10px] font-semibold text-fg disabled:opacity-40"
+                    >
+                      Do zrobienia
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void decide(item, "keep")}
+                      disabled={decisionPending !== null}
+                      className="rounded-lg border bg-white px-2.5 py-1.5 text-[10px] font-semibold text-fg-muted disabled:opacity-40"
+                    >
+                      Zostaw
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void decide(item, "remove")}
+                      disabled={decisionPending !== null}
+                      className="rounded-lg border border-red-100 bg-red-50 px-2.5 py-1.5 text-[10px] font-semibold text-red-700 disabled:opacity-40"
+                    >
+                      Usuń z Daily
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section>
+        <div className="mb-3">
+          <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-fg-subtle">
+            Krok 2
+          </div>
+          <h3 className="mt-1 text-[15px] font-bold text-fg">Krótka refleksja</h3>
+        </div>
+        <div className="grid gap-3 lg:grid-cols-2">
+          {REVIEW_FIELDS.map((field) => (
+            <ReviewCard
+              key={field.key}
+              field={field}
+              value={data.review[field.key]}
+              review={data.review}
+              saveReview={saveReview}
+            />
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border bg-white p-4 shadow-sm">
+        <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-fg-subtle">
+          Krok 3
+        </div>
+        <h3 className="mt-1 text-[15px] font-bold text-fg">Rzut oka na jutro</h3>
+        {tomorrow ? (
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <MiniFact label="Pozycje w Daily" value={String(tomorrow.items.length)} />
+            <MiniFact
+              label="Pierwszy krok"
+              value={tomorrow.plan.first_step ? "gotowy" : "do ustalenia"}
+            />
+            <MiniFact
+              label="Carry-over"
+              value={String(tomorrow.summary.carry_over)}
+            />
+          </div>
+        ) : (
+          <p className="mt-2 text-[11.5px] text-fg-muted">Nie udało się wczytać planu jutra.</p>
+        )}
+
+        <div className="mt-4 flex flex-wrap items-center gap-3 border-t pt-4">
+          <button
+            type="button"
+            onClick={() => void closeDay()}
+            disabled={closing || Boolean(data.plan.closed_at)}
+            className="rounded-xl bg-primary px-4 py-2.5 text-[12px] font-semibold text-white disabled:opacity-45"
+          >
+            {data.plan.closed_at
+              ? "Dzień zamknięty"
+              : closing
+                ? "Zamykam…"
+                : "Zamknij dzień"}
+          </button>
+          <span className="text-[10.5px] text-fg-muted">
+            Zamknięcie zapisze się w Ustawienia → Historia i można je cofnąć.
+          </span>
+        </div>
+      </section>
     </div>
   );
 }
