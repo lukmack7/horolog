@@ -3,6 +3,7 @@ import type { TranslationKey } from "./en";
 export const pl = {
   "Time": "Dzień",
   "Planner": "Planer",
+  "To do": "Do zrobienia",
   "Daily": "Dziennik",
   "Habits": "Nawyki",
   "Task inbox": "Zadania",
