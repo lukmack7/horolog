@@ -132,6 +132,8 @@ export function CommandBar({
   const [executing, setExecuting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const sendingRef = useRef(false);
+  const executingRef = useRef(false);
 
   const hasProposal = pendingActions.length > 0;
 
@@ -144,8 +146,9 @@ export function CommandBar({
 
   const send = async (override?: string) => {
     const text = (override ?? input).trim();
-    if (!text || busy || executing) return;
+    if (!text || sendingRef.current || executingRef.current || busy || executing) return;
 
+    sendingRef.current = true;
     const nextMessages: AssistantMessage[] = [
       ...messages,
       { role: "user", content: text },
@@ -175,12 +178,14 @@ export function CommandBar({
           : "Nie udało się porozmawiać z Horologiem.",
       );
     } finally {
+      sendingRef.current = false;
       setBusy(false);
     }
   };
 
   const execute = async () => {
-    if (!pendingActions.length || executing) return;
+    if (!pendingActions.length || executingRef.current || sendingRef.current || executing) return;
+    executingRef.current = true;
     setExecuting(true);
     setError(null);
     try {
@@ -202,6 +207,7 @@ export function CommandBar({
           : "Nie udało się wykonać uzgodnionych zmian.",
       );
     } finally {
+      executingRef.current = false;
       setExecuting(false);
     }
   };
