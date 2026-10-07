@@ -521,7 +521,7 @@ export default function SettingsPage() {
                   }`}
                 >
                   <span
-                    className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+                    className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
                       notifications.task_enabled ? "translate-x-5" : "translate-x-0.5"
                     }`}
                   />
@@ -579,7 +579,7 @@ export default function SettingsPage() {
                   }`}
                 >
                   <span
-                    className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+                    className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
                       notifications.meeting_enabled ? "translate-x-5" : "translate-x-0.5"
                     }`}
                   />
@@ -637,7 +637,7 @@ export default function SettingsPage() {
                   }`}
                 >
                   <span
-                    className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+                    className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
                       notifications.deadline_enabled ? "translate-x-5" : "translate-x-0.5"
                     }`}
                   />
@@ -703,7 +703,7 @@ export default function SettingsPage() {
                   }`}
                 >
                   <span
-                    className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+                    className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
                       notifications.end_of_day_enabled ? "translate-x-5" : "translate-x-0.5"
                     }`}
                   />
