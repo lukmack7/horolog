@@ -28,6 +28,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Glyph } from "@/app/components/Glyph"
+import { WorkCategoryMedal } from "@/app/components/WorkCategoryMedal"
 import { FILL, RULE } from "@/app/components/Grid"
 import {
   WORK_CATEGORIES,
@@ -1102,6 +1103,7 @@ function EventCard({
             <span className="shrink-0 font-bold" aria-label={t("Completed")}>✓</span>
           )}
           {kindGlyph(10)}
+          <WorkCategoryMedal category={event.workCategory} size="xs" />
           <span className={cn("truncate", event.completed && "line-through opacity-60")}>
             {event.title}
           </span>
@@ -1177,6 +1179,7 @@ function EventCard({
         )}>
           {event.completed && <span className="font-bold">✓</span>}
           {kindGlyph(14)}
+          <WorkCategoryMedal category={event.workCategory} />
           {event.title}
         </div>
         {event.description && (
@@ -1231,6 +1234,7 @@ function EventCard({
           <span className="shrink-0 font-bold" aria-label={t("Completed")}>✓</span>
         )}
         {kindGlyph(12)}
+        <WorkCategoryMedal category={event.workCategory} size="xs" />
         <div className={cn("truncate", event.completed && "line-through opacity-60")}>
           {event.title}
         </div>
@@ -1860,6 +1864,7 @@ function DayView({
                       <Glyph kind={event.kind} size={12} />
                     </span>
                   )}
+                  <WorkCategoryMedal category={event.workCategory} size="xs" />
                   <span
                     className={cn(
                       "truncate text-[11px] font-semibold leading-tight",
@@ -1961,6 +1966,7 @@ function ListView({
                                   <Glyph kind={event.kind} size={13} />
                                 </span>
                               )}
+                              <WorkCategoryMedal category={event.workCategory} />
                               <span className="truncate">{event.title}</span>
                             </h4>
                             {event.description && (
