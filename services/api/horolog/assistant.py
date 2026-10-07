@@ -98,6 +98,54 @@ class AssistantAction(BaseModel):
         return self
 
 
+class TodoInboxSuggestion(BaseModel):
+    minutes: int = Field(ge=15, le=480)
+    quadrant: int = Field(ge=1, le=4)
+    category: WorkCategory | None = None
+    deadline_date: str | None = Field(
+        default=None,
+        pattern=r"^\d{4}-\d{2}-\d{2}$",
+    )
+    rationale: str = Field(min_length=1, max_length=800)
+
+
+TODO_SUGGEST_SYSTEM = """\
+You help classify one inbox task before it enters the Eisenhower matrix.
+Return only a structured suggestion.
+
+Rules:
+- Preserve facts supplied by the user; never invent a client, category or deadline.
+- Estimate realistic work duration in 15-minute increments, 15..480 minutes.
+- Quadrants: 1 important+urgent, 2 important+not urgent, 3 not important+urgent,
+  4 not important+not urgent. If urgency is not evident, prefer quadrant 2.
+- Categories: cmr, macheta_data, private. Use null when the title/current data do
+  not support one.
+- deadline_date: preserve an existing explicit deadline. Infer a date only when
+  the task text itself clearly contains a relative/absolute deadline. Otherwise null.
+- rationale should be short and in Polish.
+"""
+
+
+async def suggest_todo_item(
+    *,
+    title: str,
+    current_minutes: int,
+    current_category: WorkCategory | None,
+    current_deadline_date: str | None,
+    provider: Provider | None = None,
+) -> TodoInboxSuggestion:
+    now = datetime.now(settings().zone)
+    user = (
+        f"Current local date: {now.date().isoformat()}\n"
+        f"TITLE: {title}\n"
+        f"CURRENT MINUTES: {current_minutes}\n"
+        f"CURRENT CATEGORY: {current_category.value if current_category else None}\n"
+        f"CURRENT DEADLINE: {current_deadline_date}\n"
+        "Suggest classification for this inbox task."
+    )
+    return await extract(TodoInboxSuggestion, TODO_SUGGEST_SYSTEM, user, provider=provider)
+
+
 class AssistantDecision(BaseModel):
     reply: str = Field(min_length=1, max_length=5000)
     actions: list[AssistantAction] = Field(default_factory=list)
