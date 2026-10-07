@@ -6,8 +6,7 @@ export type Language = keyof typeof messages;
 export type { TranslationKey };
 
 export function translate(language: Language, key: string): string {
-  if (language === "en") return key;
-  return pl[key as TranslationKey] ?? key;
+  return messages[language][key as TranslationKey] ?? key;
 }
 
 export function localeFor(language: Language): string {
