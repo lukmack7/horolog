@@ -17,7 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
-import { ChevronLeft, ChevronRight, Plus, Calendar, Clock, Grid3x3, List, Search, Filter, X } from "lucide-react"
+import { ChevronLeft, ChevronRight, Plus, Calendar, Clock, Grid3x3, List, Search, Filter, X, Play, Pause, Square } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   DropdownMenu,
@@ -35,6 +35,7 @@ import {
   WORK_CATEGORY_LABEL,
   type IntentKind,
   type Priority,
+  type TimeTrackingEntry,
   type WorkCategory,
 } from "@/app/lib/api"
 
@@ -67,6 +68,11 @@ export interface EventManagerProps {
   onEventUpdate?: (id: string, event: Partial<Event>) => void
   onEventDelete?: (id: string) => void
   onEventComplete?: (event: Event) => void | Promise<void>
+  timeTracking?: TimeTrackingEntry | null
+  onTimeTrackingStart?: (event: Event) => void | Promise<void>
+  onTimeTrackingPause?: (event: Event) => void | Promise<void>
+  onTimeTrackingResume?: (event: Event) => void | Promise<void>
+  onTimeTrackingStop?: (event: Event) => void | Promise<void>
   categories?: string[]
   colors?: { name: string; value: string; bg: string; text: string }[]
   defaultView?: "month" | "week" | "day" | "list"
@@ -96,6 +102,11 @@ export function EventManager({
   onEventUpdate,
   onEventDelete,
   onEventComplete,
+  timeTracking = null,
+  onTimeTrackingStart,
+  onTimeTrackingPause,
+  onTimeTrackingResume,
+  onTimeTrackingStop,
   categories = ["Meeting", "Task", "Reminder", "Personal"],
   colors = defaultColors,
   defaultView = "month",
@@ -108,6 +119,7 @@ export function EventManager({
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
+  const [timerTick, setTimerTick] = useState(() => Date.now())
   const draggedEventRef = useRef<Event | null>(null)
   const defaultColor = colors[0]?.value ?? "blue"
   const defaultCategory = categories[0] ?? "Meeting"
@@ -119,6 +131,36 @@ export function EventManager({
     workCategory: undefined,
     tags: [],
   })
+
+  useEffect(() => {
+    if (timeTracking?.status !== "running") return
+    const timer = window.setInterval(() => setTimerTick(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [timeTracking?.status, timeTracking?.id])
+
+  const trackingElapsedSeconds = useMemo(() => {
+    if (!timeTracking) return 0
+    let seconds = timeTracking.elapsed_seconds
+    if (timeTracking.status === "running" && timeTracking.last_resumed_at) {
+      const base = Date.parse(timeTracking.last_resumed_at)
+      if (!Number.isNaN(base)) {
+        seconds =
+          timeTracking.accumulated_seconds +
+          Math.max(0, Math.floor((timerTick - base) / 1000))
+      }
+    }
+    return seconds
+  }, [timeTracking, timerTick])
+
+  const trackingClock = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+    const rest = seconds % 60
+    return [hours, minutes, rest]
+      .map((value) => String(value).padStart(2, "0"))
+      .join(":")
+  }
+
 
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedColors, setSelectedColors] = useState<string[]>([])
@@ -958,6 +1000,81 @@ export function EventManager({
               </div>
             </div>
           </div>
+
+          {!isCreating &&
+            selectedEvent?.intentId &&
+            selectedEvent.kind === "task" &&
+            !selectedEvent.completed && (
+              <div className="rounded-xl border border-black/[0.08] bg-sunk/30 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-fg-muted">
+                      Rzeczywisty czas
+                    </div>
+                    {timeTracking?.intent_id === selectedEvent.intentId ? (
+                      <div className="mt-1 font-mono text-[20px] font-bold tabular-nums text-fg">
+                        {trackingClock(trackingElapsedSeconds)}
+                      </div>
+                    ) : (
+                      <div className="mt-1 text-[12px] text-fg-muted">
+                        {timeTracking
+                          ? `Timer działa dla: ${timeTracking.title}`
+                          : "Timer nie jest uruchomiony."}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {!timeTracking && onTimeTrackingStart && (
+                      <Button
+                        type="button"
+                        onClick={() => void onTimeTrackingStart(selectedEvent)}
+                        className="gap-1.5"
+                      >
+                        <Play size={14} /> Start
+                      </Button>
+                    )}
+
+                    {timeTracking?.intent_id === selectedEvent.intentId &&
+                      timeTracking.status === "running" &&
+                      onTimeTrackingPause && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => void onTimeTrackingPause(selectedEvent)}
+                          className="gap-1.5"
+                        >
+                          <Pause size={14} /> Pauza
+                        </Button>
+                      )}
+
+                    {timeTracking?.intent_id === selectedEvent.intentId &&
+                      timeTracking.status === "paused" &&
+                      onTimeTrackingResume && (
+                        <Button
+                          type="button"
+                          onClick={() => void onTimeTrackingResume(selectedEvent)}
+                          className="gap-1.5"
+                        >
+                          <Play size={14} /> Wznów
+                        </Button>
+                      )}
+
+                    {timeTracking?.intent_id === selectedEvent.intentId &&
+                      onTimeTrackingStop && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => void onTimeTrackingStop(selectedEvent)}
+                          className="gap-1.5"
+                        >
+                          <Square size={13} /> Zakończ pomiar
+                        </Button>
+                      )}
+                  </div>
+                </div>
+              </div>
+            )}
 
           <DialogFooter>
             {!isCreating &&
