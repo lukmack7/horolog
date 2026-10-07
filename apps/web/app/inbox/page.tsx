@@ -35,6 +35,7 @@ export default function Inbox() {
   const [editMinutes, setEditMinutes] = useState(60);
   const [editPriority, setEditPriority] = useState<Priority>(3);
   const [editCategory, setEditCategory] = useState<WorkCategory | "">("");
+  const [editDeadline, setEditDeadline] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -111,6 +112,7 @@ export default function Inbox() {
     setEditMinutes(intent.minutes_per_period);
     setEditPriority(intent.priority);
     setEditCategory(intent.category ?? "");
+    setEditDeadline(intent.deadline_date ?? "");
   }
 
   async function updateCategory(intent: Intent, category: WorkCategory | "") {
@@ -139,6 +141,11 @@ export default function Inbox() {
         priority: editPriority,
         category: editCategory || undefined,
       });
+      if ((intent.deadline_date ?? "") !== editDeadline) {
+        await api.patchIntent(intent.id, {
+          deadline_date: editDeadline || null,
+        });
+      }
       setEditing(null);
       await load();
     } catch (caught) {
@@ -289,6 +296,16 @@ export default function Inbox() {
                           </option>
                         ))}
                       </select>
+                      <label className="flex items-center gap-1">
+                        <span className="text-[10px] font-semibold text-fg-muted">max</span>
+                        <input
+                          type="date"
+                          value={editDeadline}
+                          onChange={(e) => setEditDeadline(e.target.value)}
+                          aria-label="Max deadline"
+                          className="rounded-lg border border-black/10 bg-background px-2 py-1.5 text-[12px] text-fg outline-none focus:border-accent"
+                        />
+                      </label>
                     </div>
                     <div className="mt-2 flex gap-2">
                       <button
@@ -319,6 +336,7 @@ export default function Inbox() {
                       <span className="tabular text-[12px] font-medium text-fg-muted">
                         {KIND_LABEL[intent.kind]} · {PRIORITY_NAME[intent.priority as Priority]}
                         {intent.category ? ` · ${WORK_CATEGORY_LABEL[intent.category]}` : ""}
+                        {intent.deadline_date ? ` · max ${intent.deadline_date}` : ""}
                         {intent.period_days ? ` · every ${intent.period_days}d` : ""}
                       </span>
                     </div>
