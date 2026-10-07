@@ -165,6 +165,8 @@ export const pl = {
   "End Time": "Koniec",
   "Category": "Kategoria",
   "Type": "Typ",
+  "Types": "Typy",
+  "Filter by Type": "Filtruj według typu",
   "Select type": "Wybierz typ",
   "No category": "Brak kategorii",
   "Color": "Kolor",
