@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
+import android.webkit.JavascriptInterface
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -131,6 +132,41 @@ class MainActivity : ComponentActivity() {
         return root
     }
 
+    private inner class AndroidBridge {
+        @JavascriptInterface
+        fun refreshNotifications() {
+            runOnUiThread {
+                NotificationSyncWorker.syncNow(this@MainActivity)
+            }
+        }
+
+        @JavascriptInterface
+        fun testNotification() {
+            runOnUiThread {
+                NotificationChannels.create(this@MainActivity)
+                NotificationAlarmReceiver.showNow(
+                    context = this@MainActivity,
+                    title = "Planer Horolog",
+                    message = "Powiadomienia działają prawidłowo.",
+                    channel = NotificationChannels.SCHEDULE,
+                    deepLink = "horolog://planner",
+                    notificationId = 20261007,
+                )
+            }
+        }
+
+        @JavascriptInterface
+        fun notificationsAvailable(): Boolean =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ContextCompat.checkSelfPermission(
+                    this@MainActivity,
+                    Manifest.permission.POST_NOTIFICATIONS,
+                ) == PackageManager.PERMISSION_GRANTED
+            } else {
+                true
+            }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     private fun configureWebView() {
         with(webView.settings) {
@@ -141,6 +177,8 @@ class MainActivity : ComponentActivity() {
             allowContentAccess = false
             mediaPlaybackRequiresUserGesture = true
         }
+
+        webView.addJavascriptInterface(AndroidBridge(), "HorologAndroid")
 
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(
