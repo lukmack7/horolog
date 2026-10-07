@@ -97,8 +97,8 @@ async def test_notification_preferences_round_trip(client: AsyncClient) -> None:
         "task_minutes_before": 30,
         "meeting_at_start": False,
         "deadline_days_before": 2,
-        "deadline_time_min": 10 * 60 + 15,
-        "end_of_day_time_min": 21 * 60,
+        "deadline_time_min": 10 * 60 + 7,
+        "end_of_day_time_min": 20 * 60 + 10,
     }
     saved = await client.put("/api/settings/notifications", json=changed)
     assert saved.status_code == 200
