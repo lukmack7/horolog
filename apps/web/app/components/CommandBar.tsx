@@ -51,7 +51,17 @@ function actionLabel(action: AssistantAction): string {
     return "Zamień miejscami dwa zaplanowane zadania";
   }
   if (action.action === "reschedule_task") {
-    return `Przełóż zadanie · ${action.date ?? "bez daty"}`;
+    const parts = ["Edytuj zadanie"];
+    if (action.date) parts.push(action.date);
+    if (action.start_min != null) {
+      parts.push(
+        `${String(Math.floor(action.start_min / 60)).padStart(2, "0")}:${String(
+          action.start_min % 60,
+        ).padStart(2, "0")}`,
+      );
+    }
+    if (action.minutes != null) parts.push(`${action.minutes} min`);
+    return parts.join(" · ");
   }
   if (action.action === "complete_task") {
     return "Oznacz zadanie jako wykonane";
