@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from typing import Any
 
@@ -425,7 +425,69 @@ async def rebase_slot_origin(
             saved_at = plan_row.saved_at
             if saved_at.tzinfo is None:
                 saved_at = saved_at.replace(tzinfo=UTC)
-            inferred = saved_at.astimezone(settings().zone).date()
+            saved_candidate = saved_at.astimezone(settings().zone).date()
+            inferred = saved_candidate
+
+            # Legacy databases did not persist the slot origin. Recover it
+            # from deliberate Daily dates when possible: the candidate origin
+            # that makes the most linked plan blocks land on their intended
+            # Daily date is stronger evidence than the plan save timestamp.
+            try:
+                plan_payload = json.loads(plan_row.payload)
+                daily_rows = (
+                    await db.execute(select(DailyPlanItemRow))
+                ).scalars().all()
+                decision_rows = (
+                    await db.execute(select(DailyItemDecisionRow))
+                ).scalars().all()
+                decisions = {row.item_id: row for row in decision_rows}
+                expected: dict[str, set[str]] = {}
+                for row in daily_rows:
+                    if not row.intent_id or row.cancelled_at is not None:
+                        continue
+                    decision = decisions.get(row.id)
+                    expected_date = (
+                        decision.defer_until
+                        if decision is not None and decision.defer_until
+                        else row.plan_date
+                    )
+                    expected.setdefault(row.intent_id, set()).add(expected_date)
+
+                candidates = []
+                for candidate in (
+                    saved_candidate,
+                    target,
+                    target - timedelta(days=1),
+                    target - timedelta(days=2),
+                ):
+                    if candidate not in candidates:
+                        candidates.append(candidate)
+
+                def score(candidate: Any) -> int:
+                    matches = 0
+                    for block in plan_payload.get("blocks", []):
+                        if not isinstance(block, dict):
+                            continue
+                        intent_id = block.get("intent_id")
+                        start_slot = block.get("start_slot")
+                        if intent_id not in expected or not isinstance(start_slot, int):
+                            continue
+                        predicted = (
+                            candidate + timedelta(days=start_slot // SLOTS_PER_DAY)
+                        ).isoformat()
+                        if predicted in expected[intent_id]:
+                            matches += 1
+                    return matches
+
+                scored = [(score(candidate), candidate) for candidate in candidates]
+                best_score, best_candidate = max(
+                    scored,
+                    key=lambda item: (item[0], item[1] == saved_candidate),
+                )
+                if best_score > 0:
+                    inferred = best_candidate
+            except (TypeError, ValueError, json.JSONDecodeError):
+                inferred = saved_candidate
         else:
             inferred = target
 
