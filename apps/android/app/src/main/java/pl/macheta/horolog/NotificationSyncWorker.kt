@@ -85,8 +85,9 @@ class NotificationSyncWorker(
                             triggerAtMillis = startMillis,
                             title = title,
                             message = "Spotkanie zaczyna się teraz.",
-                            channel = NotificationChannels.SCHEDULE,
+                            channel = NotificationChannels.ALARM,
                             deepLink = "horolog://planner",
+                            fullScreen = true,
                         )
                     }
                 }
@@ -110,8 +111,9 @@ class NotificationSyncWorker(
                             triggerAtMillis = startMillis,
                             title = title,
                             message = "Czas rozpocząć ten blok.",
-                            channel = NotificationChannels.SCHEDULE,
+                            channel = NotificationChannels.ALARM,
                             deepLink = "horolog://planner",
+                            fullScreen = true,
                         )
                     }
                 }
@@ -190,8 +192,9 @@ class NotificationSyncWorker(
             triggerAtMillis = trigger.toInstant().toEpochMilli(),
             title = "Koniec dnia",
             message = "Podsumuj dzisiejszy dzień i dopracuj plan na jutro.",
-            channel = NotificationChannels.DAILY_REVIEW,
+            channel = NotificationChannels.ALARM,
             deepLink = "horolog://daily",
+            fullScreen = true,
         )
     }
 
