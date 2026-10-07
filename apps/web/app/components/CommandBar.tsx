@@ -50,8 +50,8 @@ function actionLabel(action: AssistantAction): string {
   if (action.action === "swap_tasks") {
     return "Zamień miejscami dwa zaplanowane zadania";
   }
-  if (action.action === "reschedule_task") {
-    const parts = ["Edytuj zadanie"];
+  if (action.action === "reschedule_task" || action.action === "reschedule_break") {
+    const parts = [action.action === "reschedule_break" ? "Edytuj przerwę" : "Edytuj zadanie"];
     if (action.date) parts.push(action.date);
     if (action.start_min != null) {
       parts.push(
@@ -137,7 +137,8 @@ function executionSummary(results: Array<Record<string, unknown>>): string {
     }
     if (action === "complete_task") return `✓ Wykonane: ${title}`;
     if (action === "update_daily_plan") return "✓ Daily zaktualizowane";
-    if (action === "reschedule_task") return `✓ Przełożone: ${title}${when}`;
+    if (action === "reschedule_task") return `✓ Zadanie zmienione: ${title}${when}`;
+    if (action === "reschedule_break") return `✓ Przerwa zmieniona: ${title}${when}`;
     if (action === "create_meeting") return `✓ Spotkanie: ${title}${when}`;
     if (action === "create_break") return `✓ Przerwa: ${title}${when}`;
     return `✓ Zadanie: ${title}${when}`;
