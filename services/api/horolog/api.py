@@ -1485,7 +1485,7 @@ async def complete_daily_item(item_id: str, db: AsyncSession = Depends(session))
         if intent_row:
             intent = Intent.model_validate(intent_row.payload)
             if intent.period_days is None and intent.completed_at is None:
-                await complete_intent(row.intent_id, db)
+                await complete_intent(row.intent_id, db, record_history=False)
     return _daily_item_dict(row, row.plan_date, None)
 
 
@@ -2437,7 +2437,7 @@ async def _execute_assistant_action(
         current_intent = Intent.model_validate(row.payload)
         if current_intent.kind != IntentKind.TASK or current_intent.period_days is not None:
             raise HTTPException(status_code=422, detail="only one-shot tasks can be completed here")
-        completed = await complete_intent(action.intent_id, db)
+        completed = await complete_intent(action.intent_id, db, record_history=False)
         return {
             "action": action.action,
             "status": "done",
@@ -2705,6 +2705,7 @@ async def _execute_assistant_action(
                 exact=exact,
             ),
             db,
+            record_history=False,
         )
         return {
             "action": action.action,
@@ -3400,7 +3401,11 @@ async def uncomplete_intent_block(
 
 
 @app.post("/api/intents/{intent_id}/complete")
-async def complete_intent(intent_id: str, db: AsyncSession = Depends(session)) -> dict[str, Any]:
+async def complete_intent(
+    intent_id: str,
+    db: AsyncSession = Depends(session),
+    record_history: bool = True,
+) -> dict[str, Any]:
     """Mark a one-shot task done.
 
     The row is kept rather than deleted — so the inbox and analytics can
@@ -3408,6 +3413,7 @@ async def complete_intent(intent_id: str, db: AsyncSession = Depends(session)) -
     intent entirely, so whatever capacity it still held is freed on the very
     next solve, same as a delete would free it.
     """
+    before = await _planning_snapshot(db) if record_history else None
     row = await db.get(IntentRow, intent_id)
     if row is None:
         raise HTTPException(status_code=404, detail=f"no intent {intent_id!r}")
@@ -3458,12 +3464,27 @@ async def complete_intent(intent_id: str, db: AsyncSession = Depends(session)) -
         daily_row.completed_at = completed_at
     await db.commit()
     await _replan(db)
+    if before is not None:
+        after = await _planning_snapshot(db)
+        await _save_change_set(
+            db,
+            source="manual",
+            title=f"Wykonane · {intent.title}",
+            summary=[{"action": "complete_task", "intent_id": intent_id, "title": intent.title}],
+            before=before,
+            after=after,
+        )
     return intent.model_dump(mode="json")
 
 
 @app.delete("/api/intents/{intent_id}/complete")
-async def uncomplete_intent(intent_id: str, db: AsyncSession = Depends(session)) -> dict[str, Any]:
+async def uncomplete_intent(
+    intent_id: str,
+    db: AsyncSession = Depends(session),
+    record_history: bool = True,
+) -> dict[str, Any]:
     """Undo a completion — a misclick shouldn't require a delete-and-retype."""
+    before = await _planning_snapshot(db) if record_history else None
     row = await db.get(IntentRow, intent_id)
     if row is None:
         raise HTTPException(status_code=404, detail=f"no intent {intent_id!r}")
@@ -3481,6 +3502,16 @@ async def uncomplete_intent(intent_id: str, db: AsyncSession = Depends(session))
         daily_row.completed_at = None
     await db.commit()
     await _replan(db)
+    if before is not None:
+        after = await _planning_snapshot(db)
+        await _save_change_set(
+            db,
+            source="manual",
+            title=f"Cofnięto wykonanie · {intent.title}",
+            summary=[{"action": "uncomplete_task", "intent_id": intent_id, "title": intent.title}],
+            before=before,
+            after=after,
+        )
     return intent.model_dump(mode="json")
 
 
@@ -3489,6 +3520,7 @@ async def move_intent(
     intent_id: str,
     body: MoveIntentIn,
     db: AsyncSession = Depends(session),
+    record_history: bool = True,
 ) -> dict[str, Any]:
     """Move a one-shot task, protected break, or meeting in Planner.
 
@@ -3498,6 +3530,7 @@ async def move_intent(
     - recurring routines remain unsupported,
     - dates before today remain outside the active planning horizon.
     """
+    before = await _planning_snapshot(db) if record_history else None
     row = await db.get(IntentRow, intent_id)
     if row is None:
         raise HTTPException(status_code=404, detail=f"no intent {intent_id!r}")
@@ -3734,12 +3767,32 @@ async def move_intent(
     if linked_daily:
         await db.commit()
 
-    return {
+    result = {
         "intent_id": intent_id,
         "date": target_key,
         "start": from_slot(target_blocks[0].start_slot, base).isoformat(),
         "blocks": len(target_blocks),
     }
+    if before is not None:
+        after = await _planning_snapshot(db)
+        await _save_change_set(
+            db,
+            source="manual",
+            title=f"Zmiana w Plannerze · {intent.title}",
+            summary=[
+                {
+                    "action": "move_intent",
+                    "intent_id": intent_id,
+                    "title": intent.title,
+                    "date": target_key,
+                    "start": result["start"],
+                    "minutes": moved.minutes_per_period,
+                }
+            ],
+            before=before,
+            after=after,
+        )
+    return result
 
 
 @app.patch("/api/intents/{intent_id}")
