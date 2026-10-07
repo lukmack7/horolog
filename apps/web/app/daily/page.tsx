@@ -6,10 +6,13 @@ import { Shell } from "@/app/components/Shell";
 import {
   api,
   formatDuration,
+  WORK_CATEGORIES,
+  WORK_CATEGORY_LABEL,
   type DailyData,
   type DailyHistoryEntry,
   type DailyReview,
   type DailyWeekly,
+  type WorkCategory,
 } from "@/app/lib/api";
 import {
   CalendarDays,
@@ -477,6 +480,7 @@ function QuadrantCard({
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const [minutes, setMinutes] = useState(30);
+  const [category, setCategory] = useState<WorkCategory | "">("");
   const [smartAdding, setSmartAdding] = useState(false);
   const [smartResult, setSmartResult] = useState<string | null>(null);
   const [meetingSuggestions, setMeetingSuggestions] = useState<Array<{
@@ -495,6 +499,7 @@ function QuadrantCard({
         text: title.trim(),
         quadrant: quadrant.id,
         default_minutes: minutes,
+        ...(category ? { category } : {}),
       });
 
       const tasks = result.created.length;
@@ -509,6 +514,7 @@ function QuadrantCard({
 
       setTitle("");
       setMinutes(30);
+      setCategory("");
       setAdding(result.meeting_suggestions.length > 0);
       await reload();
     } catch (caught) {
@@ -591,6 +597,11 @@ function QuadrantCard({
                 <div className="text-[12.5px] font-semibold leading-snug text-fg">{item.title}</div>
                 <div className="mt-1 flex flex-wrap gap-1.5 text-[9.5px] font-medium text-fg-muted">
                   <span className="rounded-full bg-sunk px-2 py-0.5">{formatDuration(item.minutes)}</span>
+                  {item.category && (
+                    <span className="rounded-full bg-sunk px-2 py-0.5 font-semibold text-fg-muted">
+                      {WORK_CATEGORY_LABEL[item.category]}
+                    </span>
+                  )}
                   <span className="hidden rounded-full bg-sunk px-2 py-0.5 text-fg-subtle sm:inline">{t("przeciągnij")}</span>
                   {item.schedule_enabled && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">Planner</span>}
                   {item.carried && (
@@ -662,18 +673,31 @@ function QuadrantCard({
             className="w-full border-0 bg-transparent text-[12.5px] font-medium outline-none"
           />
           <div className="mt-3 flex items-center justify-between gap-2">
-            <label className="flex items-center gap-2 text-[10px] font-medium text-fg-muted">
-              <Clock3 size={13} />
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-2 text-[10px] font-medium text-fg-muted">
+                <Clock3 size={13} />
+                <select
+                  value={minutes}
+                  onChange={(e) => setMinutes(Number(e.target.value))}
+                  className="rounded-lg border bg-white px-2 py-1"
+                >
+                  {[15, 30, 45, 60, 90, 120].map((value) => (
+                    <option key={value} value={value}>{value} min</option>
+                  ))}
+                </select>
+              </label>
               <select
-                value={minutes}
-                onChange={(e) => setMinutes(Number(e.target.value))}
-                className="rounded-lg border bg-white px-2 py-1"
+                value={category}
+                onChange={(e) => setCategory(e.target.value as WorkCategory | "")}
+                aria-label={t("Category")}
+                className="rounded-lg border bg-white px-2 py-1 text-[10px] font-medium text-fg-muted"
               >
-                {[15, 30, 45, 60, 90, 120].map((value) => (
-                  <option key={value} value={value}>{value} min</option>
+                <option value="">{t("No category")}</option>
+                {WORK_CATEGORIES.map((value) => (
+                  <option key={value} value={value}>{WORK_CATEGORY_LABEL[value]}</option>
                 ))}
               </select>
-            </label>
+            </div>
             <div className="flex gap-2">
               <button type="button" onClick={() => setAdding(false)} className="rounded-lg px-2.5 py-1.5 text-[10.5px] font-semibold text-fg-muted">{t("Anuluj")}</button>
               <button
