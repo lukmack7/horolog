@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Planer Horolog</string>
+    <string name="server_unavailable">Nie mogę połączyć się z Horologiem.</string>
+    <string name="server_hint">Sprawdź, czy Tailscale jest połączony i czy serwer Horolog działa.</string>
+    <string name="retry">Spróbuj ponownie</string>
+    <string name="open_tailscale">Otwórz Tailscale</string>
+    <string name="shortcut_planner">Planner</string>
+    <string name="shortcut_todo">Do zrobienia</string>
+</resources>
