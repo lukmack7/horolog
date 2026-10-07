@@ -22,6 +22,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
@@ -36,6 +39,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         NotificationChannels.create(this)
         requestNotificationPermission()
         setContentView(buildContent())
@@ -105,6 +109,18 @@ class MainActivity : ComponentActivity() {
             )
         }
         root.addView(errorPanel)
+
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.setPadding(
+                systemBars.left,
+                systemBars.top,
+                systemBars.right,
+                systemBars.bottom,
+            )
+            insets
+        }
+        ViewCompat.requestApplyInsets(root)
 
         return root
     }
