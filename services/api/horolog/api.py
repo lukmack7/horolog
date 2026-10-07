@@ -1004,6 +1004,7 @@ async def capture_daily(
                 title=action.title,
                 quadrant=body.quadrant,
                 minutes=minutes,
+                category=action.category,
                 schedule_enabled=body.quadrant <= 2,
             ),
             db,
