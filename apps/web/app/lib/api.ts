@@ -29,9 +29,17 @@ export type AssistantActionKind =
   | "complete_task"
   | "update_daily_plan";
 
+export interface AssistantReference {
+  kind: "intent" | "category";
+  token: string;
+  intent_id?: string | null;
+  category?: WorkCategory | null;
+}
+
 export interface AssistantMessage {
   role: "user" | "assistant";
   content: string;
+  references?: AssistantReference[];
 }
 
 export interface AssistantAction {
