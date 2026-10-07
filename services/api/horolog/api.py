@@ -3276,6 +3276,11 @@ async def change_history(
         ),
         None,
     )
+    current_snapshot = (
+        await _planning_snapshot(db)
+        if latest_reversible is not None
+        else None
+    )
     return [
         {
             "id": row.id,
@@ -3288,6 +3293,7 @@ async def change_history(
                 row.undone_at is None
                 and latest_reversible is not None
                 and row.id == latest_reversible.id
+                and current_snapshot == row.after_state
             ),
         }
         for row in rows
