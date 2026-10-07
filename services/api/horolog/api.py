@@ -1474,6 +1474,7 @@ async def create_daily_item(date: str, body: DailyItemIn, db: AsyncSession = Dep
 
 @app.post("/api/daily/items/{item_id}/complete")
 async def complete_daily_item(item_id: str, db: AsyncSession = Depends(session)) -> dict[str, Any]:
+    before = await _planning_snapshot(db)
     row = await db.get(DailyPlanItemRow, item_id)
     if row is None:
         raise HTTPException(status_code=404, detail="daily item not found")
@@ -1486,6 +1487,15 @@ async def complete_daily_item(item_id: str, db: AsyncSession = Depends(session))
             intent = Intent.model_validate(intent_row.payload)
             if intent.period_days is None and intent.completed_at is None:
                 await complete_intent(row.intent_id, db, record_history=False)
+    after = await _planning_snapshot(db)
+    await _save_change_set(
+        db,
+        source="daily",
+        title=f"Wykonane w Daily · {row.title}",
+        summary=[{"action": "daily_complete", "item_id": item_id, "title": row.title}],
+        before=before,
+        after=after,
+    )
     return _daily_item_dict(row, row.plan_date, None)
 
 
@@ -1497,11 +1507,21 @@ async def cancel_daily_item(item_id: str, db: AsyncSession = Depends(session)) -
     it must therefore make a linked intent available to planning again rather
     than deleting it from Planner/Inbox.
     """
+    before = await _planning_snapshot(db)
     row = await db.get(DailyPlanItemRow, item_id)
     if row is None:
         raise HTTPException(status_code=404, detail="daily item not found")
     row.cancelled_at = datetime.now(UTC)
     await db.commit()
+    after = await _planning_snapshot(db)
+    await _save_change_set(
+        db,
+        source="daily",
+        title=f"Usunięto z Daily · {row.title}",
+        summary=[{"action": "daily_cancel", "item_id": item_id, "title": row.title}],
+        before=before,
+        after=after,
+    )
     return _daily_item_dict(row, row.plan_date, None)
 
 
@@ -1582,6 +1602,7 @@ async def keep_daily_item(
     db: AsyncSession = Depends(session),
 ) -> dict[str, Any]:
     _daily_date(body.date)
+    before = await _planning_snapshot(db)
     item = await db.get(DailyPlanItemRow, item_id)
     if item is None:
         raise HTTPException(status_code=404, detail="daily item not found")
@@ -1593,6 +1614,15 @@ async def keep_daily_item(
     decision.defer_until = None
     decision.updated_at = datetime.now(UTC)
     await db.commit()
+    after = await _planning_snapshot(db)
+    await _save_change_set(
+        db,
+        source="daily",
+        title=f"Zostawiono w Daily · {item.title}",
+        summary=[{"action": "daily_keep", "item_id": item_id, "title": item.title}],
+        before=before,
+        after=after,
+    )
     return {"item_id": item_id, "date": body.date, "status": "kept"}
 
 
@@ -1602,6 +1632,7 @@ async def defer_daily_item(
     body: DailyDeferIn,
     db: AsyncSession = Depends(session),
 ) -> dict[str, Any]:
+    before = await _planning_snapshot(db)
     target = _daily_date(body.until)
     item = await db.get(DailyPlanItemRow, item_id)
     if item is None:
@@ -1618,6 +1649,22 @@ async def defer_daily_item(
     await _roll_daily_intent(item, body.until, db)
     await db.commit()
     await _replan(db)
+    after = await _planning_snapshot(db)
+    await _save_change_set(
+        db,
+        source="daily",
+        title=f"Przeniesiono na {body.until} · {item.title}",
+        summary=[
+            {
+                "action": "daily_defer",
+                "item_id": item_id,
+                "title": item.title,
+                "until": body.until,
+            }
+        ],
+        before=before,
+        after=after,
+    )
     return {"item_id": item_id, "until": body.until, "status": "deferred"}
 
 
@@ -1626,6 +1673,7 @@ async def daily_item_to_todo(
     item_id: str,
     db: AsyncSession = Depends(session),
 ) -> dict[str, Any]:
+    before = await _planning_snapshot(db)
     item = await db.get(DailyPlanItemRow, item_id)
     if item is None or item.cancelled_at is not None:
         raise HTTPException(status_code=404, detail="daily item not found")
@@ -1674,6 +1722,22 @@ async def daily_item_to_todo(
 
     await db.commit()
     await _replan(db)
+    after = await _planning_snapshot(db)
+    await _save_change_set(
+        db,
+        source="daily",
+        title=f"Do zrobienia · {item.title}",
+        summary=[
+            {
+                "action": "daily_to_todo",
+                "item_id": item_id,
+                "todo_id": todo.id,
+                "title": item.title,
+            }
+        ],
+        before=before,
+        after=after,
+    )
     return {
         "item_id": item_id,
         "todo_id": todo.id,
