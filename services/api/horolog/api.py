@@ -2498,7 +2498,7 @@ async def patch_intent(
         updates["title"] = body.title.strip()
     if body.priority is not None:
         updates["priority"] = body.priority
-    if body.category is not None:
+    if "category" in body.model_fields_set:
         updates["category"] = body.category
 
     if not updates:
@@ -2507,7 +2507,11 @@ async def patch_intent(
     updated = intent.model_copy(update=updates)
     row.payload = updated.model_dump(mode="json")
     await db.commit()
-    await _replan(db)
+
+    # Title/category are metadata only and must never reshuffle the calendar.
+    # Priority is the only safe patch field here that changes placement order.
+    if body.priority is not None:
+        await _replan(db)
 
     return updated.model_dump(mode="json")
 
