@@ -1879,13 +1879,29 @@ def _dt_or_none(value: str | None) -> datetime | None:
 async def _planning_snapshot(db: AsyncSession) -> dict[str, Any]:
     """Capture mutable user planning state for reversible change sets."""
 
-    intents = (await db.execute(select(IntentRow))).scalars().all()
-    daily_plans = (await db.execute(select(DailyPlanRow))).scalars().all()
-    daily_items = (await db.execute(select(DailyPlanItemRow))).scalars().all()
-    daily_meta = (await db.execute(select(DailyItemMetaRow))).scalars().all()
-    daily_decisions = (await db.execute(select(DailyItemDecisionRow))).scalars().all()
-    daily_reviews = (await db.execute(select(DailyReviewRow))).scalars().all()
-    todos = (await db.execute(select(TodoInboxRow))).scalars().all()
+    intents = (
+        await db.execute(select(IntentRow).order_by(IntentRow.id))
+    ).scalars().all()
+    daily_plans = (
+        await db.execute(select(DailyPlanRow).order_by(DailyPlanRow.date))
+    ).scalars().all()
+    daily_items = (
+        await db.execute(select(DailyPlanItemRow).order_by(DailyPlanItemRow.id))
+    ).scalars().all()
+    daily_meta = (
+        await db.execute(select(DailyItemMetaRow).order_by(DailyItemMetaRow.item_id))
+    ).scalars().all()
+    daily_decisions = (
+        await db.execute(
+            select(DailyItemDecisionRow).order_by(DailyItemDecisionRow.item_id)
+        )
+    ).scalars().all()
+    daily_reviews = (
+        await db.execute(select(DailyReviewRow).order_by(DailyReviewRow.date))
+    ).scalars().all()
+    todos = (
+        await db.execute(select(TodoInboxRow).order_by(TodoInboxRow.id))
+    ).scalars().all()
 
     return {
         "intents": [
