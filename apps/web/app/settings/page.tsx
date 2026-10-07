@@ -116,6 +116,9 @@ type HorologAndroidBridge = {
   refreshNotifications?: () => void;
   testNotification?: () => void;
   notificationsAvailable?: () => boolean;
+  alarmAccessReady?: () => boolean;
+  requestAlarmAccess?: () => void;
+  testFullScreenAlarm?: () => void;
 };
 
 function androidBridge(): HorologAndroidBridge | undefined {
@@ -754,6 +757,43 @@ export default function SettingsPage() {
               className="inline-flex h-10 items-center rounded-xl border border-black/[0.08] bg-bg px-4 text-[12.5px] font-semibold text-fg transition-all hover:bg-sunk"
             >
               {t("Send test notification")}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const bridge = androidBridge();
+                if (!bridge?.requestAlarmAccess) {
+                  setNotificationsMessage(t("Full-screen alarm setup is available in the Android app."));
+                  return;
+                }
+                if (bridge.alarmAccessReady?.()) {
+                  setNotificationsMessage(t("Full-screen alarm access is ready."));
+                  return;
+                }
+                bridge.requestAlarmAccess();
+                setNotificationsMessage(t("Grant the missing Android alarm permission, then return here."));
+              }}
+              className="inline-flex h-10 items-center rounded-xl border border-black/[0.08] bg-bg px-4 text-[12.5px] font-semibold text-fg transition-all hover:bg-sunk"
+            >
+              {t("Configure full-screen alarm")}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const bridge = androidBridge();
+                if (!bridge?.testFullScreenAlarm) {
+                  setNotificationsMessage(t("Full-screen alarm test is available in the Android app."));
+                  return;
+                }
+                if (bridge.alarmAccessReady && !bridge.alarmAccessReady()) {
+                  setNotificationsMessage(t("Configure Android alarm access first."));
+                  return;
+                }
+                bridge.testFullScreenAlarm();
+              }}
+              className="inline-flex h-10 items-center rounded-xl border border-black/[0.08] bg-bg px-4 text-[12.5px] font-semibold text-fg transition-all hover:bg-sunk"
+            >
+              {t("Test full-screen alarm")}
             </button>
             {notificationsMessage && (
               <span className="text-[12px] font-medium text-fg-muted">{notificationsMessage}</span>
