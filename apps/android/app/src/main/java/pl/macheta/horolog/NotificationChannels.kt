@@ -9,6 +9,7 @@ object NotificationChannels {
     const val SCHEDULE = "horolog_schedule"
     const val DEADLINES = "horolog_deadlines"
     const val DAILY_REVIEW = "horolog_daily_review"
+    const val ALARM = "horolog_alarm"
 
     fun create(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -16,6 +17,15 @@ object NotificationChannels {
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannels(
             listOf(
+                NotificationChannel(
+                    ALARM,
+                    "Alarmy pełnoekranowe",
+                    NotificationManager.IMPORTANCE_HIGH,
+                ).apply {
+                    description = "Alarmy w chwili rozpoczęcia i na koniec dnia."
+                    enableVibration(true)
+                    lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+                },
                 NotificationChannel(
                     SCHEDULE,
                     "Plan dnia",
