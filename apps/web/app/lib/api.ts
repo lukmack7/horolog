@@ -60,6 +60,40 @@ export interface Block {
   recurring?: boolean;
 }
 
+export function numberBreakTitles(blocks: Block[]): Block[] {
+  const orderedBuffers = blocks
+    .filter((block) => block.kind === "buffer")
+    .slice()
+    .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+
+  const numbers = new Map<string, number>();
+  const perDay = new Map<string, number>();
+
+  for (const block of orderedBuffers) {
+    const day = block.start.slice(0, 10);
+    const next = (perDay.get(day) ?? 0) + 1;
+    perDay.set(day, next);
+    numbers.set(
+      `${block.intent_id}:${block.occurrence}:${block.chunk}`,
+      next,
+    );
+  }
+
+  return blocks.map((block) => {
+    if (block.kind !== "buffer") return block;
+    const key = `${block.intent_id}:${block.occurrence}:${block.chunk}`;
+    const number = numbers.get(key);
+    if (!number) return block;
+
+    const generic = block.title.trim().toLocaleLowerCase("pl-PL") === "przerwa";
+    return {
+      ...block,
+      title: generic ? `Przerwa ${number}` : `${block.title} · #${number}`,
+    };
+  });
+}
+
+
 export interface Unmet {
   intent_id: string;
   title: string;
