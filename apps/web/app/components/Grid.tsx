@@ -3,7 +3,13 @@
 import { useEffect, useState } from "react";
 import { Glyph, KIND_LABEL } from "@/app/components/Glyph";
 import type { Block, Busy, Priority } from "@/app/lib/api";
-import { PRIORITY_NAME, PRIORITY_TINT, formatDuration, minutesBetween } from "@/app/lib/api";
+import {
+  PRIORITY_NAME,
+  PRIORITY_TINT,
+  WORK_CATEGORY_LABEL,
+  formatDuration,
+  minutesBetween,
+} from "@/app/lib/api";
 import { Clock, Calendar, MoveRight } from "lucide-react";
 
 const DAY_START_H = 7;
@@ -255,7 +261,7 @@ export function Grid({ days, blocks, busy, selected, onSelect }: GridProps) {
                               {block.title}
                             </span>
                           </div>
-                          {(isLinear || isGithub || isTodoist || block.energy === "high") && (
+                          {(isLinear || isGithub || isTodoist || block.category) && (
                             <div className="flex items-center gap-1 shrink-0">
                               {isLinear && (
                                 <span className="rounded bg-indigo-500/10 px-1 py-0.2 text-[9px] font-bold text-indigo-600">
@@ -272,9 +278,12 @@ export function Grid({ days, blocks, busy, selected, onSelect }: GridProps) {
                                   Todoist
                                 </span>
                               )}
-                              {block.energy === "high" && (
-                                <span className="rounded bg-amber-500/10 px-1 py-0.2 text-[9px] font-bold text-amber-600" title="High Energy Focus">
-                                  ⚡
+                              {block.category && (
+                                <span
+                                  className="rounded bg-slate-500/10 px-1 py-0.2 text-[9px] font-bold text-slate-700"
+                                  title={WORK_CATEGORY_LABEL[block.category]}
+                                >
+                                  {WORK_CATEGORY_LABEL[block.category]}
                                 </span>
                               )}
                             </div>
