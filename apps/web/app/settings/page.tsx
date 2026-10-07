@@ -315,7 +315,11 @@ export default function SettingsPage() {
         {loadError && (
           <div className="flex items-center gap-2.5 rounded-card border border-red-200 bg-red-50 p-4 text-[13.5px] font-medium text-danger shadow-sm">
             <AlertCircle size={18} className="shrink-0" />
-            <span>{loadError} — sync status below may be stale.</span>
+            <span>
+              {loadError} — {language === "pl"
+                ? "status synchronizacji poniżej może być nieaktualny."
+                : "sync status below may be stale."}
+            </span>
           </div>
         )}
 
@@ -335,8 +339,12 @@ export default function SettingsPage() {
             <span>
               {result.ok
                 ? result.kind === "push"
-                  ? `Pushed to the calendar: ${result.label}.`
-                  : `Synced ${result.count} ${result.label}. Your plan has been rebuilt around them.`
+                  ? language === "pl"
+                    ? `Wysłano do kalendarza: ${result.label}.`
+                    : `Pushed to the calendar: ${result.label}.`
+                  : language === "pl"
+                    ? `Zsynchronizowano ${result.count} ${result.label}. Plan został przebudowany z uwzględnieniem tych danych.`
+                    : `Synced ${result.count} ${result.label}. Your plan has been rebuilt around them.`
                 : result.message}
             </span>
           </div>
