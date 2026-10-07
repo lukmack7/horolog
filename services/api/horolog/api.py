@@ -3062,11 +3062,19 @@ async def _time_entry_dict(
         "intent_id": row.intent_id,
         "title": title,
         "status": row.status,
-        "started_at": row.started_at.isoformat(),
-        "last_resumed_at": _iso_or_none(row.last_resumed_at),
+        "started_at": _utc_aware(row.started_at).isoformat(),
+        "last_resumed_at": (
+            _utc_aware(row.last_resumed_at).isoformat()
+            if row.last_resumed_at is not None
+            else None
+        ),
         "accumulated_seconds": row.accumulated_seconds,
         "elapsed_seconds": _time_entry_elapsed(row),
-        "ended_at": _iso_or_none(row.ended_at),
+        "ended_at": (
+            _utc_aware(row.ended_at).isoformat()
+            if row.ended_at is not None
+            else None
+        ),
     }
 
 
