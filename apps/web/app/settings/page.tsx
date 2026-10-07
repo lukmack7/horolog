@@ -7,20 +7,16 @@ import { Shell } from "@/app/components/Shell";
 import { api, calendarPush, connections, sync, type Plan, type Provider } from "@/app/lib/api";
 import {
   AlertCircle,
-  BarChart3,
-  BookOpenCheck,
+  BookOpenText,
   Calendar,
   Check,
   CheckCircle2,
   Copy,
   Download,
-  Inbox,
-  RotateCcw,
+  LogIn,
   Server,
   Unplug,
   UploadCloud,
-  Users,
-  Clock,
 } from "lucide-react";
 
 type Result =
@@ -95,16 +91,6 @@ const TRACKER_PROVIDERS: {
     placeholder: "site:email:api_token",
   },
 ];
-
-const ADDITIONAL_VIEWS = [
-  { href: "/time", label: "Time", icon: Clock },
-  { href: "/daily", label: "Daily", icon: BookOpenCheck },
-  { href: "/inbox", label: "Task inbox", icon: Inbox },
-  { href: "/habits", label: "Habits", icon: RotateCcw },
-  { href: "/meetings", label: "Meetings", icon: Users },
-  { href: "/analytics", label: "Analytics", icon: BarChart3 },
-] as const;
-
 
 function minutesToTime(value: number): string {
   const hours = Math.floor(value / 60);
@@ -442,36 +428,65 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        <section className="space-y-4 overflow-hidden rounded-card border border-black/[0.08] bg-surface p-6 shadow-sm">
+        <section className="space-y-5 overflow-hidden rounded-card border border-black/[0.08] bg-surface p-6 shadow-sm">
           <div>
-            <h2 className="text-[15px] font-bold text-fg">{t("Additional views")}</h2>
+            <h2 className="text-[15px] font-bold text-fg">{t("Access & Manifesto")}</h2>
             <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">
-              {t("Planner is the main workspace. These secondary views remain available when you need them.")}
+              {t("Access information and the principles behind Horolog live here instead of on the start page.")}
             </p>
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {ADDITIONAL_VIEWS.map((item) => {
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="group flex items-center gap-3 rounded-xl border border-black/[0.07] bg-bg px-3.5 py-3 transition-all hover:border-black/[0.12] hover:bg-sunk/60"
-                >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sunk text-fg">
-                    <Icon size={17} />
-                  </span>
-                  <span className="min-w-0 flex-1 text-[13px] font-semibold text-fg">
-                    {t(item.label)}
-                  </span>
-                  <span className="text-[16px] text-fg-subtle transition-transform group-hover:translate-x-0.5">
-                    →
-                  </span>
-                </Link>
-              );
-            })}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Link
+              href="/login"
+              className="group flex items-center gap-3 rounded-xl border border-black/[0.07] bg-bg px-4 py-3.5 transition-all hover:border-black/[0.12] hover:bg-sunk/60"
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sunk text-fg">
+                <LogIn size={18} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[13px] font-semibold text-fg">{t("Login / access")}</span>
+                <span className="mt-0.5 block text-[11.5px] leading-relaxed text-fg-muted">
+                  {t("Open the instance access screen.")}
+                </span>
+              </span>
+              <span className="text-[16px] text-fg-subtle transition-transform group-hover:translate-x-0.5">→</span>
+            </Link>
+
+            <div className="rounded-xl border border-black/[0.07] bg-bg px-4 py-3.5">
+              <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sunk text-fg">
+                  <BookOpenText size={18} />
+                </span>
+                <div className="min-w-0">
+                  <div className="text-[13px] font-semibold text-fg">{t("Horolog Manifesto")}</div>
+                  <p className="mt-1 text-[11.5px] leading-relaxed text-fg-muted">
+                    {t("Tasks, habits, focus time and meetings share one honest timeline. Horolog protects deliberate work, stays local-first and lets explicit user decisions override automation.")}
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
+
+          <details className="group rounded-xl border border-black/[0.07] bg-sunk/30">
+            <summary className="cursor-pointer list-none px-4 py-3 text-[12.5px] font-semibold text-fg">
+              {t("Read manifesto principles")}
+            </summary>
+            <div className="grid gap-3 border-t border-black/[0.06] p-4 sm:grid-cols-2">
+              {[
+                ["One timeline", "Tasks, habits, focus blocks and meetings compete for the same real time instead of living in separate silos."],
+                ["Cognitive scheduling", "Flexible work is fitted around hard commitments and can adapt when the plan changes."],
+                ["Local-first", "The engine can run on your own infrastructure and use local models, keeping control close to the user."],
+                ["User decisions win", "A manually fixed time, move or resize is authoritative; automation should assist rather than silently overrule it."],
+                ["Open integrations", "Calendars and external task systems can feed the same planning engine without becoming the source of truth for your day."],
+              ].map(([title, description]) => (
+                <div key={title} className="rounded-lg bg-surface p-3">
+                  <div className="text-[12px] font-semibold text-fg">{t(title)}</div>
+                  <p className="mt-1 text-[11.5px] leading-relaxed text-fg-muted">{t(description)}</p>
+                </div>
+              ))}
+            </div>
+          </details>
         </section>
 
         <div className="flex items-center justify-between px-1">
