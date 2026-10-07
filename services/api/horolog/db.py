@@ -164,7 +164,7 @@ class DailyPlanItemRow(Base):
     quadrant: Mapped[int] = mapped_column(Integer)
     minutes: Mapped[int] = mapped_column(Integer, default=30)
     priority: Mapped[int] = mapped_column(Integer, default=3)
-    energy: Mapped[str | None] = mapped_column(String(16), default=None)
+    category: Mapped[str | None] = mapped_column("energy", String(16), default=None)
     intent_id: Mapped[str | None] = mapped_column(String(64), default=None, index=True)
     schedule_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
