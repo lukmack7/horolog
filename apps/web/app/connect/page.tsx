@@ -403,7 +403,7 @@ export default function Connect() {
               <input
                 value={dav.username}
                 onChange={(e) => setDav({ ...dav, username: e.target.value })}
-                placeholder="username"
+                placeholder={t("username")}
                 autoComplete="username"
                 className="h-11 rounded-xl border border-black/[0.08] bg-bg px-3.5 text-[14px] font-medium outline-none focus:border-accent"
               />
@@ -411,7 +411,7 @@ export default function Connect() {
                 type="password"
                 value={dav.password}
                 onChange={(e) => setDav({ ...dav, password: e.target.value })}
-                placeholder="app password"
+                placeholder={t("app password")}
                 autoComplete="current-password"
                 className="h-11 rounded-xl border border-black/[0.08] bg-bg px-3.5 text-[14px] font-medium outline-none focus:border-accent"
               />
