@@ -275,6 +275,18 @@ class MoveIntentIn(BaseModel):
     end: LocalDateTime
 
 
+class IntentPatchIn(BaseModel):
+    """Safe metadata-only intent edit.
+
+    Used by Planner and Smart Meetings for fields that do not change the
+    scheduling shape. Applying the patch to the stored domain object preserves
+    meeting-only state such as attendee blocked slots and Zoom metadata.
+    """
+
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    priority: Priority | None = None
+
+
 class BusyIn(BaseModel):
     label: str = ""
     start: LocalDateTime
@@ -1999,6 +2011,36 @@ async def move_intent(
         "start": from_slot(target_blocks[0].start_slot, base).isoformat(),
         "blocks": len(target_blocks),
     }
+
+
+@app.patch("/api/intents/{intent_id}")
+async def patch_intent(
+    intent_id: str,
+    body: IntentPatchIn,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    """Update intent metadata without rebuilding its scheduling constraints."""
+    row = await db.get(IntentRow, intent_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"no intent {intent_id!r}")
+
+    intent = Intent.model_validate(row.payload)
+    updates: dict[str, Any] = {}
+
+    if body.title is not None:
+        updates["title"] = body.title.strip()
+    if body.priority is not None:
+        updates["priority"] = body.priority
+
+    if not updates:
+        return intent.model_dump(mode="json")
+
+    updated = intent.model_copy(update=updates)
+    row.payload = updated.model_dump(mode="json")
+    await db.commit()
+    await _replan(db)
+
+    return updated.model_dump(mode="json")
 
 
 @app.put("/api/intents/{intent_id}")
