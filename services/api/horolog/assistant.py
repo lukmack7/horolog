@@ -30,6 +30,7 @@ class AssistantAction(BaseModel):
         "swap_tasks",
         "reschedule_task",
         "reschedule_break",
+        "reschedule_meeting",
         "complete_task",
         "update_daily_plan",
     ]
@@ -55,7 +56,7 @@ class AssistantAction(BaseModel):
         if self.start_mode is not None and self.start_min is None:
             raise ValueError("start_mode requires start_min")
         if (
-            self.action in ("reschedule_task", "reschedule_break")
+            self.action in ("reschedule_task", "reschedule_break", "reschedule_meeting")
             and self.date is None
             and self.start_min is None
             and self.minutes is None
@@ -135,6 +136,11 @@ Core rules:
   existing break. It requires the break's intent_id from FACTUAL CONTEXT and at
   least one of date, start_min or minutes. Never replace an existing break with
   create_break unless the user explicitly asked for an additional new break.
+- reschedule_meeting edits an existing Horolog meeting. It requires the
+  meeting's intent_id from FACTUAL CONTEXT and at least one of date, start_min
+  or minutes. Omitted fields keep their current values. Use it for moving or
+  resizing an existing meeting; preserve the meeting itself rather than
+  creating a second meeting.
 - complete_task requires an intent_id from FACTUAL CONTEXT.
 - update_daily_plan requires date and at least win_condition or first_step.
   Use update_daily_plan ONLY when the user explicitly asks to change Daily,
