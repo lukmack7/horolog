@@ -7,7 +7,15 @@
 
 export type IntentKind = "task" | "habit" | "focus" | "buffer" | "meeting";
 export type Priority = 1 | 2 | 3 | 4;
-export type EnergyLevel = "high" | "medium" | "low";
+export type WorkCategory = "cmr" | "macheta_data" | "private";
+
+export const WORK_CATEGORY_LABEL: Record<WorkCategory, string> = {
+  cmr: "CMR",
+  macheta_data: "Macheta Data",
+  private: "Prywatne",
+};
+
+export const WORK_CATEGORIES: WorkCategory[] = ["cmr", "macheta_data", "private"];
 
 
 export type AssistantActionKind =
@@ -36,6 +44,7 @@ export interface AssistantAction {
   quadrant?: 1 | 2 | 3 | 4 | null;
   start_min?: number | null;
   start_mode?: "fixed" | "preferred" | null;
+  category?: WorkCategory | null;
   win_condition?: string | null;
   first_step?: string | null;
 }
@@ -50,7 +59,7 @@ export interface Block {
   title: string;
   kind: IntentKind;
   priority: Priority;
-  energy?: EnergyLevel;
+  category?: WorkCategory | null;
   occurrence: number;
   chunk: number;
   start: string;
@@ -223,7 +232,7 @@ export interface Intent {
   title: string;
   kind: IntentKind;
   priority: Priority;
-  energy?: EnergyLevel | null;
+  category?: WorkCategory | null;
   minutes_per_period: number;
   period_days: number | null;
   min_chunk_minutes: number;
@@ -264,7 +273,7 @@ export function intentToEditPayload(intent: Intent, origin: string): Record<stri
     title: intent.title,
     kind: intent.kind,
     priority: intent.priority,
-    energy: intent.energy ?? undefined,
+    category: intent.category ?? undefined,
     minutes_per_period: intent.minutes_per_period,
     period_days: intent.period_days ?? undefined,
     min_chunk_minutes: intent.min_chunk_minutes,
@@ -313,7 +322,7 @@ export const api = {
   remove: (id: string) => request<void>(`/api/intents/${id}`, { method: "DELETE" }),
   update: (id: string, body: Record<string, unknown>) =>
     request<Intent>(`/api/intents/${id}`, { method: "PUT", body: JSON.stringify(body) }),
-  patchIntent: (id: string, body: { title?: string; priority?: Priority }) =>
+  patchIntent: (id: string, body: { title?: string; priority?: Priority; category?: WorkCategory }) =>
     request<Intent>(`/api/intents/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   complete: (id: string) => request<Intent>(`/api/intents/${id}/complete`, { method: "POST" }),
   uncomplete: (id: string) =>
