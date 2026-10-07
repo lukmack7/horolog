@@ -25,6 +25,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from horolog.domain.intent import Intent
 from horolog.domain.plan import Plan
+from horolog.domain.time import SLOTS_PER_DAY
 from horolog.settings import settings
 
 
@@ -65,6 +66,23 @@ class PlanRow(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     payload: Mapped[str] = mapped_column(Text)
     saved_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class SlotOriginRow(Base):
+    """Calendar date used as slot zero for all persisted relative slot values.
+
+    Horolog stores compact integer slots. Because the local scheduling origin
+    advances at midnight, persisted slots must be rebased exactly once when
+    the local date changes or a block stored for tomorrow jumps another day.
+    """
+
+    __tablename__ = "slot_origin"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    origin_date: Mapped[str] = mapped_column(String(10))
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
@@ -354,8 +372,143 @@ async def init_db() -> None:
         ) from exc
 
 
+def _shift_intent_payload_slots(
+    payload: dict[str, Any],
+    offset: int,
+) -> dict[str, Any]:
+    shifted = dict(payload)
+    for field in ("earliest_slot", "latest_slot", "due_slot"):
+        value = shifted.get(field)
+        if isinstance(value, int):
+            shifted[field] = value - offset
+
+    blocked = shifted.get("blocked_slots")
+    if isinstance(blocked, list):
+        shifted["blocked_slots"] = [
+            [int(span[0]) - offset, int(span[1]) - offset]
+            for span in blocked
+            if isinstance(span, (list, tuple)) and len(span) == 2
+        ]
+    return shifted
+
+
+def _shift_snapshot_slots(
+    snapshot: dict[str, Any],
+    offset: int,
+) -> dict[str, Any]:
+    shifted = json.loads(json.dumps(snapshot))
+    intents = shifted.get("intents")
+    if isinstance(intents, list):
+        for item in intents:
+            if not isinstance(item, dict):
+                continue
+            payload = item.get("payload")
+            if isinstance(payload, dict):
+                item["payload"] = _shift_intent_payload_slots(payload, offset)
+    return shifted
+
+
+async def rebase_slot_origin(
+    db: AsyncSession,
+    target_date: str,
+) -> int:
+    """Move all persisted relative slots when the local day advances."""
+
+    target = datetime.strptime(target_date, "%Y-%m-%d").date()
+    meta = await db.get(SlotOriginRow, LATEST_PLAN_ID)
+
+    if meta is None:
+        plan_row = await db.get(PlanRow, LATEST_PLAN_ID)
+        if plan_row is not None:
+            saved_at = plan_row.saved_at
+            if saved_at.tzinfo is None:
+                saved_at = saved_at.replace(tzinfo=UTC)
+            inferred = saved_at.astimezone(settings().zone).date()
+        else:
+            inferred = target
+
+        meta = SlotOriginRow(
+            id=LATEST_PLAN_ID,
+            origin_date=inferred.isoformat(),
+            updated_at=datetime.now(UTC),
+        )
+        db.add(meta)
+        await db.commit()
+
+    stored = datetime.strptime(meta.origin_date, "%Y-%m-%d").date()
+    days = (target - stored).days
+    if days <= 0:
+        return 0
+
+    offset = days * SLOTS_PER_DAY
+
+    intent_rows = (await db.execute(select(IntentRow))).scalars().all()
+    for row in intent_rows:
+        row.payload = _shift_intent_payload_slots(row.payload, offset)
+
+    busy_rows = (await db.execute(select(BusyRow))).scalars().all()
+    for row in busy_rows:
+        start = row.start_slot - offset
+        end = row.end_slot - offset
+        if end <= 0:
+            await db.delete(row)
+            continue
+        row.start_slot = max(0, start)
+        row.end_slot = end
+
+    plan_row = await db.get(PlanRow, LATEST_PLAN_ID)
+    if plan_row is not None:
+        payload = json.loads(plan_row.payload)
+        blocks: list[dict[str, Any]] = []
+        for raw in payload.get("blocks", []):
+            if not isinstance(raw, dict):
+                continue
+            block = dict(raw)
+            end = int(block.get("end_slot", 0)) - offset
+            if end <= 0:
+                continue
+            start = int(block.get("start_slot", 0)) - offset
+            block["start_slot"] = max(0, start)
+            block["end_slot"] = end
+            moved_from = block.get("moved_from")
+            if isinstance(moved_from, int):
+                moved = moved_from - offset
+                block["moved_from"] = moved if moved >= 0 else None
+            blocks.append(block)
+        payload["blocks"] = blocks
+        plan_row.payload = json.dumps(payload)
+
+    synced_rows = (await db.execute(select(SyncedBlockRow))).scalars().all()
+    for row in synced_rows:
+        start = row.start_slot - offset
+        end = row.end_slot - offset
+        if end <= 0:
+            await db.delete(row)
+            continue
+        row.start_slot = max(0, start)
+        row.end_slot = end
+
+    change_rows = (await db.execute(select(ChangeSetRow))).scalars().all()
+    for row in change_rows:
+        if row.before_state:
+            row.before_state = _shift_snapshot_slots(row.before_state, offset)
+        if row.after_state:
+            row.after_state = _shift_snapshot_slots(row.after_state, offset)
+
+    meta.origin_date = target.isoformat()
+    meta.updated_at = datetime.now(UTC)
+    await db.commit()
+    return days
+
+
+async def ensure_slot_origin(db: AsyncSession) -> int:
+    today = datetime.now(settings().zone).date().isoformat()
+    return await rebase_slot_origin(db, today)
+
+
 async def session() -> AsyncIterator[AsyncSession]:
     async with _session_factory()() as db:
+        await ensure_slot_origin(db)
         yield db
 
 
