@@ -156,6 +156,38 @@ class MainActivity : ComponentActivity() {
         }
 
         @JavascriptInterface
+        fun alarmAccessReady(): Boolean =
+            AlarmPermissionHelper.canScheduleExact(this@MainActivity) &&
+                AlarmPermissionHelper.canUseFullScreen(this@MainActivity)
+
+        @JavascriptInterface
+        fun requestAlarmAccess() {
+            runOnUiThread {
+                when {
+                    !AlarmPermissionHelper.canScheduleExact(this@MainActivity) ->
+                        AlarmPermissionHelper.openExactAlarmSettings(this@MainActivity)
+                    !AlarmPermissionHelper.canUseFullScreen(this@MainActivity) ->
+                        AlarmPermissionHelper.openFullScreenSettings(this@MainActivity)
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun testFullScreenAlarm() {
+            runOnUiThread {
+                val testIntent = Intent(this@MainActivity, AlarmActivity::class.java).apply {
+                    putExtra(NotificationAlarmReceiver.EXTRA_TITLE, "Test alarmu")
+                    putExtra(
+                        NotificationAlarmReceiver.EXTRA_MESSAGE,
+                        "Pełnoekranowy alarm Planera Horolog działa.",
+                    )
+                    putExtra(NotificationAlarmReceiver.EXTRA_NOTIFICATION_ID, 20261008)
+                }
+                startActivity(testIntent)
+            }
+        }
+
+        @JavascriptInterface
         fun notificationsAvailable(): Boolean =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 ContextCompat.checkSelfPermission(
