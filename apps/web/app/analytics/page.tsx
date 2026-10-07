@@ -267,6 +267,7 @@ function OverviewView({
   plan: Plan;
   derived: Derived;
 }) {
+  const { t } = useLanguage();
   return (
     <div className="space-y-5 sm:space-y-6">
       <KpiGrid
@@ -301,8 +302,8 @@ function OverviewView({
 
       <SectionCard>
         <SectionHeading
-          title="Time per day"
-          subtitle="The next seven days, stacked by work type."
+          title={t("Time per day")}
+          subtitle={t("The next seven days, stacked by work type.")}
           right={<MiniLegend entries={KIND_ORDER.map((kind) => ({ label: KIND_LABEL[kind], color: KIND_COLOR[kind] }))} />}
         />
         <StackedDayChart week={derived.week} rows={derived.dayKind} mode="kind" />
@@ -310,7 +311,7 @@ function OverviewView({
 
       <div className="grid gap-5 lg:grid-cols-2">
         <SectionCard>
-          <SectionHeading title="Time by type" subtitle="What your plan is made of." />
+          <SectionHeading title={t("Time by type")} subtitle={t("What your plan is made of.")} />
           <DistributionRows
             rows={KIND_ORDER.map((kind) => ({
               label: KIND_LABEL[kind],
@@ -321,7 +322,7 @@ function OverviewView({
         </SectionCard>
 
         <SectionCard>
-          <SectionHeading title="Time by priority" subtitle="How much time your important work receives." />
+          <SectionHeading title={t("Time by priority")} subtitle={t("How much time your important work receives.")} />
           <DistributionRows
             rows={PRIORITIES.map((priority) => ({
               label: `P${priority} · ${PRIORITY_NAME[priority]}`,
@@ -338,6 +339,7 @@ function OverviewView({
 }
 
 function PrioritiesView({ data, derived }: { data: Analytics; derived: Derived }) {
+  const { t } = useLanguage();
   const maxCell = Math.max(
     1,
     ...derived.dayPriority.flatMap((row) => PRIORITIES.map((priority) => row[priority])),
@@ -377,8 +379,8 @@ function PrioritiesView({ data, derived }: { data: Analytics; derived: Derived }
 
       <SectionCard>
         <SectionHeading
-          title="Priority heatmap"
-          subtitle="Minutes scheduled by priority across the next seven days."
+          title={t("Priority heatmap")}
+          subtitle={t("Minutes scheduled by priority across the next seven days.")}
         />
         <div className="mt-5 grid grid-cols-[54px_repeat(7,minmax(0,1fr))] gap-1.5 sm:gap-2">
           <div />
@@ -418,12 +420,12 @@ function PrioritiesView({ data, derived }: { data: Analytics; derived: Derived }
 
       <div className="grid gap-5 lg:grid-cols-[1.1fr_.9fr]">
         <SectionCard>
-          <SectionHeading title="Priority mix by day" subtitle="Daily workload split across P1–P4." />
+          <SectionHeading title={t("Priority mix by day")} subtitle={t("Daily workload split across P1–P4.")} />
           <StackedDayChart week={derived.week} rows={derived.dayPriority} mode="priority" />
         </SectionCard>
 
         <SectionCard>
-          <SectionHeading title="Priority coverage" subtitle="Share of all scheduled work." />
+          <SectionHeading title={t("Priority coverage")} subtitle={t("Share of all scheduled work.")} />
           <DistributionRows
             rows={PRIORITIES.map((priority) => ({
               label: `P${priority} · ${PRIORITY_NAME[priority]}`,
@@ -446,6 +448,7 @@ function WeekMapView({
   plan: Plan;
   derived: Derived;
 }) {
+  const { t } = useLanguage();
   const startHour = 7;
   const endHour = 21;
   const hours = Array.from({ length: endHour - startHour }, (_, i) => startHour + i);
@@ -507,8 +510,8 @@ function WeekMapView({
 
       <SectionCard>
         <SectionHeading
-          title="Weekly time map"
-          subtitle="A compact heatmap of what occupies each part of the day."
+          title={t("Weekly time map")}
+          subtitle={t("A compact heatmap of what occupies each part of the day.")}
           right={<MiniLegend entries={KIND_ORDER.map((kind) => ({ label: KIND_LABEL[kind], color: KIND_COLOR[kind] }))} />}
         />
 
@@ -548,7 +551,7 @@ function WeekMapView({
 
       <div className="grid gap-5 lg:grid-cols-2">
         <SectionCard>
-          <SectionHeading title="Time by type" subtitle="What fills the map." />
+          <SectionHeading title={t("Time by type")} subtitle={t("What fills the map.")} />
           <DonutSummary
             rows={KIND_ORDER.map((kind) => ({
               label: KIND_LABEL[kind],
@@ -561,7 +564,7 @@ function WeekMapView({
         </SectionCard>
 
         <SectionCard>
-          <SectionHeading title="Fragmentation" subtitle="How chopped-up the plan feels." />
+          <SectionHeading title={t("Fragmentation")} subtitle={t("How chopped-up the plan feels.")} />
           <div className="mt-5 grid grid-cols-3 gap-2">
             <MiniMetric value={String(derived.totalBlocks)} label="blocks" icon={<BarChart3 size={15} />} />
             <MiniMetric value={formatDuration(data.fragmentation)} label="avg block" icon={<TimerReset size={15} />} />
@@ -683,7 +686,7 @@ function ExecutiveView({ data, derived }: { data: Analytics; derived: Derived })
 
       <div className="grid gap-5 lg:grid-cols-[1.15fr_.85fr]">
         <SectionCard>
-          <SectionHeading title="Time distribution" subtitle="The current workload mix." />
+          <SectionHeading title={t("Time distribution")} subtitle={t("The current workload mix.")} />
           <DonutSummary
             rows={KIND_ORDER.map((kind) => ({
               label: KIND_LABEL[kind],
@@ -696,7 +699,7 @@ function ExecutiveView({ data, derived }: { data: Analytics; derived: Derived })
         </SectionCard>
 
         <SectionCard>
-          <SectionHeading title="Focus vs meetings" subtitle="Protected work against calendar pressure." />
+          <SectionHeading title={t("Focus vs meetings")} subtitle={t("Protected work against calendar pressure.")} />
           <div className="mt-7 flex h-40 items-end justify-center gap-10">
             <MetricColumn label="Focus" minutes={data.focus_minutes} color="#7c3aed" max={Math.max(data.focus_minutes, data.meeting_minutes, 1)} />
             <MetricColumn label="Meetings" minutes={data.meeting_minutes} color="#f97316" max={Math.max(data.focus_minutes, data.meeting_minutes, 1)} />
@@ -705,7 +708,7 @@ function ExecutiveView({ data, derived }: { data: Analytics; derived: Derived })
       </div>
 
       <SectionCard>
-        <SectionHeading title="Recommendations" subtitle="What to change next, based only on the current plan." />
+        <SectionHeading title={t("Recommendations")} subtitle={t("What to change next, based only on the current plan.")} />
         <div className="mt-4 divide-y divide-black/[0.06] overflow-hidden rounded-xl border border-black/[0.06]">
           {recommendations.slice(0, 4).map((recommendation, index) => (
             <div key={recommendation} className="flex items-start gap-3 bg-white px-3.5 py-3.5">
