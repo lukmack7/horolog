@@ -3325,6 +3325,16 @@ async def undo_change_set(
             ),
         )
 
+    current = await _planning_snapshot(db)
+    if current != row.after_state:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Plan zmienił się już po tej operacji. Horolog nie cofnie starego "
+                "snapshotu, żeby nie nadpisać nowszych decyzji."
+            ),
+        )
+
     await _restore_planning_snapshot(db, row.before_state)
     row.undone_at = datetime.now(UTC)
     await db.commit()
