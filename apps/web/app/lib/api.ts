@@ -634,6 +634,18 @@ export const api = {
     request<DailyItem>(`/api/daily/items/${id}/complete`, { method: "POST" }),
   cancelDailyItem: (id: string) =>
     request<DailyItem>(`/api/daily/items/${id}/cancel`, { method: "POST" }),
+  moveDailyItemToTodo: (id: string) =>
+    request<{ item_id: string; todo_id: string; status: string }>(
+      `/api/daily/items/${id}/to-todo`,
+      { method: "POST" },
+    ),
+  closeDaily: (date: string) =>
+    request<{
+      date: string;
+      closed_at: string;
+      change_set_id?: string;
+      already_closed: boolean;
+    }>(`/api/daily/${date}/close`, { method: "POST" }),
   moveDailyItem: (id: string, quadrant: 1 | 2 | 3 | 4, date: string) =>
     request<DailyItem>(`/api/daily/items/${id}/move`, {
       method: "POST",
