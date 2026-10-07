@@ -7,11 +7,12 @@ import {
   WORK_CATEGORY_LABEL,
   api,
   formatDuration,
+  type TodoAISuggestion,
   type TodoInboxItem,
   type WorkCategory,
 } from "@/app/lib/api";
 import { useLanguage } from "@/app/components/LanguageProvider";
-import { CalendarDays, Check, Clock3, Inbox, Pencil, Plus, Trash2, X } from "lucide-react";
+import { CalendarDays, Check, Clock3, Inbox, Pencil, Plus, Sparkles, Trash2, X } from "lucide-react";
 
 type Draft = {
   title: string;
@@ -42,6 +43,7 @@ export default function TodoPage() {
   const [editing, setEditing] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Draft>(EMPTY);
   const [busy, setBusy] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<Record<string, TodoAISuggestion>>({});
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -111,6 +113,42 @@ export default function TodoPage() {
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Nie udało się zapisać zmian.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function suggest(item: TodoInboxItem) {
+    setBusy(`suggest-${item.id}`);
+    try {
+      const suggestion = await api.suggestTodo(item.id);
+      setSuggestions((current) => ({ ...current, [item.id]: suggestion }));
+      setError(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Nie udało się przygotować sugestii AI.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function applySuggestion(item: TodoInboxItem) {
+    const suggestion = suggestions[item.id];
+    if (!suggestion) return;
+    setBusy(`apply-${item.id}`);
+    try {
+      await api.patchTodo(item.id, {
+        minutes: suggestion.minutes,
+        category: suggestion.category ?? item.category ?? null,
+        deadline_date: suggestion.deadline_date ?? item.deadline_date ?? null,
+      });
+      setSuggestions((current) => {
+        const next = { ...current };
+        delete next[item.id];
+        return next;
+      });
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Nie udało się zastosować sugestii.");
     } finally {
       setBusy(null);
     }
@@ -316,6 +354,16 @@ export default function TodoPage() {
                       </div>
                       <button
                         type="button"
+                        onClick={() => void suggest(item)}
+                        disabled={busy === `suggest-${item.id}`}
+                        className="flex h-8 shrink-0 items-center gap-1 rounded-lg px-2 text-[10.5px] font-semibold text-violet-700 hover:bg-violet-50 disabled:opacity-40"
+                        aria-label="Podpowiedź AI"
+                      >
+                        <Sparkles size={13} />
+                        AI
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => startEdit(item)}
                         className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-fg-subtle hover:bg-sunk hover:text-fg"
                         aria-label="Edytuj"
@@ -331,6 +379,66 @@ export default function TodoPage() {
                       >
                         <Trash2 size={14} />
                       </button>
+                    </div>
+                  )}
+
+                  {suggestions[item.id] && !editingThis && (
+                    <div className="mt-3 rounded-xl border border-violet-100 bg-violet-50/45 p-3">
+                      <div className="flex items-start gap-2">
+                        <Sparkles size={14} className="mt-0.5 shrink-0 text-violet-700" />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[10px] font-bold uppercase tracking-wide text-violet-800">
+                            Sugestia AI
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-1.5 text-[10.5px] font-semibold">
+                            <span className="rounded-full bg-white px-2 py-1">
+                              {formatDuration(suggestions[item.id]!.minutes)}
+                            </span>
+                            <span className="rounded-full bg-white px-2 py-1">
+                              Q{suggestions[item.id]!.quadrant}
+                            </span>
+                            {suggestions[item.id]!.category && (
+                              <span className="rounded-full bg-white px-2 py-1">
+                                {WORK_CATEGORY_LABEL[suggestions[item.id]!.category!]}
+                              </span>
+                            )}
+                            {suggestions[item.id]!.deadline_date && (
+                              <span className="rounded-full bg-white px-2 py-1">
+                                max {suggestions[item.id]!.deadline_date}
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-2 text-[11px] leading-relaxed text-violet-950/75">
+                            {suggestions[item.id]!.rationale}
+                          </p>
+                          <div className="mt-3 flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => void applySuggestion(item)}
+                              disabled={busy === `apply-${item.id}`}
+                              className="rounded-lg bg-violet-700 px-3 py-1.5 text-[10.5px] font-semibold text-white disabled:opacity-40"
+                            >
+                              Zastosuj czas/kategorię/deadline
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSuggestions((current) => {
+                                  const next = { ...current };
+                                  delete next[item.id];
+                                  return next;
+                                })
+                              }
+                              className="rounded-lg border border-violet-100 bg-white px-3 py-1.5 text-[10.5px] font-semibold text-violet-800"
+                            >
+                              Ukryj
+                            </button>
+                          </div>
+                          <p className="mt-2 text-[10px] text-violet-900/60">
+                            Q{suggestions[item.id]!.quadrant} jest rekomendacją do macierzy — wpis pozostaje w „Do zrobienia”.
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
