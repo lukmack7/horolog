@@ -37,7 +37,7 @@ DEMO_INTENTS: list[dict[str, Any]] = [
         "title": "Deep work",
         "kind": "focus",
         "priority": 2,
-        "energy": "high",
+        "category": "macheta_data",
         "minutes_per_period": 600,
         "period_days": 7,
         "min_chunk_minutes": 90,
