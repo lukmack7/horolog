@@ -31,11 +31,13 @@ import { Glyph } from "@/app/components/Glyph"
 import { WorkCategoryMedal } from "@/app/components/WorkCategoryMedal"
 import { FILL, RULE } from "@/app/components/Grid"
 import {
+  api,
   WORK_CATEGORIES,
   WORK_CATEGORY_LABEL,
   type IntentKind,
   type Priority,
   type TimeTrackingEntry,
+  type TimeTrackingStats,
   type WorkCategory,
 } from "@/app/lib/api"
 
@@ -120,6 +122,7 @@ export function EventManager({
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [timerTick, setTimerTick] = useState(() => Date.now())
+  const [trackingStats, setTrackingStats] = useState<TimeTrackingStats | null>(null)
   const draggedEventRef = useRef<Event | null>(null)
   const defaultColor = colors[0]?.value ?? "blue"
   const defaultCategory = categories[0] ?? "Meeting"
@@ -131,6 +134,25 @@ export function EventManager({
     workCategory: undefined,
     tags: [],
   })
+
+  useEffect(() => {
+    if (!isDialogOpen || !selectedEvent?.intentId || selectedEvent.kind !== "task") {
+      setTrackingStats(null)
+      return
+    }
+    let alive = true
+    void api
+      .timeTrackingStats(selectedEvent.intentId)
+      .then((stats) => {
+        if (alive) setTrackingStats(stats)
+      })
+      .catch(() => {
+        if (alive) setTrackingStats(null)
+      })
+    return () => {
+      alive = false
+    }
+  }, [isDialogOpen, selectedEvent?.intentId, selectedEvent?.kind, timeTracking?.id, timeTracking?.status])
 
   useEffect(() => {
     if (timeTracking?.status !== "running") return
@@ -1024,7 +1046,19 @@ export function EventManager({
                     )}
                   </div>
 
-                  <div className="flex flex-wrap gap-2">
+                  {trackingStats && trackingStats.sessions > 0 && (
+                    <div className="mt-2 text-[10.5px] text-fg-muted">
+                      Plan: {trackingStats.planned_minutes} min · zmierzone:{" "}
+                      {Math.round(trackingStats.total_seconds / 60)} min · sesje:{" "}
+                      {trackingStats.sessions}
+                      {trackingStats.sessions > 1
+                        ? ` · średnio ${Math.round(trackingStats.average_seconds / 60)} min`
+                        : ""}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap gap-2">
                     {!timeTracking && onTimeTrackingStart && (
                       <Button
                         type="button"
