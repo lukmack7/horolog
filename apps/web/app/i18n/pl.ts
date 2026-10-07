@@ -304,4 +304,6 @@ export const pl = {
   "Enter wysyła · Shift+Enter nowa linia": "Enter wysyła · Shift+Enter nowa linia",
   "AI proponuje · backend sprawdza · Ty zatwierdzasz": "AI proponuje · backend sprawdza · Ty zatwierdzasz",
   "Wyślij": "Wyślij",
+  "in": "za",
+  "or": "lub",
 } satisfies Record<TranslationKey, string>;
