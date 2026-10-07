@@ -174,7 +174,15 @@ class NotificationSyncWorker(
 
         var trigger = now.toLocalDate().atTime(time).atZone(zone)
         if (!trigger.isAfter(now)) {
-            trigger = trigger.plusDays(1)
+            val sameMinute =
+                trigger.toLocalDate() == now.toLocalDate() &&
+                trigger.hour == now.hour &&
+                trigger.minute == now.minute
+            trigger = if (sameMinute) {
+                now.plusSeconds(3)
+            } else {
+                trigger.plusDays(1)
+            }
         }
 
         alarms += AlarmSpec(
