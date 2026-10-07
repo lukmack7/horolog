@@ -24,12 +24,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from horolog.api import IntentIn, app, origin
 from horolog.db import (
     BusyRow,
+    ChangeSetRow,
     DailyItemDecisionRow,
     DailyItemMetaRow,
     DailyPlanItemRow,
     DailyPlanRow,
     DailyReviewRow,
     NotificationSettingsRow,
+    TimeEntryRow,
     TodoInboxRow,
     UserSettingsRow,
     init_db,
@@ -57,6 +59,8 @@ async def client() -> AsyncIterator[AsyncClient]:
         gen = cast("AsyncGenerator[AsyncSession, None]", session())
         db = await anext(gen)
         await db.execute(delete(BusyRow))
+        await db.execute(delete(ChangeSetRow))
+        await db.execute(delete(TimeEntryRow))
         await db.execute(delete(DailyItemDecisionRow))
         await db.execute(delete(DailyItemMetaRow))
         await db.execute(delete(DailyPlanItemRow))
@@ -68,6 +72,102 @@ async def client() -> AsyncIterator[AsyncClient]:
         await db.commit()
         await gen.aclose()
         yield http
+
+
+@pytest.mark.asyncio
+async def test_assistant_execute_is_reversible_change_set(client: AsyncClient) -> None:
+    tomorrow = (origin() + timedelta(days=1)).date().isoformat()
+
+    response = await client.post(
+        "/api/assistant/execute",
+        json={
+            "actions": [
+                {
+                    "action": "create_task",
+                    "title": "Atomic test task",
+                    "date": tomorrow,
+                    "minutes": 30,
+                    "quadrant": 2,
+                    "category": "cmr",
+                }
+            ]
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["atomic"] is True
+    assert payload["change_set_id"]
+
+    history = (await client.get("/api/history")).json()
+    change = next(item for item in history if item["id"] == payload["change_set_id"])
+    assert change["source"] == "assistant"
+    assert change["can_undo"] is True
+
+    undo = await client.post(f"/api/history/{payload['change_set_id']}/undo")
+    assert undo.status_code == 200
+
+    intents = (await client.get("/api/intents")).json()
+    assert not any(item["title"] == "Atomic test task" for item in intents)
+
+
+@pytest.mark.asyncio
+async def test_time_tracking_start_pause_resume_stop(client: AsyncClient) -> None:
+    tomorrow = (origin() + timedelta(days=1)).replace(hour=10, minute=0, second=0, microsecond=0)
+    created = await client.post(
+        "/api/intents",
+        json={
+            "title": "Measured work",
+            "kind": "task",
+            "priority": 2,
+            "minutes_per_period": 60,
+            "min_chunk_minutes": 60,
+            "max_chunk_minutes": 60,
+            "max_per_day": 1,
+            "earliest": tomorrow.isoformat(),
+            "due": (tomorrow + timedelta(hours=2)).isoformat(),
+        },
+    )
+    assert created.status_code == 201
+    intent_id = created.json()["id"]
+
+    started = await client.post(f"/api/time-tracking/{intent_id}/start")
+    assert started.status_code == 201
+    assert started.json()["status"] == "running"
+
+    paused = await client.post(f"/api/time-tracking/{intent_id}/pause")
+    assert paused.status_code == 200
+    assert paused.json()["status"] == "paused"
+
+    resumed = await client.post(f"/api/time-tracking/{intent_id}/resume")
+    assert resumed.status_code == 200
+    assert resumed.json()["status"] == "running"
+
+    stopped = await client.post(f"/api/time-tracking/{intent_id}/stop")
+    assert stopped.status_code == 200
+    assert stopped.json()["status"] == "stopped"
+    assert (await client.get("/api/time-tracking/active")).json() is None
+
+    stats = (await client.get(f"/api/time-tracking/{intent_id}/stats")).json()
+    assert stats["sessions"] == 1
+    assert stats["suggested_minutes"] >= 15
+
+
+@pytest.mark.asyncio
+async def test_daily_close_is_recorded_and_undoable(client: AsyncClient) -> None:
+    today = origin().date().isoformat()
+    closed = await client.post(f"/api/daily/{today}/close")
+    assert closed.status_code == 200
+    payload = closed.json()
+    assert payload["closed_at"]
+    assert payload["change_set_id"]
+
+    daily = (await client.get(f"/api/daily/{today}")).json()
+    assert daily["plan"]["closed_at"] is not None
+
+    undo = await client.post(f"/api/history/{payload['change_set_id']}/undo")
+    assert undo.status_code == 200
+    daily_after = (await client.get(f"/api/daily/{today}")).json()
+    assert daily_after["plan"]["closed_at"] is None
 
 
 @pytest.mark.asyncio
