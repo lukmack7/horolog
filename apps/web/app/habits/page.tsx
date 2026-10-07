@@ -524,10 +524,11 @@ function Field({
   hint: string;
   children: React.ReactNode;
 }) {
+  const { t } = useLanguage();
   return (
     <label className="block">
       <span className="mb-1.5 block text-[12px] font-semibold text-fg-muted">
-        {label} <span className="font-normal text-fg-subtle">· {hint}</span>
+        {t(label)} <span className="font-normal text-fg-subtle">· {t(hint)}</span>
       </span>
       {children}
     </label>
