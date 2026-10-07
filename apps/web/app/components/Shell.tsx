@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import {
   Calendar,
   Clock,
+  ClipboardList,
   Inbox,
   RotateCcw,
   Users,
@@ -27,6 +28,7 @@ import { useLanguage } from "@/app/components/LanguageProvider";
 const NAV = [
   { href: "/time", label: "Time", icon: Clock },
   { href: "/planner", label: "Planner", icon: Calendar },
+  { href: "/todo", label: "To do", icon: ClipboardList },
   { href: "/daily", label: "Daily", icon: BookOpenCheck },
   { href: "/habits", label: "Habits", icon: RotateCcw },
   { href: "/inbox", label: "Task inbox", icon: Inbox },
