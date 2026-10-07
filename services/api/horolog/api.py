@@ -743,17 +743,10 @@ async def get_daily(date: str, db: AsyncSession = Depends(session)) -> dict[str,
         )
     ]
 
-    # Rollover happens only when opening today (or tomorrow while planning it).
-    # Historical browsing is read-only and can never move current tasks.
-    if requested.date() >= today:
-        changed = False
-        for row in rows:
-            if row.completed_at is None and row.plan_date < date:
-                await _roll_daily_intent(row, date, db)
-                changed = True
-        if changed:
-            await db.commit()
-            await _replan(db)
+    # Reading Daily must never mutate Planner dates. Unfinished items are
+    # rendered as carry-over until the user explicitly chooses to defer/move
+    # them. In particular, opening tomorrow while planning ahead must not
+    # silently move today's unfinished Planner tasks to tomorrow.
 
     intent_ids = [row.intent_id for row in rows if row.intent_id]
     intent_map: dict[str, dict[str, Any]] = {}
