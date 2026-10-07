@@ -517,7 +517,7 @@ export function EventManager({
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="gap-2 whitespace-nowrap flex-shrink-0 bg-transparent">
                   <Filter className="h-4 w-4" />
-                  Categories
+                  {t("Types")}
                   {selectedCategories.length > 0 && (
                     <Badge variant="secondary" className="ml-1 h-5 px-1.5">
                       {selectedCategories.length}
@@ -526,7 +526,7 @@ export function EventManager({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-48 bg-white">
-                <DropdownMenuLabel>{t("Filter by Category")}</DropdownMenuLabel>
+                <DropdownMenuLabel>{t("Filter by Type")}</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {categories.map((category) => (
                   <DropdownMenuCheckboxItem
