@@ -320,6 +320,28 @@ export function intentToEditPayload(intent: Intent, origin: string): Record<stri
   };
 }
 
+function formatApiDetail(value: unknown): string | null {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    const messages = value
+      .map((item) => {
+        if (item && typeof item === "object" && "msg" in item) {
+          const msg = (item as { msg?: unknown }).msg;
+          return typeof msg === "string" ? msg : null;
+        }
+        return null;
+      })
+      .filter((message): message is string => Boolean(message));
+    if (messages.length > 0) return messages.join("; ");
+  }
+  if (value == null) return null;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
@@ -330,8 +352,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // deliberately - surface that rather than a bare status code.
     let detail = `${response.status} ${response.statusText}`;
     try {
-      const body = (await response.json()) as { detail?: string };
-      if (body.detail) detail = body.detail;
+      const body = (await response.json()) as { detail?: unknown };
+      const parsed = formatApiDetail(body.detail);
+      if (parsed) detail = parsed;
     } catch {
       /* non-JSON error body; keep the status line */
     }
