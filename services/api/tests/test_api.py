@@ -28,6 +28,7 @@ from horolog.db import (
     DailyPlanItemRow,
     DailyPlanRow,
     DailyReviewRow,
+    UserSettingsRow,
     init_db,
     session,
 )
@@ -57,6 +58,7 @@ async def client() -> AsyncIterator[AsyncClient]:
         await db.execute(delete(DailyPlanItemRow))
         await db.execute(delete(DailyPlanRow))
         await db.execute(delete(DailyReviewRow))
+        await db.execute(delete(UserSettingsRow))
         await db.commit()
         await gen.aclose()
         yield http
@@ -65,6 +67,51 @@ async def client() -> AsyncIterator[AsyncClient]:
 @pytest.mark.asyncio
 async def test_health(client: AsyncClient) -> None:
     assert (await client.get("/api/health")).json() == {"status": "ok"}
+
+
+@pytest.mark.asyncio
+async def test_user_workday_preferences_are_persistent_defaults_not_manual_limits(
+    client: AsyncClient,
+) -> None:
+    defaults = (await client.get("/api/settings")).json()
+    assert defaults["preferred_workday_start_min"] == 9 * 60
+    assert defaults["preferred_workday_end_min"] == 17 * 60
+
+    saved = await client.put(
+        "/api/settings",
+        json={
+            "preferred_workday_start_min": 8 * 60 + 15,
+            "preferred_workday_end_min": 16 * 60 + 45,
+        },
+    )
+    assert saved.status_code == 200
+
+    created = await client.post(
+        "/api/intents",
+        json={
+            "title": "Uses preferred hours",
+            "minutes_per_period": 30,
+            "min_chunk_minutes": 30,
+            "max_chunk_minutes": 30,
+        },
+    )
+    assert created.status_code == 201
+    ident = created.json()["id"]
+
+    intents = (await client.get("/api/intents")).json()
+    intent = next(item for item in intents if item["id"] == ident)
+    assert intent["daily_windows"] == [{"start_min": 495, "end_min": 1005}]
+
+    # "Suggested" is not a hard ban: an explicit manual placement after the
+    # preferred workday remains authoritative.
+    tomorrow = origin() + timedelta(days=1)
+    start = tomorrow.replace(hour=18, minute=0, second=0, microsecond=0)
+    end = start + timedelta(minutes=30)
+    moved = await client.post(
+        f"/api/intents/{ident}/move",
+        json={"start": start.isoformat(), "end": end.isoformat()},
+    )
+    assert moved.status_code == 200
 
 
 @pytest.mark.asyncio
