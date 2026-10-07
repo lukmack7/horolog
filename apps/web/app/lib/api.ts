@@ -268,6 +268,9 @@ export interface TimeTrackingStats {
   sessions: number;
   total_seconds: number;
   average_seconds: number;
+  similar_sessions: number;
+  similar_average_seconds: number;
+  suggested_minutes: number;
 }
 
 export interface ChangeHistoryEntry {
