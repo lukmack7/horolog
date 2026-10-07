@@ -1777,12 +1777,14 @@ async def close_daily(
         db,
         source="daily",
         title=f"Zamknięcie dnia · {date}",
-        summary=[{
-            "action": "close_daily",
-            "date": date,
-            "items": len(active_items),
-            "completed": completed,
-        }],
+        summary=[
+            {
+                "action": "close_daily",
+                "date": date,
+                "items": len(active_items),
+                "completed": completed,
+            }
+        ],
         before=before,
         after=after,
     )
