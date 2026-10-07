@@ -236,6 +236,38 @@ export interface DailyData {
   };
 }
 
+export interface TimeTrackingEntry {
+  id: string;
+  intent_id: string;
+  title: string;
+  status: "running" | "paused" | "stopped";
+  started_at: string;
+  last_resumed_at?: string | null;
+  accumulated_seconds: number;
+  elapsed_seconds: number;
+  ended_at?: string | null;
+}
+
+export interface TimeTrackingStats {
+  intent_id: string;
+  title: string;
+  planned_minutes: number;
+  sessions: number;
+  total_seconds: number;
+  average_seconds: number;
+}
+
+export interface ChangeHistoryEntry {
+  id: string;
+  source: string;
+  title: string;
+  summary: Array<Record<string, unknown>>;
+  created_at: string;
+  undone_at?: string | null;
+  can_undo: boolean;
+}
+
+
 export interface UserPreferences {
   preferred_workday_start_min: number;
   preferred_workday_end_min: number;
@@ -448,6 +480,33 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ actions }),
     }),
+  activeTimeTracking: () =>
+    request<TimeTrackingEntry | null>("/api/time-tracking/active"),
+  timeTrackingStats: (intentId: string) =>
+    request<TimeTrackingStats>(`/api/time-tracking/${intentId}/stats`),
+  startTimeTracking: (intentId: string) =>
+    request<TimeTrackingEntry>(`/api/time-tracking/${intentId}/start`, {
+      method: "POST",
+    }),
+  pauseTimeTracking: (intentId: string) =>
+    request<TimeTrackingEntry>(`/api/time-tracking/${intentId}/pause`, {
+      method: "POST",
+    }),
+  resumeTimeTracking: (intentId: string) =>
+    request<TimeTrackingEntry>(`/api/time-tracking/${intentId}/resume`, {
+      method: "POST",
+    }),
+  stopTimeTracking: (intentId: string) =>
+    request<TimeTrackingEntry>(`/api/time-tracking/${intentId}/stop`, {
+      method: "POST",
+    }),
+  history: (limit = 50) =>
+    request<ChangeHistoryEntry[]>(`/api/history?limit=${limit}`),
+  undoHistory: (id: string) =>
+    request<{ id: string; status: string; undone_at: string }>(
+      `/api/history/${id}/undo`,
+      { method: "POST" },
+    ),
   setBusy: (events: Omit<Busy, "source">[]) =>
     request<{ events: number; blocks: number }>("/api/busy", {
       method: "PUT",
