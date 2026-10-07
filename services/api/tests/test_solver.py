@@ -12,7 +12,7 @@ from itertools import pairwise
 import pytest
 
 from horolog.domain.events import BusyInterval
-from horolog.domain.intent import DailyWindow, EnergyLevel, Intent, IntentKind, Priority
+from horolog.domain.intent import DailyWindow, Intent, IntentKind, Priority, WorkCategory
 from horolog.domain.plan import Plan
 from horolog.domain.time import SLOTS_PER_DAY, SLOTS_PER_HOUR, minutes_to_slots
 from horolog.solver.expand import expand
@@ -117,23 +117,36 @@ def test_higher_priority_wins_a_contested_slot() -> None:
     assert [u.intent_id for u in plan.unmet] == ["trivial"]
 
 
-def test_high_energy_wins_a_contested_slot_among_equals() -> None:
-    """Same priority, same kind, one open hour: the demanding one goes first.
-
-    This is the only place `energy` is allowed to have any effect at all - it
-    must never override priority or kind, only break a tie between them."""
+def test_work_category_does_not_override_scheduler_priority() -> None:
+    """CMR/Macheta Data/private are labels, never hidden scheduling weights."""
     only_an_hour = [DailyWindow(start_min=10 * 60, end_min=11 * 60)]
-    demanding = task(
-        "demanding", 60, Priority.P3, 60, 60, daily_windows=only_an_hour, energy=EnergyLevel.HIGH
+    cmr = task(
+        "z-cmr",
+        60,
+        Priority.P3,
+        60,
+        60,
+        daily_windows=only_an_hour,
+        category=WorkCategory.CMR,
     )
-    ordinary = task("ordinary", 60, Priority.P3, 60, 60, daily_windows=only_an_hour)
+    private = task(
+        "a-private",
+        60,
+        Priority.P3,
+        60,
+        60,
+        daily_windows=only_an_hour,
+        category=WorkCategory.PRIVATE,
+    )
 
-    plan = solve([demanding, ordinary], [], SLOTS_PER_DAY)
+    plan = solve([cmr, private], [], SLOTS_PER_DAY)
 
     assert_sound(plan, [])
+    # With every real scheduling attribute equal, the stable intent-id
+    # tiebreaker decides. Category must not affect the result.
     scheduled = {b.intent_id for b in plan.blocks}
-    assert scheduled == {"demanding"}
-    assert [u.intent_id for u in plan.unmet] == ["ordinary"]
+    assert scheduled == {"a-private"}
+    assert [u.intent_id for u in plan.unmet] == ["z-cmr"]
 
 
 def test_resolve_with_nothing_changed_is_a_fixed_point() -> None:
