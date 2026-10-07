@@ -105,7 +105,7 @@ class Settings(BaseSettings):
     """Local default. Use e.g. `claude-opus-5` for Anthropic, `gpt-4.1` for OpenAI."""
 
     llm_api_key: str = ""
-    llm_timeout_s: float = 60.0
+    llm_timeout_s: float = 180.0
 
     cors_origins: list[str] = ["http://localhost:3000"]
 
