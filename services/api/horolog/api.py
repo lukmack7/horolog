@@ -1691,23 +1691,27 @@ async def _execute_assistant_action(
             ],
         }
 
-    if action.action == "reschedule_task":
+    if action.action in ("reschedule_task", "reschedule_break"):
         if not action.intent_id:
-            raise HTTPException(status_code=422, detail="reschedule_task needs intent_id")
+            raise HTTPException(status_code=422, detail=f"{action.action} needs intent_id")
 
         row = await db.get(IntentRow, action.intent_id)
         if row is None:
             raise HTTPException(status_code=404, detail=f"no intent {action.intent_id!r}")
 
         intent = Intent.model_validate(row.payload)
+        expected_kind = (
+            IntentKind.BUFFER if action.action == "reschedule_break" else IntentKind.TASK
+        )
         if (
             intent.period_days is not None
-            or intent.kind != IntentKind.TASK
+            or intent.kind != expected_kind
             or intent.completed_at is not None
         ):
+            label = "break" if expected_kind == IntentKind.BUFFER else "task"
             raise HTTPException(
                 status_code=422,
-                detail="only active one-shot tasks can be rescheduled",
+                detail=f"only an active one-shot {label} can be rescheduled here",
             )
 
         current_plan = await load_previous_plan(db) or await _replan(db)
@@ -1715,11 +1719,12 @@ async def _execute_assistant_action(
             block for block in current_plan.blocks if block.intent_id == intent.id
         ]
         if len(current_blocks) != 1:
+            label = "przerwę" if expected_kind == IntentKind.BUFFER else "zadanie"
             raise HTTPException(
                 status_code=409,
                 detail=(
-                    "Mogę edytować godzinę lub długość tylko zadania, które ma "
-                    "jeden aktualnie zaplanowany blok."
+                    f"Mogę edytować godzinę lub długość tylko elementu „{label}”, "
+                    "który ma jeden aktualnie zaplanowany blok."
                 ),
             )
 
@@ -1751,10 +1756,13 @@ async def _execute_assistant_action(
         )
         end = start + timedelta(minutes=duration_minutes)
 
-        # Explicit clock or duration edits are exact user decisions. A pure
-        # date move stays flexible within that day, preserving the older
-        # reschedule semantics.
-        exact = action.start_min is not None or action.minutes is not None
+        # Breaks are protected appointments, so even a date-only break move is
+        # exact. Tasks retain the older flexible date-only semantics.
+        exact = (
+            action.action == "reschedule_break"
+            or action.start_min is not None
+            or action.minutes is not None
+        )
 
         moved = await move_intent(
             action.intent_id,
@@ -2073,10 +2081,10 @@ async def move_intent(
     body: MoveIntentIn,
     db: AsyncSession = Depends(session),
 ) -> dict[str, Any]:
-    """Move a one-shot task or meeting to a chosen Planner day/time.
+    """Move a one-shot task, protected break, or meeting in Planner.
 
     Manual moves are explicit user decisions:
-    - tasks stay on the selected day,
+    - tasks and breaks use the selected span,
     - meetings stay at the exact selected start time,
     - recurring routines remain unsupported,
     - dates before today remain outside the active planning horizon.
@@ -2091,10 +2099,10 @@ async def move_intent(
             status_code=422,
             detail="Recurring routines are not draggable as whole tasks yet.",
         )
-    if intent.kind not in (IntentKind.TASK, IntentKind.MEETING):
+    if intent.kind not in (IntentKind.TASK, IntentKind.BUFFER, IntentKind.MEETING):
         raise HTTPException(
             status_code=422,
-            detail="Only one-shot tasks and meetings can be moved in Planner.",
+            detail="Only one-shot tasks, breaks and meetings can be moved in Planner.",
         )
     if intent.completed_at is not None:
         raise HTTPException(status_code=422, detail="Completed items cannot be moved.")
@@ -2144,12 +2152,12 @@ async def move_intent(
         if requested_seconds % (SLOT_MINUTES * 60) != 0:
             raise HTTPException(
                 status_code=422,
-                detail=f"Task duration must use {SLOT_MINUTES}-minute increments.",
+                detail=f"Duration must use {SLOT_MINUTES}-minute increments.",
             )
         if start.minute % SLOT_MINUTES != 0 or start.second != 0 or start.microsecond != 0:
             raise HTTPException(
                 status_code=422,
-                detail=f"Task start must use {SLOT_MINUTES}-minute increments.",
+                detail=f"Start time must use {SLOT_MINUTES}-minute increments.",
             )
 
         dragged_minutes = requested_seconds // 60
@@ -2160,7 +2168,7 @@ async def move_intent(
             if task_end.date() != start.date():
                 raise HTTPException(
                     status_code=409,
-                    detail="The task would extend beyond the selected day.",
+                    detail="The item would extend beyond the selected day.",
                 )
 
             moved = intent.model_copy(
@@ -2256,7 +2264,7 @@ async def move_intent(
                 raise HTTPException(
                     status_code=409,
                     detail=(
-                        "This task cannot be placed at the selected time. "
+                        "This item cannot be placed at the selected time. "
                         "Choose another time or free that slot."
                     ),
                 )
