@@ -3636,9 +3636,9 @@ async def _execute_assistant_action(
             raise HTTPException(status_code=422, detail="delete_tasks_for_date needs date")
 
         target_date = _daily_date(action.date).date()
-        current_plan = await get_plan(db)
+        deletion_plan = await get_plan(db)
         active_task_dates: dict[str, set[Date]] = {}
-        for block in current_plan.blocks:
+        for block in deletion_plan.blocks:
             if block.kind == IntentKind.TASK and not block.completed:
                 active_task_dates.setdefault(block.intent_id, set()).add(
                     block.start.astimezone(settings().zone).date()
