@@ -2530,6 +2530,11 @@ async def _execute_assistant_action(
                 detail="Ten wpis nie jest już dostępny w „Do zrobienia”.",
             )
 
+        if action.category is not None:
+            todo.category = action.category.value
+            todo.updated_at = datetime.now(UTC)
+            await db.commit()
+
         item = await assign_todo_to_daily(
             action.todo_id,
             TodoAssignIn(date=action.date, quadrant=action.quadrant),
