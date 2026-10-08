@@ -1840,8 +1840,11 @@ async def defer_daily_item(
     item = await db.get(DailyPlanItemRow, item_id)
     if item is None:
         raise HTTPException(status_code=404, detail="daily item not found")
-    if target.date() <= origin().date():
-        raise HTTPException(status_code=422, detail="defer date must be in the future")
+    if target.date() < origin().date():
+        raise HTTPException(
+            status_code=422,
+            detail="Nie można świadomie przenieść zadania do dnia w przeszłości.",
+        )
     decision = await db.get(DailyItemDecisionRow, item_id)
     if decision is None:
         decision = DailyItemDecisionRow(item_id=item_id)
