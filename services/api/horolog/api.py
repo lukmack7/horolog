@@ -34,6 +34,7 @@ from horolog.analytics import Analytics, analyse
 from horolog.assistant import (
     AssistantAction,
     AssistantMessage,
+    AssistantReference,
     converse,
     suggest_todo_item,
 )
@@ -2928,7 +2929,35 @@ def _apply_explicit_todo_timeline(
         if index in break_after:
             ordered.append(break_after[index])
 
-    return decision.model_copy(update={"actions": [*ordered, *preserved]})
+    display_date = datetime.strptime(explicit_date, "%Y-%m-%d").strftime("%d.%m")
+    proposal_lines: list[str] = []
+    for action in ordered:
+        if action.start_min is None or action.minutes is None:
+            continue
+        start_hour, start_minute = divmod(action.start_min, 60)
+        end_total = action.start_min + action.minutes
+        end_hour, end_minute = divmod(end_total, 60)
+        label = action.title or ("Przerwa" if action.action == "create_break" else "Zadanie")
+        proposal_lines.append(
+            f"• {label} — {display_date} "
+            f"{start_hour:02d}:{start_minute:02d}–{end_hour:02d}:{end_minute:02d}"
+        )
+
+    reply = decision.reply
+    if proposal_lines:
+        reply = (
+            "Proponuję dokładnie ten pakiet:\n"
+            + "\n".join(proposal_lines)
+            + "\n\nWykorzystam istniejące wpisy z „Do zrobienia”; "
+            "nie utworzę ich kopii. Zmiany zostaną wykonane dopiero po potwierdzeniu."
+        )
+
+    return decision.model_copy(
+        update={
+            "reply": reply,
+            "actions": [*ordered, *preserved],
+        }
+    )
 
 
 async def _coerce_exact_todo_creates(
