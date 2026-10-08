@@ -26,6 +26,7 @@ from horolog.api import (
     IntentIn,
     _apply_explicit_todo_timeline,
     _apply_explicit_user_date,
+    _apply_sequential_todo_followup,
     app,
     origin,
 )
@@ -196,6 +197,81 @@ def test_explicit_todo_timeline_preserves_existing_items_break_and_clock_ranges(
     assert second.start_min == 11 * 60 + 30
     assert second.minutes == 60
     assert second.start_mode == "fixed"
+
+
+def test_sequential_todo_followup_uses_stored_durations_and_break() -> None:
+    todos = [
+        {
+            "id": "todo-a",
+            "title": "Test Raport A",
+            "minutes": 60,
+            "category": "macheta_data",
+            "deadline_date": None,
+        },
+        {
+            "id": "todo-b",
+            "title": "Test Raport B",
+            "minutes": 60,
+            "category": "cmr",
+            "deadline_date": None,
+        },
+    ]
+    messages = [
+        AssistantMessage(
+            role="user",
+            content="Jakie mam zadania do zrobienia?",
+        ),
+        AssistantMessage(
+            role="assistant",
+            content="1. Test Raport A\n2. Test Raport B",
+        ),
+        AssistantMessage(
+            role="user",
+            content=(
+                "OK zaplanuj je 10.10.2026 od 10:00 z 30 minutową "
+                "przerwą między nimi. Najpierw A potem przerwa i B"
+            ),
+        ),
+    ]
+    wrong = AssistantDecision(
+        reply="Dodam dwa zadania.",
+        actions=[
+            AssistantAction(
+                action="schedule_todo",
+                todo_id="todo-a",
+                date="2026-10-10",
+                quadrant=1,
+                start_min=10 * 60,
+                start_mode="fixed",
+            ),
+            AssistantAction(
+                action="schedule_todo",
+                todo_id="todo-b",
+                date="2026-10-10",
+                quadrant=1,
+                start_min=11 * 60,
+                start_mode="fixed",
+            ),
+        ],
+    )
+
+    corrected = _apply_sequential_todo_followup(wrong, messages, todos)
+
+    assert [action.action for action in corrected.actions] == [
+        "schedule_todo",
+        "create_break",
+        "schedule_todo",
+    ]
+    first, pause, second = corrected.actions
+    assert first.todo_id == "todo-a"
+    assert first.start_min == 10 * 60
+    assert first.minutes == 60
+    assert pause.start_min == 11 * 60
+    assert pause.minutes == 30
+    assert second.todo_id == "todo-b"
+    assert second.start_min == 11 * 60 + 30
+    assert second.minutes == 60
+    assert "nie utworzę kopii" in corrected.reply
 
 
 @pytest.mark.asyncio
