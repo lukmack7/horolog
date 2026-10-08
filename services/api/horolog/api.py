@@ -1200,7 +1200,7 @@ async def get_daily(date: str, db: AsyncSession = Depends(session)) -> dict[str,
             block.start.astimezone(settings().zone).date().isoformat()
         )
 
-    rows = (
+    all_rows = (
         await db.execute(
             select(DailyPlanItemRow).where(
                 DailyPlanItemRow.plan_date <= date,
@@ -1208,75 +1208,36 @@ async def get_daily(date: str, db: AsyncSession = Depends(session)) -> dict[str,
             )
         )
     ).scalars().all()
-    item_ids = [row.id for row in rows]
+    item_ids = [row.id for row in all_rows]
     decisions = (
         (
             await db.execute(
-                select(DailyItemDecisionRow).where(DailyItemDecisionRow.item_id.in_(item_ids))
+                select(DailyItemDecisionRow).where(
+                    DailyItemDecisionRow.item_id.in_(item_ids)
+                )
             )
         ).scalars().all()
         if item_ids
         else []
     )
     decision_map = {row.item_id: row for row in decisions}
+
+    # The matrix itself is deliberate: opening a later day must never project
+    # unfinished work into Q1/Q2/Q3/Q4. A card belongs to this day only when it
+    # was originally created here or the user explicitly deferred it here.
     rows = [
         row
-        for row in rows
-        if not (
+        for row in all_rows
+        if row.plan_date == date
+        or (
             (decision := decision_map.get(row.id))
-            and decision.defer_until
-            and decision.defer_until > date
+            and decision.defer_until == date
         )
     ]
 
-    # Future planning must be deliberate. Merely opening Friday/Saturday may
-    # not project every unfinished item from today into that future matrix.
-    # A future Daily view contains only:
-    #   1) items originally assigned to that date, or
-    #   2) older items explicitly deferred to exactly that date.
-    # Today (and historical views) may still surface genuine unfinished
-    # carry-over so the user can consciously decide what to do with it.
-    if requested.date() > today:
-        rows = [
-            row
-            for row in rows
-            if row.plan_date == date
-            or (
-                (decision := decision_map.get(row.id))
-                and decision.defer_until == date
-                and (
-                    row.intent_id is None
-                    or not row.schedule_enabled
-                    or date in scheduled_dates.get(row.intent_id, set())
-                )
-            )
-        ]
-    else:
-        # An unfinished Daily card is not genuine carry-over when its linked
-        # Planner task already has a concrete block on a later day. Showing it
-        # here as overdue creates a second, virtual copy of the same work.
-        rows = [
-            row
-            for row in rows
-            if not (
-                row.plan_date < date
-                and row.intent_id is not None
-                and row.schedule_enabled
-                and (
-                    (decision := decision_map.get(row.id)) is None
-                    or decision.defer_until != date
-                )
-                and any(
-                    scheduled_date > date
-                    for scheduled_date in scheduled_dates.get(row.intent_id, set())
-                )
-            )
-        ]
-
     # Legacy versions could leave more than one active Daily row linked to the
     # same one-shot Planner intent. Render exactly one card per intent without
-    # mutating history on read. Prefer the row explicitly belonging to this day,
-    # then a row deliberately deferred here, then the newest surviving row.
+    # mutating history on read.
     unique_rows: list[DailyPlanItemRow] = []
     grouped_by_intent: dict[str, list[DailyPlanItemRow]] = {}
     for row in rows:
@@ -1302,7 +1263,6 @@ async def get_daily(date: str, db: AsyncSession = Depends(session)) -> dict[str,
     rows = unique_rows
 
     # Reading Daily must never mutate Planner dates.
-
     meta_rows = (
         (
             await db.execute(
@@ -1314,11 +1274,17 @@ async def get_daily(date: str, db: AsyncSession = Depends(session)) -> dict[str,
     )
     meta_map = {row.item_id: row for row in meta_rows}
 
-    intent_ids = [row.intent_id for row in rows if row.intent_id]
+    all_intent_ids = {
+        row.intent_id
+        for row in all_rows
+        if row.intent_id is not None
+    }
     intent_map: dict[str, dict[str, Any]] = {}
-    if intent_ids:
+    if all_intent_ids:
         intent_rows = (
-            await db.execute(select(IntentRow).where(IntentRow.id.in_(intent_ids)))
+            await db.execute(
+                select(IntentRow).where(IntentRow.id.in_(all_intent_ids))
+            )
         ).scalars().all()
         intent_map = {row.id: row.payload for row in intent_rows}
 
@@ -1332,6 +1298,63 @@ async def get_daily(date: str, db: AsyncSession = Depends(session)) -> dict[str,
         )
         for row in rows
         if row.completed_at is None or row.plan_date == date
+    ]
+
+    # Genuine unfinished work from earlier days is a suggestion, not a virtual
+    # card in today's/future matrix. Only tasks already overdue as of REAL
+    # today qualify; merely looking two days ahead must not make today's work
+    # look two days late.
+    carry_rows: list[DailyPlanItemRow] = []
+    if requested.date() >= today:
+        today_key = today.isoformat()
+        for row in all_rows:
+            if row.plan_date >= today_key:
+                continue
+            if row.completed_at is not None or row.cancelled_at is not None:
+                continue
+            decision = decision_map.get(row.id)
+            if decision is not None:
+                if decision.defer_until == date:
+                    continue
+                if decision.defer_until and decision.defer_until >= today_key:
+                    # Already deliberately placed today or later.
+                    continue
+                if decision.acknowledged_date == date:
+                    # User explicitly chose to leave it on its original day
+                    # while planning this requested day.
+                    continue
+            if row.intent_id is not None and row.schedule_enabled:
+                planned = scheduled_dates.get(row.intent_id, set())
+                if any(planned_date >= today_key for planned_date in planned):
+                    # The underlying task already has a concrete current/future
+                    # Planner slot. Surface it through "Już w Plannerze" on its
+                    # actual day rather than inventing a second Daily card.
+                    continue
+            carry_rows.append(row)
+
+    # One suggestion per Planner task even if a legacy database contains
+    # several active Daily rows for the same intent.
+    carry_unique: list[DailyPlanItemRow] = []
+    carry_by_intent: dict[str, DailyPlanItemRow] = {}
+    for row in carry_rows:
+        if row.intent_id is None:
+            carry_unique.append(row)
+            continue
+        previous = carry_by_intent.get(row.intent_id)
+        if previous is None or row.created_at > previous.created_at:
+            carry_by_intent[row.intent_id] = row
+    carry_unique.extend(carry_by_intent.values())
+
+    today_key = today.isoformat()
+    carry_suggestions = [
+        _daily_item_dict(
+            row,
+            today_key,
+            intent_map.get(row.intent_id or ""),
+            decision_map.get(row.id),
+            meta_map.get(row.id),
+        )
+        for row in carry_unique
     ]
 
     linked_ids = {row.intent_id for row in rows if row.intent_id}
@@ -1368,6 +1391,7 @@ async def get_daily(date: str, db: AsyncSession = Depends(session)) -> dict[str,
             "closed_at": plan_row.closed_at.isoformat() if plan_row and plan_row.closed_at else None,
         },
         "items": items,
+        "carry_suggestions": carry_suggestions,
         "suggestions": suggestions,
         "yesterday": {
             "improve": previous_review.improve_tomorrow if previous_review else "",
@@ -1384,7 +1408,7 @@ async def get_daily(date: str, db: AsyncSession = Depends(session)) -> dict[str,
         "summary": {
             "completed_blocks": completed_today,
             "total_blocks": total_today,
-            "carry_over": sum(1 for item in items if item["carried"]),
+            "carry_over": len(carry_suggestions),
         },
     }
 
