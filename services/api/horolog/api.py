@@ -10,6 +10,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import re
 import sys
 import time
 import uuid
@@ -2370,6 +2371,87 @@ def _format_available_slots(action: AssistantAction, slots: list[dict[str, Any]]
     return "\n".join(lines)
 
 
+_DATE_SCOPED_ASSISTANT_ACTIONS = {
+    "create_task",
+    "create_meeting",
+    "create_break",
+    "reschedule_task",
+    "reschedule_break",
+    "reschedule_meeting",
+    "schedule_todo",
+    "update_daily_plan",
+    "find_time",
+}
+
+
+def _explicit_date_from_latest_user_message(
+    messages: list[AssistantMessage],
+) -> str | None:
+    """Resolve one unambiguous date written directly by the user.
+
+    Local models occasionally explain the right date in prose while emitting a
+    different ISO date in structured actions. A literal DD.MM/DD/MM/ISO date is
+    user input, so it is stronger evidence than the model's generated field.
+    Multiple distinct dates deliberately disable this shortcut.
+    """
+
+    latest = next(
+        (message.content for message in reversed(messages) if message.role == "user"),
+        None,
+    )
+    if not latest:
+        return None
+
+    today = origin().date()
+    found: set[str] = set()
+
+    for match in re.finditer(r"(?<!\d)(20\d{2})-(\d{1,2})-(\d{1,2})(?!\d)", latest):
+        year, month, day = map(int, match.groups())
+        try:
+            found.add(datetime(year, month, day).date().isoformat())
+        except ValueError:
+            continue
+
+    for match in re.finditer(
+        r"(?<!\d)(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?(?!\d)",
+        latest,
+    ):
+        day = int(match.group(1))
+        month = int(match.group(2))
+        raw_year = match.group(3)
+        if raw_year is None:
+            year = today.year
+        else:
+            year = int(raw_year)
+            if year < 100:
+                year += 2000
+        try:
+            found.add(datetime(year, month, day).date().isoformat())
+        except ValueError:
+            continue
+
+    return next(iter(found)) if len(found) == 1 else None
+
+
+def _apply_explicit_user_date(
+    decision: Any,
+    messages: list[AssistantMessage],
+) -> Any:
+    explicit = _explicit_date_from_latest_user_message(messages)
+    if explicit is None:
+        return decision
+
+    changed = False
+    actions: list[AssistantAction] = []
+    for action in decision.actions:
+        if action.action in _DATE_SCOPED_ASSISTANT_ACTIONS and action.date != explicit:
+            action = action.model_copy(update={"date": explicit})
+            changed = True
+        actions.append(action)
+
+    return decision.model_copy(update={"actions": actions}) if changed else decision
+
+
 @app.post("/api/assistant/chat")
 async def assistant_chat(
     body: AssistantChatIn,
@@ -2381,6 +2463,7 @@ async def assistant_chat(
             await _assistant_context(db, body.context_page, body.messages),
             pending_actions=body.pending_actions,
         )
+        decision = _apply_explicit_user_date(decision, body.messages)
     except ExtractionFailed as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except (ProviderError, httpx.HTTPError, RuntimeError) as exc:
