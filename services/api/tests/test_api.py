@@ -22,7 +22,8 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from horolog.api import IntentIn, app, origin
+from horolog.api import IntentIn, _apply_explicit_user_date, app, origin
+from horolog.assistant import AssistantAction, AssistantDecision, AssistantMessage
 from horolog.db import (
     BusyRow,
     ChangeSetRow,
@@ -77,6 +78,70 @@ async def client() -> AsyncIterator[AsyncClient]:
         await db.commit()
         await gen.aclose()
         yield http
+
+
+def test_explicit_dd_mm_date_overrides_model_action_date() -> None:
+    decision = AssistantDecision(
+        reply="Proponuję zmiany na 10 października.",
+        actions=[
+            AssistantAction(
+                action="create_task",
+                title="Test",
+                date="2026-10-08",
+                minutes=60,
+                quadrant=1,
+            )
+        ],
+    )
+    messages = [
+        AssistantMessage(
+            role="user",
+            content="10.10 ustaw test od 10:00 do 11:00",
+        )
+    ]
+
+    corrected = _apply_explicit_user_date(decision, messages)
+
+    assert corrected.actions[0].date == "2026-10-10"
+
+
+@pytest.mark.asyncio
+async def test_future_daily_does_not_auto_project_unfinished_items(
+    client: AsyncClient,
+) -> None:
+    today = origin().date().isoformat()
+    future = (origin() + timedelta(days=2)).date().isoformat()
+
+    created = await client.post(
+        f"/api/daily/{today}/items",
+        json={
+            "title": "Do not auto carry",
+            "quadrant": 2,
+            "minutes": 30,
+            "schedule_enabled": True,
+        },
+    )
+    assert created.status_code == 201
+    item = created.json()
+
+    future_view = await client.get(f"/api/daily/{future}")
+    assert future_view.status_code == 200
+    assert all(
+        row["id"] != item["id"]
+        for row in future_view.json()["items"]
+    )
+
+    deferred = await client.post(
+        f"/api/daily/items/{item['id']}/defer",
+        json={"until": future},
+    )
+    assert deferred.status_code == 200
+
+    future_after = await client.get(f"/api/daily/{future}")
+    rows = {row["id"]: row for row in future_after.json()["items"]}
+    assert item["id"] in rows
+    assert rows[item["id"]]["deferred_here"] is True
+    assert rows[item["id"]]["carried"] is False
 
 
 @pytest.mark.asyncio
