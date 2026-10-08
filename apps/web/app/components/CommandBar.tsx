@@ -35,6 +35,7 @@ type MentionTrigger = {
   kind: "intent" | "category";
   query: string;
   start: number;
+  end: number;
 };
 
 type MentionOption = {
@@ -58,8 +59,13 @@ function localDayKey(value: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function detectMentionTrigger(value: string): MentionTrigger | null {
-  const match = value.match(/(^|\s)([@#])([^@#\[\]\n]*)$/);
+function detectMentionTrigger(
+  value: string,
+  cursorPosition: number,
+): MentionTrigger | null {
+  const cursor = Math.max(0, Math.min(cursorPosition, value.length));
+  const beforeCursor = value.slice(0, cursor);
+  const match = beforeCursor.match(/(^|\s)([@#])([^@#\[\]\n]*)$/);
   if (!match) return null;
   const prefix = match[1] ?? "";
   const symbol = match[2];
@@ -68,6 +74,7 @@ function detectMentionTrigger(value: string): MentionTrigger | null {
     kind: symbol === "@" ? "intent" : "category",
     query,
     start: (match.index ?? 0) + prefix.length,
+    end: cursor,
   };
 }
 
@@ -254,6 +261,7 @@ export function CommandBar({
     },
   ]);
   const [input, setInput] = useState("");
+  const [cursorPosition, setCursorPosition] = useState(0);
   const [inputReferences, setInputReferences] = useState<AssistantReference[]>([]);
   const [mentionBlocks, setMentionBlocks] = useState<Block[]>([]);
   const [mentionTodos, setMentionTodos] = useState<TodoInboxItem[]>([]);
@@ -287,7 +295,10 @@ export function CommandBar({
     };
   }, [open]);
 
-  const mentionTrigger = useMemo(() => detectMentionTrigger(input), [input]);
+  const mentionTrigger = useMemo(
+    () => detectMentionTrigger(input, cursorPosition),
+    [input, cursorPosition],
+  );
 
   const mentionOptions = useMemo<MentionOption[]>(() => {
     if (!mentionTrigger) return [];
@@ -441,8 +452,18 @@ export function CommandBar({
   const selectMention = (option: MentionOption) => {
     const trigger = mentionTrigger;
     if (!trigger) return;
-    const next = `${input.slice(0, trigger.start)}${option.reference.token} `;
+
+    const before = input.slice(0, trigger.start);
+    const after = input.slice(trigger.end);
+    const needsSpace =
+      after.length === 0 ||
+      (!/^\s/.test(after) && !/^[,.;:!?)]/.test(after));
+    const spacer = needsSpace ? " " : "";
+    const next = `${before}${option.reference.token}${spacer}${after}`;
+    const nextCursor = before.length + option.reference.token.length + spacer.length;
+
     setInput(next);
+    setCursorPosition(nextCursor);
     setInputReferences((current) => [
       ...current.filter(
         (reference) =>
@@ -469,13 +490,14 @@ export function CommandBar({
       const element = document.getElementById("horolog-assistant-input");
       if (element instanceof HTMLTextAreaElement) {
         element.focus();
-        element.setSelectionRange(next.length, next.length);
+        element.setSelectionRange(nextCursor, nextCursor);
       }
     });
   };
 
-  const updateInput = (value: string) => {
+  const updateInput = (value: string, cursor: number) => {
     setInput(value);
+    setCursorPosition(cursor);
     setInputReferences((current) =>
       current.filter((reference) => value.includes(reference.token)),
     );
@@ -506,6 +528,7 @@ export function CommandBar({
     ];
     setMessages(nextMessages);
     setInput("");
+    setCursorPosition(0);
     setInputReferences([]);
     setBusy(true);
     setError(null);
@@ -535,6 +558,7 @@ export function CommandBar({
         return current;
       });
       setInput(text);
+      setCursorPosition(text.length);
       setInputReferences(references);
       setError(
         caught instanceof Error
@@ -592,6 +616,7 @@ export function CommandBar({
     ]);
     setPendingActions([]);
     setInput("");
+    setCursorPosition(0);
     setInputReferences([]);
     setError(null);
   };
@@ -745,10 +770,15 @@ export function CommandBar({
                       <button
                         type="button"
                         onClick={() => {
-                          setInput("Zmień proszę: ");
+                          const next = "Zmień proszę: ";
+                          setInput(next);
+                          setCursorPosition(next.length);
                           requestAnimationFrame(() => {
                             const element = document.getElementById("horolog-assistant-input");
-                            if (element instanceof HTMLTextAreaElement) element.focus();
+                            if (element instanceof HTMLTextAreaElement) {
+                              element.focus();
+                              element.setSelectionRange(next.length, next.length);
+                            }
                           });
                         }}
                         className="h-9 rounded-xl border bg-white px-3 text-[11px] font-semibold text-fg-muted hover:bg-sunk"
@@ -809,10 +839,10 @@ export function CommandBar({
                           }`}
                         >
                           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-sunk text-fg-muted">
-                            {option.reference.kind === "intent" ? (
-                              <AtSign size={13} />
-                            ) : (
+                            {option.reference.kind === "category" ? (
                               <Hash size={13} />
+                            ) : (
+                              <AtSign size={13} />
                             )}
                           </span>
                           <span className="min-w-0 flex-1">
@@ -831,7 +861,17 @@ export function CommandBar({
                 <textarea
                   id="horolog-assistant-input"
                   value={input}
-                  onChange={(event) => updateInput(event.target.value)}
+                  onChange={(event) =>
+                    updateInput(
+                      event.target.value,
+                      event.target.selectionStart ?? event.target.value.length,
+                    )
+                  }
+                  onSelect={(event) =>
+                    setCursorPosition(
+                      event.currentTarget.selectionStart ?? event.currentTarget.value.length,
+                    )
+                  }
                   onKeyDown={(event) => {
                     if (mentionTrigger && mentionOptions.length > 0) {
                       if (event.key === "ArrowDown") {
