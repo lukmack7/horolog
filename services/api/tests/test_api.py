@@ -445,6 +445,52 @@ async def test_daily_reuses_existing_active_card_for_same_intent(
 
 
 @pytest.mark.asyncio
+async def test_daily_view_hides_legacy_duplicate_cards_for_same_intent(
+    client: AsyncClient,
+) -> None:
+    target = (origin().date() + timedelta(days=1)).isoformat()
+    created = (
+        await client.post(
+            f"/api/daily/{target}/items",
+            json={
+                "title": "Legacy Daily duplicate",
+                "quadrant": 2,
+                "minutes": 30,
+                "schedule_enabled": True,
+            },
+        )
+    ).json()
+    intent_id = created["intent_id"]
+
+    gen = cast("AsyncGenerator[AsyncSession, None]", session())
+    db = await anext(gen)
+    try:
+        db.add(
+            DailyPlanItemRow(
+                id="legacy-daily-duplicate-row",
+                plan_date=target,
+                title="Legacy Daily duplicate",
+                quadrant=2,
+                minutes=30,
+                priority=2,
+                intent_id=intent_id,
+                schedule_enabled=True,
+                created_at=datetime.now(ZoneInfo("UTC")) + timedelta(seconds=1),
+            )
+        )
+        await db.commit()
+    finally:
+        await gen.aclose()
+
+    daily = (await client.get(f"/api/daily/{target}")).json()
+    matching = [
+        item for item in daily["items"]
+        if item["intent_id"] == intent_id
+    ]
+    assert len(matching) == 1
+
+
+@pytest.mark.asyncio
 async def test_planner_move_clears_stale_daily_defer_projection(
     client: AsyncClient,
 ) -> None:
