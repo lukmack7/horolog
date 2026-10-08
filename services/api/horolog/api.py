@@ -1153,6 +1153,15 @@ async def get_daily(date: str, db: AsyncSession = Depends(session)) -> dict[str,
     previous_date = (requested - timedelta(days=1)).strftime("%Y-%m-%d")
     previous_review = await db.get(DailyReviewRow, previous_date)
 
+    rendered = await get_plan(db)
+    scheduled_dates: dict[str, set[str]] = {}
+    for block in rendered.blocks:
+        if block.completed or block.kind != IntentKind.TASK:
+            continue
+        scheduled_dates.setdefault(block.intent_id, set()).add(
+            block.start.astimezone(settings().zone).date().isoformat()
+        )
+
     rows = (
         await db.execute(
             select(DailyPlanItemRow).where(
@@ -1197,6 +1206,32 @@ async def get_daily(date: str, db: AsyncSession = Depends(session)) -> dict[str,
             or (
                 (decision := decision_map.get(row.id))
                 and decision.defer_until == date
+                and (
+                    row.intent_id is None
+                    or not row.schedule_enabled
+                    or date in scheduled_dates.get(row.intent_id, set())
+                )
+            )
+        ]
+    else:
+        # An unfinished Daily card is not genuine carry-over when its linked
+        # Planner task already has a concrete block on a later day. Showing it
+        # here as overdue creates a second, virtual copy of the same work.
+        rows = [
+            row
+            for row in rows
+            if not (
+                row.plan_date < date
+                and row.intent_id is not None
+                and row.schedule_enabled
+                and (
+                    (decision := decision_map.get(row.id)) is None
+                    or decision.defer_until != date
+                )
+                and any(
+                    scheduled_date > date
+                    for scheduled_date in scheduled_dates.get(row.intent_id, set())
+                )
             )
         ]
 
@@ -1233,7 +1268,6 @@ async def get_daily(date: str, db: AsyncSession = Depends(session)) -> dict[str,
         if row.completed_at is None or row.plan_date == date
     ]
 
-    rendered = await get_plan(db)
     linked_ids = {row.intent_id for row in rows if row.intent_id}
     suggestions: list[dict[str, Any]] = []
     seen: set[str] = set()
