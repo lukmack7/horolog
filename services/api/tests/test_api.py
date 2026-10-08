@@ -151,6 +151,55 @@ async def test_assistant_execute_rolls_back_whole_batch_on_conflict(
 
 
 @pytest.mark.asyncio
+async def test_assistant_schedules_existing_todo_without_duplicate(
+    client: AsyncClient,
+) -> None:
+    tomorrow = (origin() + timedelta(days=1)).date().isoformat()
+
+    created = await client.post(
+        "/api/todos",
+        json={
+            "title": "TEST existing todo mention",
+            "minutes": 30,
+            "category": "cmr",
+        },
+    )
+    assert created.status_code == 201
+    todo = created.json()
+
+    response = await client.post(
+        "/api/assistant/execute",
+        json={
+            "actions": [
+                {
+                    "action": "schedule_todo",
+                    "todo_id": todo["id"],
+                    "date": tomorrow,
+                    "quadrant": 2,
+                    "start_min": 10 * 60,
+                    "start_mode": "fixed",
+                }
+            ]
+        },
+    )
+    assert response.status_code == 200, response.text
+
+    todos = (await client.get("/api/todos")).json()
+    assert not any(item["id"] == todo["id"] for item in todos)
+
+    intents = (await client.get("/api/intents")).json()
+    matching = [item for item in intents if item["title"] == "TEST existing todo mention"]
+    assert len(matching) == 1
+
+    daily = (await client.get(f"/api/daily/{tomorrow}")).json()
+    matching_daily = [
+        item for item in daily["items"] if item["title"] == "TEST existing todo mention"
+    ]
+    assert len(matching_daily) == 1
+    assert matching_daily[0]["intent_id"] == matching[0]["id"]
+
+
+@pytest.mark.asyncio
 async def test_time_tracking_start_pause_resume_stop(client: AsyncClient) -> None:
     tomorrow = (origin() + timedelta(days=1)).replace(hour=10, minute=0, second=0, microsecond=0)
     created = await client.post(
