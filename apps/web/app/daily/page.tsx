@@ -320,6 +320,7 @@ function PlanView({
   const { t } = useLanguage();
   const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
   const [draggingSuggestionId, setDraggingSuggestionId] = useState<string | null>(null);
+  const [carryPending, setCarryPending] = useState<string | null>(null);
 
   const attachSuggestion = async (
     suggestionId: string,
@@ -347,6 +348,25 @@ function PlanView({
     await reload();
   };
 
+  const resolveCarry = async (
+    itemId: string,
+    action: "adopt" | "original" | "todo",
+  ) => {
+    setCarryPending(`${itemId}:${action}`);
+    try {
+      if (action === "adopt") {
+        await api.deferDailyItem(itemId, dateKey);
+      } else if (action === "original") {
+        await api.keepDailyItem(itemId, dateKey);
+      } else {
+        await api.moveDailyItemToTodo(itemId);
+      }
+      await reload();
+    } finally {
+      setCarryPending(null);
+    }
+  };
+
   return (
     <div className="space-y-5">
       {data.yesterday.improve && (
@@ -365,16 +385,81 @@ function PlanView({
         </section>
       )}
 
-      {data.summary.carry_over > 0 && (
+      {data.carry_suggestions.length > 0 && (
         <section className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
           <div className="flex items-start gap-3">
             <RotateCcw size={17} className="mt-0.5 shrink-0 text-amber-700" />
-            <div>
-              <h2 className="text-[13px] font-bold text-amber-900">{t("Zaległe z wcześniejszych dni")}</h2>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-[13px] font-bold text-amber-900">
+                {t("Do rozważenia z wcześniejszych dni")}
+              </h2>
               <p className="mt-0.5 text-[11.5px] leading-relaxed text-amber-800">
-                To są niewykonane pozycje wymagające decyzji. Nie zostały automatycznie przeniesione na ten dzień.
+                Te zadania nie są częścią macierzy {new Date(`${dateKey}T12:00:00`).toLocaleDateString("pl-PL")}.
+                Pojawią się w niej dopiero po świadomej decyzji.
               </p>
             </div>
+          </div>
+
+          <div className="mt-3 space-y-2">
+            {data.carry_suggestions.map((item) => (
+              <div
+                key={item.id}
+                className="rounded-xl border border-amber-200/80 bg-white/90 p-3"
+              >
+                <div className="flex flex-wrap items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[12.5px] font-semibold text-fg">
+                      {item.title}
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-1.5 text-[9.5px] font-medium text-fg-muted">
+                      <span className="rounded-full bg-sunk px-2 py-0.5">
+                        {formatDuration(item.minutes)}
+                      </span>
+                      {item.category && (
+                        <span className="rounded-full bg-sunk px-2 py-0.5">
+                          {WORK_CATEGORY_LABEL[item.category]}
+                        </span>
+                      )}
+                      <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">
+                        oryginalnie {new Date(`${item.plan_date}T12:00:00`).toLocaleDateString("pl-PL")}
+                      </span>
+                      {item.carry_days > 0 && (
+                        <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">
+                          zaległe {item.carry_days}d
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      disabled={carryPending !== null}
+                      onClick={() => void resolveCarry(item.id, "adopt")}
+                      className="rounded-lg bg-amber-800 px-2.5 py-1.5 text-[10px] font-semibold text-white disabled:opacity-50"
+                    >
+                      {carryPending === `${item.id}:adopt` ? "Dodaję…" : "Dodaj do tego dnia"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={carryPending !== null}
+                      onClick={() => void resolveCarry(item.id, "original")}
+                      className="rounded-lg bg-white px-2.5 py-1.5 text-[10px] font-semibold text-amber-900 shadow-sm disabled:opacity-50"
+                    >
+                      Zostaw na oryginalnym dniu
+                    </button>
+                    <button
+                      type="button"
+                      disabled={carryPending !== null}
+                      onClick={() => void resolveCarry(item.id, "todo")}
+                      className="rounded-lg bg-white px-2.5 py-1.5 text-[10px] font-semibold text-fg-muted shadow-sm disabled:opacity-50"
+                    >
+                      Do zrobienia
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </section>
       )}
