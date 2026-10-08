@@ -21,9 +21,10 @@ from horolog.settings import settings
 class AssistantReference(BaseModel):
     """Explicit UI-selected reference carried alongside natural-language text."""
 
-    kind: Literal["intent", "category"]
+    kind: Literal["intent", "todo", "category"]
     token: str = Field(min_length=2, max_length=400)
     intent_id: str | None = None
+    todo_id: str | None = None
     category: WorkCategory | None = None
 
     @model_validator(mode="after")
@@ -31,13 +32,18 @@ class AssistantReference(BaseModel):
         if self.kind == "intent":
             if not self.intent_id:
                 raise ValueError("intent reference requires intent_id")
-            if self.category is not None:
-                raise ValueError("intent reference cannot carry category")
+            if self.todo_id is not None or self.category is not None:
+                raise ValueError("intent reference can carry only intent_id")
+        elif self.kind == "todo":
+            if not self.todo_id:
+                raise ValueError("todo reference requires todo_id")
+            if self.intent_id is not None or self.category is not None:
+                raise ValueError("todo reference can carry only todo_id")
         else:
             if self.category is None:
                 raise ValueError("category reference requires category")
-            if self.intent_id is not None:
-                raise ValueError("category reference cannot carry intent_id")
+            if self.intent_id is not None or self.todo_id is not None:
+                raise ValueError("category reference can carry only category")
         return self
 
 
@@ -57,12 +63,14 @@ class AssistantAction(BaseModel):
         "reschedule_break",
         "reschedule_meeting",
         "complete_task",
+        "schedule_todo",
         "update_daily_plan",
         "find_time",
     ]
     title: str | None = None
     intent_id: str | None = None
     second_intent_id: str | None = None
+    todo_id: str | None = None
     date: str | None = None
     minutes: int | None = None
     quadrant: int | None = None
@@ -100,6 +108,11 @@ class AssistantAction(BaseModel):
                 datetime.strptime(self.date, "%Y-%m-%d")
             except ValueError as exc:
                 raise ValueError("date must be YYYY-MM-DD") from exc
+        if self.action == "schedule_todo":
+            if self.todo_id is None or self.date is None or self.quadrant is None:
+                raise ValueError("schedule_todo requires todo_id, date and quadrant")
+            if self.start_min is not None and self.quadrant > 2:
+                raise ValueError("a fixed/preferred Planner time requires quadrant 1 or 2")
         if self.action == "find_time":
             if self.date is None or self.minutes is None:
                 raise ValueError("find_time requires date and minutes")
@@ -197,12 +210,15 @@ Core rules:
   default and mention that assumption.
 - The UI may provide EXPLICIT REFERENCES selected with @ or #. They are listed
   in FACTUAL CONTEXT under explicit_references and are authoritative:
-    * @ references point to one exact existing intent_id. When the latest user
-      message names that token, use that exact intent_id instead of fuzzy title
-      matching. Never substitute another similarly named item.
-    * # references point to an explicit work category. Apply that category to
-      newly created tasks/meetings when the user's instruction concerns that
-      item. A category reference never changes scheduling priority.
+    * @ references with kind="intent" point to one exact existing Planner
+      intent_id. Use that exact id instead of fuzzy title matching.
+    * @ references with kind="todo" point to one exact existing item in
+      "Do zrobienia". If the user asks to plan/place it, use schedule_todo with
+      that exact todo_id. NEVER replace it with create_task, because that would
+      duplicate the existing inbox item.
+    * # references point to an explicit work category. Apply that category when
+      the user's instruction concerns the referenced/new item. Category never
+      changes scheduling priority.
   If an @ reference is stale or missing from FACTUAL CONTEXT, ask rather than
   guessing another item.
 - Categories describe the area of life/work and NEVER affect scheduling priority:
@@ -246,6 +262,15 @@ Core rules:
   resizing an existing meeting; preserve the meeting itself rather than
   creating a second meeting.
 - complete_task requires an intent_id from FACTUAL CONTEXT.
+- schedule_todo moves one existing "Do zrobienia" item into Daily/Planner
+  without creating a duplicate inbox task. It requires todo_id copied from an
+  explicit todo reference or FACTUAL CONTEXT, plus date and quadrant.
+  * quadrant 1/2 makes it actionable and therefore creates/links a Planner task;
+    quadrant 3/4 keeps it note-only in Daily.
+  * If the user gives an exact/preferred clock time for a Q1/Q2 item, also set
+    start_min and start_mode just like create_task.
+  * Do not copy title/minutes/category/deadline into a new task; the backend
+    uses the existing todo item's authoritative metadata.
 - find_time is informational and NEVER mutates the plan. Use it when the user
   asks "znajdź mi miejsce", "kiedy mam wolne", "gdzie zmieszczę X minut" or
   equivalent. It requires date and minutes. Optional:
