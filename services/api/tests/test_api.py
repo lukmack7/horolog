@@ -264,6 +264,148 @@ async def test_assistant_schedules_existing_todo_without_duplicate(
     assert matching_daily[0]["intent_id"] == matching[0]["id"]
 
 
+def test_assistant_plural_followup_resolves_recent_todo_items() -> None:
+    todos = [
+        {
+            "id": "todo-a",
+            "title": "Test Raport A",
+            "minutes": 60,
+            "category": "macheta_data",
+            "deadline_date": None,
+        },
+        {
+            "id": "todo-b",
+            "title": "Test Raport B",
+            "minutes": 60,
+            "category": "cmr",
+            "deadline_date": None,
+        },
+    ]
+    messages = [
+        AssistantMessage(
+            role="user",
+            content="Jakie mam zadania do zrobienia?",
+        ),
+        AssistantMessage(
+            role="assistant",
+            content="Masz dwa zadania: Test Raport A oraz Test Raport B.",
+        ),
+        AssistantMessage(
+            role="user",
+            content="OK, zaplanuj je jutro.",
+        ),
+    ]
+
+    referents = _todo_referents_from_conversation(messages, todos)
+    assert {item["id"] for item in referents} == {"todo-a", "todo-b"}
+
+    wrong = AssistantDecision(
+        reply="Zaplanuję oba.",
+        actions=[
+            AssistantAction(
+                action="update_daily_plan",
+                date="2026-10-10",
+                first_step="Test Raport A",
+            )
+        ],
+    )
+    problem = _assistant_semantic_problem(wrong, messages, referents)
+    assert problem is not None
+    assert "update_daily_plan" in problem
+
+
+@pytest.mark.asyncio
+async def test_daily_reuses_existing_active_card_for_same_intent(
+    client: AsyncClient,
+) -> None:
+    tomorrow = (origin().date() + timedelta(days=1)).isoformat()
+    created = (
+        await client.post(
+            f"/api/daily/{tomorrow}/items",
+            json={
+                "title": "Single Daily card",
+                "quadrant": 2,
+                "minutes": 30,
+                "schedule_enabled": True,
+            },
+        )
+    ).json()
+    intent_id = created["intent_id"]
+
+    second = await client.post(
+        f"/api/daily/{tomorrow}/items",
+        json={
+            "title": "Single Daily card",
+            "quadrant": 1,
+            "minutes": 45,
+            "intent_id": intent_id,
+            "schedule_enabled": True,
+        },
+    )
+    assert second.status_code == 201
+    assert second.json()["id"] == created["id"]
+    assert second.json()["quadrant"] == 1
+
+    daily = (await client.get(f"/api/daily/{tomorrow}")).json()
+    matching = [item for item in daily["items"] if item["intent_id"] == intent_id]
+    assert len(matching) == 1
+
+
+@pytest.mark.asyncio
+async def test_planner_move_clears_stale_daily_defer_projection(
+    client: AsyncClient,
+) -> None:
+    base = origin().date()
+    original = (base + timedelta(days=1)).isoformat()
+    deferred_to = (base + timedelta(days=2)).isoformat()
+    moved_to = (base + timedelta(days=3)).isoformat()
+
+    created = (
+        await client.post(
+            f"/api/daily/{original}/items",
+            json={
+                "title": "No virtual duplicate",
+                "quadrant": 2,
+                "minutes": 30,
+                "schedule_enabled": True,
+            },
+        )
+    ).json()
+
+    deferred = await client.post(
+        f"/api/daily/items/{created['id']}/defer",
+        json={"until": deferred_to},
+    )
+    assert deferred.status_code == 200
+
+    start = datetime.fromisoformat(f"{moved_to}T10:00:00").replace(
+        tzinfo=origin().tzinfo
+    )
+    moved = await client.post(
+        f"/api/intents/{created['intent_id']}/move",
+        json={
+            "start": start.isoformat(),
+            "end": (start + timedelta(minutes=30)).isoformat(),
+            "exact": True,
+        },
+    )
+    assert moved.status_code == 200, moved.text
+
+    old_projection = (await client.get(f"/api/daily/{deferred_to}")).json()
+    assert not any(
+        item["intent_id"] == created["intent_id"]
+        for item in old_projection["items"]
+    )
+
+    actual_day = (await client.get(f"/api/daily/{moved_to}")).json()
+    matching = [
+        item for item in actual_day["items"]
+        if item["intent_id"] == created["intent_id"]
+    ]
+    assert len(matching) == 1
+    assert matching[0]["carried"] is False
+
+
 @pytest.mark.asyncio
 async def test_time_tracking_start_pause_resume_stop(client: AsyncClient) -> None:
     tomorrow = (origin() + timedelta(days=1)).replace(hour=10, minute=0, second=0, microsecond=0)
