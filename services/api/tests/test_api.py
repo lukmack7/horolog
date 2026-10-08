@@ -1616,6 +1616,52 @@ async def test_daily_item_is_not_projected_into_tomorrow_without_decision(
 
 
 @pytest.mark.asyncio
+async def test_overdue_daily_suggestion_can_be_adopted_into_today(
+    client: AsyncClient,
+) -> None:
+    today = origin().date()
+    old = (today - timedelta(days=1)).isoformat()
+    current = today.isoformat()
+
+    created = (
+        await client.post(
+            f"/api/daily/{old}/items",
+            json={
+                "title": "Adopt me deliberately",
+                "quadrant": 3,
+                "minutes": 30,
+                "schedule_enabled": False,
+            },
+        )
+    ).json()
+
+    before = (await client.get(f"/api/daily/{current}")).json()
+    assert not any(row["id"] == created["id"] for row in before["items"])
+    assert any(
+        row["id"] == created["id"]
+        for row in before["carry_suggestions"]
+    )
+
+    adopted = await client.post(
+        f"/api/daily/items/{created['id']}/defer",
+        json={"until": current},
+    )
+    assert adopted.status_code == 200
+
+    after = (await client.get(f"/api/daily/{current}")).json()
+    matching = [
+        row for row in after["items"]
+        if row["id"] == created["id"]
+    ]
+    assert len(matching) == 1
+    assert matching[0]["deferred_here"] is True
+    assert not any(
+        row["id"] == created["id"]
+        for row in after["carry_suggestions"]
+    )
+
+
+@pytest.mark.asyncio
 async def test_daily_completion_completes_linked_task(client: AsyncClient) -> None:
     day = origin().date().isoformat()
     created = (
