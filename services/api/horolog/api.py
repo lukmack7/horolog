@@ -856,6 +856,42 @@ async def assign_todo_to_daily(
             detail="Maksymalny deadline tego zadania już minął. Zmień deadline przed dodaniem do planu.",
         )
 
+    reuse_intent_id: str | None = None
+    if body.quadrant <= 2:
+        target_key = target.date().isoformat()
+        rendered = await get_plan(db)
+        scheduled_ids = {
+            block.intent_id
+            for block in rendered.blocks
+            if (
+                not block.completed
+                and block.kind == IntentKind.TASK
+                and block.start.astimezone(settings().zone).date().isoformat()
+                == target_key
+            )
+        }
+        candidates: list[Intent] = []
+        for intent in await load_intents(db):
+            if (
+                intent.id in scheduled_ids
+                and intent.kind == IntentKind.TASK
+                and intent.period_days is None
+                and intent.completed_at is None
+                and _normalise_task_title(intent.title)
+                == _normalise_task_title(row.title)
+                and intent.minutes_per_period == row.minutes
+                and (
+                    intent.category.value if intent.category is not None else None
+                )
+                == row.category
+            ):
+                candidates.append(intent)
+        if len(candidates) == 1:
+            # Repair a legacy state produced by older assistant versions:
+            # the todo remained unassigned although an identical task had
+            # already been created in Planner.
+            reuse_intent_id = candidates[0].id
+
     item = await create_daily_item(
         body.date,
         DailyItemIn(
@@ -864,6 +900,7 @@ async def assign_todo_to_daily(
             minutes=row.minutes,
             category=WorkCategory(row.category) if row.category else None,
             deadline_date=row.deadline_date,
+            intent_id=reuse_intent_id,
             schedule_enabled=body.quadrant <= 2,
         ),
         db,
