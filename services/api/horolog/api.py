@@ -2868,8 +2868,17 @@ async def _execute_assistant_action(
                 detail="Ten wpis nie jest już dostępny w „Do zrobienia”.",
             )
 
+        todo_changed = False
         if action.category is not None:
             todo.category = action.category.value
+            todo_changed = True
+        if action.minutes is not None:
+            todo.minutes = max(
+                SLOT_MINUTES,
+                minutes_to_slots(action.minutes) * SLOT_MINUTES,
+            )
+            todo_changed = True
+        if todo_changed:
             todo.updated_at = datetime.now(UTC)
             await db.commit()
 
