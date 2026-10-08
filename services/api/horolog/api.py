@@ -2702,6 +2702,207 @@ def _assistant_semantic_problem(
     return None
 
 
+def _time_range_after_token(
+    text: str,
+    token_end: int,
+    limit: int,
+) -> tuple[int, int] | None:
+    """Read one explicit HH:MM-HH:MM range following a selected @ token."""
+
+    fragment = text[token_end:limit]
+    match = re.search(
+        r"(?:\bod\s*)?(\d{1,2})[:.](\d{2})\s*(?:do|[-–—])\s*(\d{1,2})[:.](\d{2})",
+        fragment,
+        flags=re.IGNORECASE,
+    )
+    if match is None:
+        return None
+
+    sh, sm, eh, em = map(int, match.groups())
+    if not (0 <= sh <= 23 and 0 <= eh <= 23 and 0 <= sm <= 59 and 0 <= em <= 59):
+        return None
+    start = sh * 60 + sm
+    end = eh * 60 + em
+    if end <= start:
+        return None
+    return start, end
+
+
+def _break_minutes_between(text: str, start: int, end: int) -> int | None:
+    fragment = text[start:end]
+    patterns = (
+        r"przerw\w*\s*(?:na\s*)?(\d{1,3})\s*(?:min\.?|minut\w*)",
+        r"(\d{1,3})\s*(?:min\.?|minut\w*)\s*przerw\w*",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, fragment, flags=re.IGNORECASE)
+        if match is None:
+            continue
+        minutes = int(match.group(1))
+        if 0 < minutes <= 240:
+            return max(SLOT_MINUTES, minutes_to_slots(minutes) * SLOT_MINUTES)
+    return None
+
+
+def _apply_explicit_todo_timeline(
+    decision: Any,
+    messages: list[AssistantMessage],
+    todo_items: list[dict[str, Any]],
+) -> Any:
+    """Make explicit @todo + clock ranges deterministic.
+
+    The local model remains responsible for conversational intent, but a literal
+    user timeline such as "@A 10:00-11:00, przerwa 30 min, @B 11:30-12:30"
+    is stronger evidence than generated structured fields. Build those actions
+    directly from the selected todo ids so existing inbox items cannot be
+    duplicated or silently lose an explicitly requested break.
+    """
+
+    latest = _latest_user_message(messages)
+    if latest is None:
+        return decision
+
+    explicit_date = _explicit_date_from_latest_user_message(messages)
+    if explicit_date is None:
+        return decision
+
+    todo_by_id = {item["id"]: item for item in todo_items}
+    refs: list[tuple[int, AssistantReference, dict[str, Any]]] = []
+    for reference in latest.references:
+        if reference.kind != "todo" or not reference.todo_id:
+            continue
+        item = todo_by_id.get(reference.todo_id)
+        if item is None:
+            continue
+        position = latest.content.find(reference.token)
+        if position < 0:
+            continue
+        refs.append((position, reference, item))
+
+    refs.sort(key=lambda item: item[0])
+    if not refs:
+        return decision
+
+    existing_schedule = {
+        action.todo_id: action
+        for action in decision.actions
+        if action.action == "schedule_todo" and action.todo_id
+    }
+
+    deterministic: list[AssistantAction] = []
+    matched_ids: set[str] = set()
+    ranges: list[tuple[int, int, int, int]] = []
+    for index, (position, reference, item) in enumerate(refs):
+        token_end = position + len(reference.token)
+        next_position = refs[index + 1][0] if index + 1 < len(refs) else len(latest.content)
+        clock_range = _time_range_after_token(latest.content, token_end, next_position)
+        if clock_range is None:
+            continue
+
+        start_min, end_min = clock_range
+        minutes = end_min - start_min
+        previous = existing_schedule.get(reference.todo_id)
+        quadrant = previous.quadrant if previous and previous.quadrant else 2
+        category = previous.category if previous else None
+
+        deterministic.append(
+            AssistantAction(
+                action="schedule_todo",
+                title=item["title"],
+                todo_id=reference.todo_id,
+                date=explicit_date,
+                minutes=minutes,
+                quadrant=quadrant,
+                start_min=start_min,
+                start_mode="fixed",
+                category=category,
+            )
+        )
+        matched_ids.add(reference.todo_id)
+        ranges.append((index, token_end, next_position, end_min))
+
+    if not deterministic:
+        return decision
+
+    # A literal break between two selected todo references is also
+    # deterministic. Its start is the end of the preceding explicit range.
+    injected_breaks: list[AssistantAction] = []
+    for range_index, token_end, next_position, end_min in ranges:
+        if range_index + 1 >= len(refs):
+            continue
+        break_minutes = _break_minutes_between(latest.content, token_end, next_position)
+        if break_minutes is None:
+            continue
+        next_ref_position = refs[range_index + 1][0]
+        next_token_end = next_ref_position + len(refs[range_index + 1][1].token)
+        next_limit = (
+            refs[range_index + 2][0]
+            if range_index + 2 < len(refs)
+            else len(latest.content)
+        )
+        next_range = _time_range_after_token(latest.content, next_token_end, next_limit)
+        if next_range is not None and end_min + break_minutes > next_range[0]:
+            # Contradictory literal times: leave the proposal to semantic
+            # validation instead of inventing a different break.
+            continue
+        injected_breaks.append(
+            AssistantAction(
+                action="create_break",
+                title="Przerwa",
+                date=explicit_date,
+                minutes=break_minutes,
+                start_min=end_min,
+                start_mode="fixed",
+            )
+        )
+
+    referenced_titles = {
+        _normalise_task_title(item["title"])
+        for _, reference, item in refs
+        if reference.todo_id in matched_ids
+    }
+    preserved: list[AssistantAction] = []
+    for action in decision.actions:
+        if action.action == "schedule_todo" and action.todo_id in matched_ids:
+            continue
+        if (
+            action.action == "create_task"
+            and action.title
+            and _normalise_task_title(action.title) in referenced_titles
+        ):
+            continue
+        # Explicit break wording is represented by our deterministic break.
+        if injected_breaks and action.action == "create_break":
+            continue
+        preserved.append(action)
+
+    # Keep the user's order: todo A, break, todo B. Reconstruct it from the
+    # reference order rather than grouping actions by type.
+    ordered: list[AssistantAction] = []
+    by_todo = {
+        action.todo_id: action
+        for action in deterministic
+        if action.todo_id is not None
+    }
+    break_after: dict[int, AssistantAction] = {}
+    for br in injected_breaks:
+        for index, (_, _, _) in enumerate(refs[:-1]):
+            prior = by_todo.get(refs[index][1].todo_id)
+            if prior and prior.start_min is not None and prior.minutes is not None:
+                if prior.start_min + prior.minutes == br.start_min:
+                    break_after[index] = br
+                    break
+
+    for index, (_, reference, _) in enumerate(refs):
+        action = by_todo.get(reference.todo_id)
+        if action is not None:
+            ordered.append(action)
+        if index in break_after:
+            ordered.append(break_after[index])
+
+    return decision.model_copy(update={"actions": [*ordered, *preserved]})
+
+
 async def _coerce_exact_todo_creates(
     decision: Any,
     db: AsyncSession,
@@ -2755,6 +2956,11 @@ async def assistant_chat(
         )
         decision = _apply_explicit_user_date(decision, body.messages)
         decision = await _coerce_exact_todo_creates(decision, db)
+        decision = _apply_explicit_todo_timeline(
+            decision,
+            body.messages,
+            context.get("todo_items", []),
+        )
 
         todo_referents = _todo_referents_from_conversation(
             body.messages,
@@ -2789,6 +2995,11 @@ async def assistant_chat(
             )
             decision = _apply_explicit_user_date(decision, body.messages)
             decision = await _coerce_exact_todo_creates(decision, db)
+            decision = _apply_explicit_todo_timeline(
+                decision,
+                body.messages,
+                context.get("todo_items", []),
+            )
 
             remaining_problem = _assistant_semantic_problem(
                 decision,
