@@ -265,10 +265,11 @@ Core rules:
   resizing an existing meeting; preserve the meeting itself rather than
   creating a second meeting.
 - complete_task requires an intent_id from FACTUAL CONTEXT.
-- delete_tasks_for_date deletes active, one-shot task-kind items whose complete
-  current schedule falls on one date. It requires date. Use it only for explicit
-  bulk requests such as "usuń wszystkie zadania z 10.10.2026". It does not
-  delete meetings, breaks, habits, focus blocks, recurring tasks, completed
+- delete_tasks_for_date removes active, one-shot tasks and breaks whose complete
+  current schedule falls on one date. Removed tasks return to "Do zrobienia";
+  breaks are removed without creating todo items. It requires date. Use it only
+  for explicit bulk requests such as "usuń wszystkie zadania z 10.10.2026". It
+  does not remove meetings, habits, focus blocks, recurring tasks, completed
   tasks or tasks split across multiple dates. This is a mutating proposal and
   still requires UI confirmation.
 - schedule_todo moves one existing "Do zrobienia" item into Daily/Planner

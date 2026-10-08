@@ -243,6 +243,19 @@ class TodoInboxRow(Base):
     )
 
 
+class TodoAssignmentRow(Base):
+    """Current link from an assigned todo to its Daily/Planner representation."""
+
+    __tablename__ = "todo_assignments"
+
+    daily_item_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    todo_id: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    intent_id: Mapped[str | None] = mapped_column(String(64), default=None, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
 class DailyItemMetaRow(Base):
     """Optional metadata that should not force a migration of daily_plan_items."""
 

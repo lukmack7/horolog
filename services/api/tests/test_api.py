@@ -51,6 +51,7 @@ from horolog.db import (
     PlanRow,
     SlotOriginRow,
     TimeEntryRow,
+    TodoAssignmentRow,
     TodoInboxRow,
     UserSettingsRow,
     init_db,
@@ -81,6 +82,7 @@ async def client() -> AsyncIterator[AsyncClient]:
         await db.execute(delete(BusyRow))
         await db.execute(delete(ChangeSetRow))
         await db.execute(delete(TimeEntryRow))
+        await db.execute(delete(TodoAssignmentRow))
         await db.execute(delete(DailyItemDecisionRow))
         await db.execute(delete(DailyItemMetaRow))
         await db.execute(delete(DailyPlanItemRow))
@@ -1947,7 +1949,7 @@ async def test_assistant_executes_confirmed_task_only_after_execute(client: Asyn
 
 
 @pytest.mark.asyncio
-async def test_assistant_deletes_only_tasks_scheduled_for_requested_date(
+async def test_assistant_deletes_tasks_and_breaks_and_returns_tasks_to_todo(
     client: AsyncClient,
 ) -> None:
     target = origin().date() + timedelta(days=1)
@@ -1987,8 +1989,20 @@ async def test_assistant_deletes_only_tasks_scheduled_for_requested_date(
         return created.json()["id"]
 
     target_day = origin() + timedelta(days=1)
-    first_id = await create_fixed("Delete first", "task", target_day, 9 * 60)
+    source_todo = await client.post(
+        "/api/todos",
+        json={"title": "Delete first", "minutes": 30},
+    )
+    assert source_todo.status_code == 201, source_todo.text
+    source_todo_id = source_todo.json()["id"]
+    assigned = await client.post(
+        f"/api/todos/{source_todo_id}/assign",
+        json={"date": target.isoformat(), "quadrant": 1},
+    )
+    assert assigned.status_code == 201, assigned.text
+    first_id = assigned.json()["intent_id"]
     second_id = await create_fixed("Delete second", "task", target_day, 10 * 60)
+    break_id = await create_fixed("Delete break", "buffer", target_day, 13 * 60)
     meeting_id = await create_fixed("Keep meeting", "meeting", target_day, 11 * 60)
     completed_id = await create_fixed("Keep completed task", "task", target_day, 12 * 60)
     completed = await client.post(f"/api/intents/{completed_id}/complete")
@@ -2017,7 +2031,15 @@ async def test_assistant_deletes_only_tasks_scheduled_for_requested_date(
     )
     assert failed_batch.status_code == 404, failed_batch.text
     ids_after_failed_batch = {item["id"] for item in (await client.get("/api/intents")).json()}
-    assert {first_id, second_id, meeting_id, completed_id, other_id} <= ids_after_failed_batch
+    assert {
+        first_id,
+        second_id,
+        break_id,
+        meeting_id,
+        completed_id,
+        other_id,
+    } <= ids_after_failed_batch
+    assert (await client.get("/api/todos")).json() == []
 
     response = await client.post(
         "/api/assistant/execute",
@@ -2033,12 +2055,24 @@ async def test_assistant_deletes_only_tasks_scheduled_for_requested_date(
 
     assert response.status_code == 200, response.text
     result = response.json()["results"][0]
-    assert result["deleted_count"] == 2
-    assert {item["intent_id"] for item in result["deleted"]} == {first_id, second_id}
+    assert result["deleted_count"] == 3
+    assert result["deleted_task_count"] == 2
+    assert result["deleted_break_count"] == 1
+    assert {item["intent_id"] for item in result["deleted"]} == {
+        first_id,
+        second_id,
+        break_id,
+    }
+    returned_todos = (await client.get("/api/todos")).json()
+    assert {item["title"] for item in returned_todos} == {"Delete first", "Delete second"}
+    assert next(item for item in returned_todos if item["title"] == "Delete first")["id"] == (
+        source_todo_id
+    )
 
     remaining_ids = {item["id"] for item in (await client.get("/api/intents")).json()}
     assert first_id not in remaining_ids
     assert second_id not in remaining_ids
+    assert break_id not in remaining_ids
     assert meeting_id in remaining_ids
     assert completed_id in remaining_ids
     assert other_id in remaining_ids
@@ -2046,7 +2080,8 @@ async def test_assistant_deletes_only_tasks_scheduled_for_requested_date(
     undo = await client.post(f"/api/history/{response.json()['change_set_id']}/undo")
     assert undo.status_code == 200, undo.text
     restored_ids = {item["id"] for item in (await client.get("/api/intents")).json()}
-    assert {first_id, second_id, meeting_id, completed_id, other_id} <= restored_ids
+    assert {first_id, second_id, break_id, meeting_id, completed_id, other_id} <= restored_ids
+    assert (await client.get("/api/todos")).json() == []
 
 
 @pytest.mark.asyncio

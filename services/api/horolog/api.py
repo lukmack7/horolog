@@ -52,6 +52,7 @@ from horolog.db import (
     NotificationSettingsRow,
     SyncedBlockRow,
     TimeEntryRow,
+    TodoAssignmentRow,
     TodoInboxRow,
     UserSettingsRow,
     init_db,
@@ -736,6 +737,66 @@ def _todo_dict(row: TodoInboxRow) -> dict[str, Any]:
     }
 
 
+async def _return_task_to_todo(db: AsyncSession, intent: Intent) -> TodoInboxRow:
+    assignment = (
+        await db.execute(
+            select(TodoAssignmentRow)
+            .where(TodoAssignmentRow.intent_id == intent.id)
+            .order_by(TodoAssignmentRow.created_at)
+        )
+    ).scalars().first()
+    todo = await db.get(TodoInboxRow, assignment.todo_id) if assignment is not None else None
+
+    if todo is None:
+        category = intent.category.value if intent.category is not None else None
+        linked_todo_ids = set(
+            (
+                await db.execute(select(TodoAssignmentRow.todo_id))
+            ).scalars().all()
+        )
+        candidates = (
+            await db.execute(
+                select(TodoInboxRow).where(TodoInboxRow.assigned_at.is_not(None))
+            )
+        ).scalars().all()
+        exact = [
+            row
+            for row in candidates
+            if (
+                row.id not in linked_todo_ids
+                and _normalise_task_title(row.title) == _normalise_task_title(intent.title)
+                and row.minutes == intent.minutes_per_period
+                and row.category == category
+                and row.deadline_date == intent.deadline_date
+            )
+        ]
+        if len(exact) == 1:
+            todo = exact[0]
+
+    now = datetime.now(UTC)
+    if todo is None:
+        todo = TodoInboxRow(
+            id=uuid.uuid4().hex[:16],
+            title=intent.title,
+            minutes=intent.minutes_per_period,
+            category=intent.category.value if intent.category is not None else None,
+            deadline_date=intent.deadline_date,
+        )
+        db.add(todo)
+    else:
+        todo.title = intent.title
+        todo.minutes = intent.minutes_per_period
+        todo.category = intent.category.value if intent.category is not None else None
+        todo.deadline_date = intent.deadline_date
+        todo.assigned_at = None
+        todo.updated_at = now
+
+    await db.execute(
+        delete(TodoAssignmentRow).where(TodoAssignmentRow.intent_id == intent.id)
+    )
+    return todo
+
+
 @app.get("/api/todos")
 async def list_todos(db: AsyncSession = Depends(session)) -> list[dict[str, Any]]:
     rows = (
@@ -906,6 +967,19 @@ async def assign_todo_to_daily(
             schedule_enabled=body.quadrant <= 2,
         ),
         db,
+    )
+    await db.execute(
+        delete(TodoAssignmentRow).where(TodoAssignmentRow.todo_id == todo_id)
+    )
+    await db.execute(
+        delete(TodoAssignmentRow).where(TodoAssignmentRow.daily_item_id == item["id"])
+    )
+    db.add(
+        TodoAssignmentRow(
+            daily_item_id=item["id"],
+            todo_id=todo_id,
+            intent_id=item.get("intent_id"),
+        )
     )
     row.assigned_at = datetime.now(UTC)
     row.updated_at = datetime.now(UTC)
@@ -2109,6 +2183,11 @@ async def _planning_snapshot(db: AsyncSession) -> dict[str, Any]:
     todos = (
         await db.execute(select(TodoInboxRow).order_by(TodoInboxRow.id))
     ).scalars().all()
+    todo_assignments = (
+        await db.execute(
+            select(TodoAssignmentRow).order_by(TodoAssignmentRow.daily_item_id)
+        )
+    ).scalars().all()
 
     return {
         "intents": [
@@ -2189,6 +2268,15 @@ async def _planning_snapshot(db: AsyncSession) -> dict[str, Any]:
             }
             for row in todos
         ],
+        "todo_assignments": [
+            {
+                "daily_item_id": row.daily_item_id,
+                "todo_id": row.todo_id,
+                "intent_id": row.intent_id,
+                "created_at": _stable_iso(row.created_at),
+            }
+            for row in todo_assignments
+        ],
     }
 
 
@@ -2199,6 +2287,7 @@ async def _restore_planning_snapshot(
     """Restore planning state captured by _planning_snapshot."""
 
     # Dependent rows first; intents last.
+    await db.execute(delete(TodoAssignmentRow))
     await db.execute(delete(DailyItemMetaRow))
     await db.execute(delete(DailyItemDecisionRow))
     await db.execute(delete(DailyPlanItemRow))
@@ -2283,6 +2372,15 @@ async def _restore_planning_snapshot(
                 assigned_at=_dt_or_none(item.get("assigned_at")),
                 created_at=datetime.fromisoformat(item["created_at"]),
                 updated_at=datetime.fromisoformat(item["updated_at"]),
+            )
+        )
+    for item in snapshot.get("todo_assignments", []):
+        db.add(
+            TodoAssignmentRow(
+                daily_item_id=item["daily_item_id"],
+                todo_id=item["todo_id"],
+                intent_id=item.get("intent_id"),
+                created_at=datetime.fromisoformat(item["created_at"]),
             )
         )
 
@@ -3637,15 +3735,15 @@ async def _execute_assistant_action(
 
         target_date = _daily_date(action.date).date()
         deletion_plan = await get_plan(db)
-        active_task_dates: dict[str, set[Date]] = {}
+        active_item_dates: dict[str, set[Date]] = {}
         for block in deletion_plan.blocks:
-            if block.kind == IntentKind.TASK and not block.completed:
-                active_task_dates.setdefault(block.intent_id, set()).add(
+            if block.kind in (IntentKind.TASK, IntentKind.BUFFER) and not block.completed:
+                active_item_dates.setdefault(block.intent_id, set()).add(
                     block.start.astimezone(settings().zone).date()
                 )
         intent_ids = {
             intent_id
-            for intent_id, scheduled_dates in active_task_dates.items()
+            for intent_id, scheduled_dates in active_item_dates.items()
             if scheduled_dates == {target_date}
         }
         if not intent_ids:
@@ -3660,15 +3758,28 @@ async def _execute_assistant_action(
             .all()
         )
         deleted: list[dict[str, str]] = []
+        returned_todos: list[dict[str, str]] = []
         for row in rows:
             intent = Intent.model_validate(row.payload)
             if (
-                intent.kind != IntentKind.TASK
+                intent.kind not in (IntentKind.TASK, IntentKind.BUFFER)
                 or intent.period_days is not None
                 or intent.completed_at is not None
             ):
                 continue
-            deleted.append({"intent_id": intent.id, "title": intent.title})
+            todo_id: str | None = None
+            if intent.kind == IntentKind.TASK:
+                todo = await _return_task_to_todo(db, intent)
+                todo_id = todo.id
+                returned_todos.append({"todo_id": todo.id, "title": todo.title})
+            deleted.append(
+                {
+                    "intent_id": intent.id,
+                    "title": intent.title,
+                    "kind": intent.kind.value,
+                    **({"todo_id": todo_id} if todo_id is not None else {}),
+                }
+            )
             await db.delete(row)
 
         if not deleted:
@@ -3699,10 +3810,15 @@ async def _execute_assistant_action(
         return {
             "action": action.action,
             "status": "done",
-            "title": f"Zadania z {action.date}",
+            "title": f"Zadania i przerwy z {action.date}",
             "date": action.date,
             "deleted_count": len(deleted),
+            "deleted_task_count": sum(item["kind"] == IntentKind.TASK.value for item in deleted),
+            "deleted_break_count": sum(
+                item["kind"] == IntentKind.BUFFER.value for item in deleted
+            ),
             "deleted": deleted,
+            "returned_todos": returned_todos,
         }
 
     if action.action == "swap_tasks":

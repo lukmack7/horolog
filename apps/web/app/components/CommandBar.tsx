@@ -148,7 +148,7 @@ function actionLabel(action: AssistantAction): string {
     return "Oznacz zadanie jako wykonane";
   }
   if (action.action === "delete_tasks_for_date") {
-    return `Usuń wszystkie zadania · ${action.date ?? "bez daty"}`;
+    return `Usuń zadania i przerwy · ${action.date ?? "bez daty"}`;
   }
   if (action.action === "schedule_todo") {
     const hour =
@@ -166,7 +166,7 @@ function actionLabel(action: AssistantAction): string {
 }
 
 function actionTitle(action: AssistantAction): string {
-  if (action.action === "delete_tasks_for_date") return "Usuń zadania z dnia";
+  if (action.action === "delete_tasks_for_date") return "Usuń zadania i przerwy z dnia";
   if (action.action === "swap_tasks") return "Zamień zadania miejscami";
   if (action.action === "schedule_todo" && !action.title) return "Wpis z „Do zrobienia”";
   if (action.title) return action.title;
@@ -234,6 +234,13 @@ function executionSummary(results: Array<Record<string, unknown>>): string {
       return `✓ Zamieniono miejscami: ${title} ↔ ${otherTitle}${details ? ` — ${details}` : ""}`;
     }
     if (action === "complete_task") return `✓ Wykonane: ${title}`;
+    if (action === "delete_tasks_for_date") {
+      const taskCount =
+        typeof result.deleted_task_count === "number" ? result.deleted_task_count : 0;
+      const breakCount =
+        typeof result.deleted_break_count === "number" ? result.deleted_break_count : 0;
+      return `✓ Usunięto: ${taskCount} zadań i ${breakCount} przerw. Zadania wróciły do „Do zrobienia”.`;
+    }
     if (action === "schedule_todo") return `✓ Zaplanowano z „Do zrobienia”: ${title}${when}`;
     if (action === "update_daily_plan") return "✓ Daily zaktualizowane";
     if (action === "reschedule_task") return `✓ Zadanie zmienione: ${title}${when}`;
