@@ -27,6 +27,8 @@ from horolog.api import (
     _apply_explicit_todo_timeline,
     _apply_explicit_user_date,
     _apply_sequential_todo_followup,
+    _assistant_semantic_problem,
+    _todo_referents_from_conversation,
     app,
     origin,
 )
@@ -272,6 +274,22 @@ def test_sequential_todo_followup_uses_stored_durations_and_break() -> None:
     assert second.start_min == 11 * 60 + 30
     assert second.minutes == 60
     assert "nie utworzę kopii" in corrected.reply
+
+
+def test_assistant_rejects_task_deletion_claim_without_action() -> None:
+    messages = [AssistantMessage(role="user", content="Usuń wszystkie zadania z 10.10.2026")]
+    decision = AssistantDecision(
+        reply="Usuwam wszystkie zadania z tego dnia.",
+        actions=[],
+    )
+
+    problem = _assistant_semantic_problem(decision, messages, [])
+
+    assert problem is not None
+    assert "delete_tasks_for_date" in problem
+
+    single_task = [AssistantMessage(role="user", content="Usuń zadanie Raport z 10.10.2026")]
+    assert _assistant_semantic_problem(decision, single_task, []) is None
 
 
 @pytest.mark.asyncio
@@ -1926,6 +1944,109 @@ async def test_assistant_executes_confirmed_task_only_after_execute(client: Asyn
 
     after = (await client.get("/api/intents")).json()
     assert any(row["title"] == "Prepare client notes" for row in after)
+
+
+@pytest.mark.asyncio
+async def test_assistant_deletes_only_tasks_scheduled_for_requested_date(
+    client: AsyncClient,
+) -> None:
+    target = origin().date() + timedelta(days=1)
+
+    async def create_fixed(
+        title: str,
+        kind: str,
+        day: datetime,
+        start_min: int,
+    ) -> str:
+        start = day.replace(
+            hour=start_min // 60,
+            minute=start_min % 60,
+            second=0,
+            microsecond=0,
+        )
+        end = start + timedelta(minutes=30)
+        created = await client.post(
+            "/api/intents",
+            json={
+                "title": title,
+                "kind": kind,
+                "priority": 2,
+                "minutes_per_period": 30,
+                "min_chunk_minutes": 30,
+                "max_chunk_minutes": 30,
+                "max_per_day": 1,
+                "earliest": start.isoformat(),
+                "latest": end.isoformat(),
+                "due": end.isoformat(),
+                "preferred_start_min": start_min,
+                "window_start_min": start_min,
+                "window_end_min": start_min + 30,
+            },
+        )
+        assert created.status_code == 201, created.text
+        return created.json()["id"]
+
+    target_day = origin() + timedelta(days=1)
+    first_id = await create_fixed("Delete first", "task", target_day, 9 * 60)
+    second_id = await create_fixed("Delete second", "task", target_day, 10 * 60)
+    meeting_id = await create_fixed("Keep meeting", "meeting", target_day, 11 * 60)
+    completed_id = await create_fixed("Keep completed task", "task", target_day, 12 * 60)
+    completed = await client.post(f"/api/intents/{completed_id}/complete")
+    assert completed.status_code == 200, completed.text
+    other_id = await create_fixed(
+        "Keep tomorrow task",
+        "task",
+        target_day + timedelta(days=1),
+        9 * 60,
+    )
+
+    failed_batch = await client.post(
+        "/api/assistant/execute",
+        json={
+            "actions": [
+                {
+                    "action": "delete_tasks_for_date",
+                    "date": target.isoformat(),
+                },
+                {
+                    "action": "complete_task",
+                    "intent_id": "missing-task",
+                },
+            ]
+        },
+    )
+    assert failed_batch.status_code == 404, failed_batch.text
+    ids_after_failed_batch = {item["id"] for item in (await client.get("/api/intents")).json()}
+    assert {first_id, second_id, meeting_id, completed_id, other_id} <= ids_after_failed_batch
+
+    response = await client.post(
+        "/api/assistant/execute",
+        json={
+            "actions": [
+                {
+                    "action": "delete_tasks_for_date",
+                    "date": target.isoformat(),
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    result = response.json()["results"][0]
+    assert result["deleted_count"] == 2
+    assert {item["intent_id"] for item in result["deleted"]} == {first_id, second_id}
+
+    remaining_ids = {item["id"] for item in (await client.get("/api/intents")).json()}
+    assert first_id not in remaining_ids
+    assert second_id not in remaining_ids
+    assert meeting_id in remaining_ids
+    assert completed_id in remaining_ids
+    assert other_id in remaining_ids
+
+    undo = await client.post(f"/api/history/{response.json()['change_set_id']}/undo")
+    assert undo.status_code == 200, undo.text
+    restored_ids = {item["id"] for item in (await client.get("/api/intents")).json()}
+    assert {first_id, second_id, meeting_id, completed_id, other_id} <= restored_ids
 
 
 @pytest.mark.asyncio

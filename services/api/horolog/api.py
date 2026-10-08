@@ -17,6 +17,7 @@ import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
+from datetime import date as Date
 from typing import Annotated, Any
 from urllib.parse import urlencode
 
@@ -2557,6 +2558,7 @@ _DATE_SCOPED_ASSISTANT_ACTIONS = {
     "reschedule_task",
     "reschedule_break",
     "reschedule_meeting",
+    "delete_tasks_for_date",
     "schedule_todo",
     "update_daily_plan",
     "find_time",
@@ -2659,6 +2661,19 @@ def _daily_requested_explicitly(messages: list[AssistantMessage]) -> bool:
     return any(cue in text for cue in cues)
 
 
+def _task_deletion_requested_explicitly(messages: list[AssistantMessage]) -> bool:
+    latest = _latest_user_message(messages)
+    if latest is None:
+        return False
+    text = latest.content.casefold()
+    if any(cue in text for cue in ("nie usu", "do not delete", "don't delete")):
+        return False
+    delete_cue = any(cue in text for cue in ("usuń", "usun", "skasuj", "delete", "remove"))
+    task_cue = any(cue in text for cue in ("zadani", "task"))
+    all_cue = any(cue in text for cue in ("wszystk", "każd", "all ", "every "))
+    return delete_cue and task_cue and all_cue
+
+
 def _todo_referents_from_conversation(
     messages: list[AssistantMessage],
     todo_items: list[dict[str, Any]],
@@ -2726,6 +2741,15 @@ def _assistant_semantic_problem(
         return (
             "The user is scheduling ordinary tasks, not editing Daily. "
             "update_daily_plan is forbidden for this request."
+        )
+
+    if _task_deletion_requested_explicitly(messages) and not any(
+        action.action == "delete_tasks_for_date" for action in decision.actions
+    ):
+        return (
+            "The user explicitly requested deletion of scheduled tasks. "
+            "Use delete_tasks_for_date with the requested date. Do not claim that "
+            "anything was deleted without this structured action."
         )
 
     schedule_cues = (
@@ -3245,8 +3269,7 @@ async def assistant_chat(
                     update={
                         "reply": (
                             "Nie przygotowałem bezpiecznej propozycji zmian. "
-                            "Nie wykonam operacji na Daily ani nie utworzę kopii zadań. "
-                            "Proszę wskazać wpisy przez @ albo spróbować ponownie."
+                            "Spróbuj ponownie lub doprecyzuj polecenie."
                         ),
                         "actions": [],
                     }
@@ -3608,6 +3631,80 @@ async def _execute_assistant_action(
             "title": completed["title"],
         }
 
+    if action.action == "delete_tasks_for_date":
+        if not action.date:
+            raise HTTPException(status_code=422, detail="delete_tasks_for_date needs date")
+
+        target_date = _daily_date(action.date).date()
+        current_plan = await get_plan(db)
+        active_task_dates: dict[str, set[Date]] = {}
+        for block in current_plan.blocks:
+            if block.kind == IntentKind.TASK and not block.completed:
+                active_task_dates.setdefault(block.intent_id, set()).add(
+                    block.start.astimezone(settings().zone).date()
+                )
+        intent_ids = {
+            intent_id
+            for intent_id, scheduled_dates in active_task_dates.items()
+            if scheduled_dates == {target_date}
+        }
+        if not intent_ids:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Brak zaplanowanych zadań na {action.date}.",
+            )
+
+        rows = (
+            (await db.execute(select(IntentRow).where(IntentRow.id.in_(intent_ids))))
+            .scalars()
+            .all()
+        )
+        deleted: list[dict[str, str]] = []
+        for row in rows:
+            intent = Intent.model_validate(row.payload)
+            if (
+                intent.kind != IntentKind.TASK
+                or intent.period_days is not None
+                or intent.completed_at is not None
+            ):
+                continue
+            deleted.append({"intent_id": intent.id, "title": intent.title})
+            await db.delete(row)
+
+        if not deleted:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Brak zaplanowanych zadań na {action.date}.",
+            )
+
+        deleted_ids = [item["intent_id"] for item in deleted]
+        linked_daily = (
+            (
+                await db.execute(
+                    select(DailyPlanItemRow).where(
+                        DailyPlanItemRow.intent_id.in_(deleted_ids),
+                        DailyPlanItemRow.cancelled_at.is_(None),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        cancelled_at = datetime.now(UTC)
+        for daily_row in linked_daily:
+            daily_row.cancelled_at = cancelled_at
+
+        await db.commit()
+        await _replan(db)
+        return {
+            "action": action.action,
+            "status": "done",
+            "title": f"Zadania z {action.date}",
+            "date": action.date,
+            "deleted_count": len(deleted),
+            "deleted": deleted,
+        }
+
     if action.action == "swap_tasks":
         if not action.intent_id or not action.second_intent_id:
             raise HTTPException(status_code=422, detail="swap_tasks needs two intent ids")
@@ -3913,6 +4010,7 @@ async def _order_atomic_assistant_actions(
 ) -> list[AssistantAction]:
     """Order dependent moves before creates to avoid transient collisions."""
 
+    deletes = [action for action in actions if action.action == "delete_tasks_for_date"]
     completes = [action for action in actions if action.action == "complete_task"]
     swaps = [action for action in actions if action.action == "swap_tasks"]
     moves = [
@@ -3926,11 +4024,11 @@ async def _order_atomic_assistant_actions(
         if action.action in ("create_task", "create_break", "create_meeting", "schedule_todo")
     ]
     daily = [action for action in actions if action.action == "update_daily_plan"]
-    known = {id(action) for action in [*completes, *swaps, *moves, *creates, *daily]}
+    known = {id(action) for action in [*deletes, *completes, *swaps, *moves, *creates, *daily]}
     other = [action for action in actions if id(action) not in known]
 
     if len(moves) <= 1:
-        return [*completes, *swaps, *moves, *creates, *daily, *other]
+        return [*deletes, *completes, *swaps, *moves, *creates, *daily, *other]
 
     plan = await get_plan(db)
     current: dict[str, tuple[datetime, datetime]] = {}
@@ -4009,7 +4107,7 @@ async def _order_atomic_assistant_actions(
             remaining.remove(index)
 
     ordered_moves = [moves[index] for index in ordered_indices]
-    return [*completes, *swaps, *ordered_moves, *creates, *daily, *other]
+    return [*deletes, *completes, *swaps, *ordered_moves, *creates, *daily, *other]
 
 @app.post("/api/assistant/execute")
 async def assistant_execute(

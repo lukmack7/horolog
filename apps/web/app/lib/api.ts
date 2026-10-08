@@ -27,6 +27,7 @@ export type AssistantActionKind =
   | "reschedule_break"
   | "reschedule_meeting"
   | "complete_task"
+  | "delete_tasks_for_date"
   | "schedule_todo"
   | "update_daily_plan"
   | "find_time";

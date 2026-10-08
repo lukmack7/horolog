@@ -18,6 +18,7 @@ import {
   Send,
   Sparkles,
   Target,
+  Trash2,
   X,
 } from "lucide-react";
 import {
@@ -146,6 +147,9 @@ function actionLabel(action: AssistantAction): string {
   if (action.action === "complete_task") {
     return "Oznacz zadanie jako wykonane";
   }
+  if (action.action === "delete_tasks_for_date") {
+    return `Usuń wszystkie zadania · ${action.date ?? "bez daty"}`;
+  }
   if (action.action === "schedule_todo") {
     const hour =
       action.start_min == null
@@ -162,6 +166,7 @@ function actionLabel(action: AssistantAction): string {
 }
 
 function actionTitle(action: AssistantAction): string {
+  if (action.action === "delete_tasks_for_date") return "Usuń zadania z dnia";
   if (action.action === "swap_tasks") return "Zamień zadania miejscami";
   if (action.action === "schedule_todo" && !action.title) return "Wpis z „Do zrobienia”";
   if (action.title) return action.title;
@@ -745,7 +750,9 @@ export function CommandBar({
                         >
                           <div className="flex items-start gap-2">
                             <span className="mt-0.5 text-amber-700">
-                              {action.action === "create_meeting" ? (
+                              {action.action === "delete_tasks_for_date" ? (
+                                <Trash2 size={14} />
+                              ) : action.action === "create_meeting" ? (
                                 <CalendarClock size={14} />
                               ) : action.action === "update_daily_plan" ? (
                                 <Target size={14} />

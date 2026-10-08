@@ -63,6 +63,7 @@ class AssistantAction(BaseModel):
         "reschedule_break",
         "reschedule_meeting",
         "complete_task",
+        "delete_tasks_for_date",
         "schedule_todo",
         "update_daily_plan",
         "find_time",
@@ -122,6 +123,8 @@ class AssistantAction(BaseModel):
                 and self.window_end_min <= self.window_start_min
             ):
                 raise ValueError("find_time window end must be after start")
+        if self.action == "delete_tasks_for_date" and self.date is None:
+            raise ValueError("delete_tasks_for_date requires date")
         return self
 
 
@@ -262,6 +265,12 @@ Core rules:
   resizing an existing meeting; preserve the meeting itself rather than
   creating a second meeting.
 - complete_task requires an intent_id from FACTUAL CONTEXT.
+- delete_tasks_for_date deletes active, one-shot task-kind items whose complete
+  current schedule falls on one date. It requires date. Use it only for explicit
+  bulk requests such as "usuń wszystkie zadania z 10.10.2026". It does not
+  delete meetings, breaks, habits, focus blocks, recurring tasks, completed
+  tasks or tasks split across multiple dates. This is a mutating proposal and
+  still requires UI confirmation.
 - schedule_todo moves one existing "Do zrobienia" item into Daily/Planner
   without creating a duplicate inbox task. It requires todo_id copied from an
   explicit todo reference or FACTUAL CONTEXT, plus date and quadrant.
