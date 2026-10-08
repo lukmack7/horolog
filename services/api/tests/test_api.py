@@ -1579,7 +1579,9 @@ async def test_completing_and_uncompleting_one_habit_occurrence(
 
 
 @pytest.mark.asyncio
-async def test_daily_item_rolls_forward_without_duplication(client: AsyncClient) -> None:
+async def test_daily_item_is_not_projected_into_tomorrow_without_decision(
+    client: AsyncClient,
+) -> None:
     base = origin().date()
     day1 = base.isoformat()
     day2 = (base + timedelta(days=1)).isoformat()
@@ -1600,10 +1602,14 @@ async def test_daily_item_rolls_forward_without_duplication(client: AsyncClient)
 
     tomorrow = await client.get(f"/api/daily/{day2}")
     assert tomorrow.status_code == 200
-    carried = [row for row in tomorrow.json()["items"] if row["id"] == item["id"]]
-    assert len(carried) == 1
-    assert carried[0]["carried"] is True
-    assert carried[0]["carry_days"] == 1
+    payload = tomorrow.json()
+    assert not any(row["id"] == item["id"] for row in payload["items"])
+    # Today's task is not overdue yet just because the user is planning
+    # tomorrow in advance.
+    assert not any(
+        row["id"] == item["id"]
+        for row in payload["carry_suggestions"]
+    )
 
     intents = (await client.get("/api/intents")).json()
     assert sum(1 for intent in intents if intent["id"] == item["intent_id"]) == 1
@@ -1703,7 +1709,12 @@ async def test_stale_daily_item_can_be_acknowledged_or_deferred(
     ).json()
 
     daily = (await client.get(f"/api/daily/{current}")).json()
-    item = next(row for row in daily["items"] if row["id"] == created["id"])
+    assert not any(row["id"] == created["id"] for row in daily["items"])
+    item = next(
+        row
+        for row in daily["carry_suggestions"]
+        if row["id"] == created["id"]
+    )
     assert item["needs_decision"] is True
 
     kept = await client.post(
@@ -1712,8 +1723,11 @@ async def test_stale_daily_item_can_be_acknowledged_or_deferred(
     )
     assert kept.status_code == 200
     daily = (await client.get(f"/api/daily/{current}")).json()
-    item = next(row for row in daily["items"] if row["id"] == created["id"])
-    assert item["needs_decision"] is False
+    assert not any(row["id"] == created["id"] for row in daily["items"])
+    assert not any(
+        row["id"] == created["id"]
+        for row in daily["carry_suggestions"]
+    )
 
     deferred = await client.post(
         f"/api/daily/items/{created['id']}/defer",
@@ -1723,7 +1737,12 @@ async def test_stale_daily_item_can_be_acknowledged_or_deferred(
     today_view = (await client.get(f"/api/daily/{current}")).json()
     assert not any(row["id"] == created["id"] for row in today_view["items"])
     tomorrow_view = (await client.get(f"/api/daily/{tomorrow}")).json()
-    assert any(row["id"] == created["id"] for row in tomorrow_view["items"])
+    matching = [
+        row for row in tomorrow_view["items"]
+        if row["id"] == created["id"]
+    ]
+    assert len(matching) == 1
+    assert matching[0]["deferred_here"] is True
 
 
 @pytest.mark.asyncio
