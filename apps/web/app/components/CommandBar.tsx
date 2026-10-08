@@ -139,6 +139,15 @@ function actionLabel(action: AssistantAction): string {
   if (action.action === "complete_task") {
     return "Oznacz zadanie jako wykonane";
   }
+  if (action.action === "schedule_todo") {
+    const hour =
+      action.start_min == null
+        ? ""
+        : ` · ${String(Math.floor(action.start_min / 60)).padStart(2, "0")}:${String(
+            action.start_min % 60,
+          ).padStart(2, "0")}`;
+    return `Zaplanuj z „Do zrobienia” · ${action.date ?? "bez daty"}${hour} · Q${action.quadrant ?? "?"}`;
+  }
   if (action.action === "find_time") {
     return `Znajdź wolne miejsce · ${action.minutes ?? "?"} min`;
   }
@@ -147,6 +156,7 @@ function actionLabel(action: AssistantAction): string {
 
 function actionTitle(action: AssistantAction): string {
   if (action.action === "swap_tasks") return "Zamień zadania miejscami";
+  if (action.action === "schedule_todo" && !action.title) return "Wpis z „Do zrobienia”";
   if (action.title) return action.title;
   if (action.win_condition) return `Dzisiaj wygrywam, jeśli: ${action.win_condition}`;
   if (action.first_step) return `Zaczynam od: ${action.first_step}`;
@@ -212,6 +222,7 @@ function executionSummary(results: Array<Record<string, unknown>>): string {
       return `✓ Zamieniono miejscami: ${title} ↔ ${otherTitle}${details ? ` — ${details}` : ""}`;
     }
     if (action === "complete_task") return `✓ Wykonane: ${title}`;
+    if (action === "schedule_todo") return `✓ Zaplanowano z „Do zrobienia”: ${title}${when}`;
     if (action === "update_daily_plan") return "✓ Daily zaktualizowane";
     if (action === "reschedule_task") return `✓ Zadanie zmienione: ${title}${when}`;
     if (action === "reschedule_break") return `✓ Przerwa zmieniona: ${title}${when}`;
