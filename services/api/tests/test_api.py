@@ -22,8 +22,19 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from horolog.api import (\n    IntentIn,\n    _apply_explicit_todo_timeline,\n    _apply_explicit_user_date,\n    app,\n    origin,\n)
-from horolog.assistant import (\n    AssistantAction,\n    AssistantDecision,\n    AssistantMessage,\n    AssistantReference,\n)
+from horolog.api import (
+    IntentIn,
+    _apply_explicit_todo_timeline,
+    _apply_explicit_user_date,
+    app,
+    origin,
+)
+from horolog.assistant import (
+    AssistantAction,
+    AssistantDecision,
+    AssistantMessage,
+    AssistantReference,
+)
 from horolog.db import (
     BusyRow,
     ChangeSetRow,
