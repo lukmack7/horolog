@@ -1483,6 +1483,58 @@ async def create_daily_item(date: str, body: DailyItemIn, db: AsyncSession = Dep
     if intent_id is not None:
         if await db.get(IntentRow, intent_id) is None:
             raise HTTPException(status_code=404, detail=f"no intent {intent_id!r}")
+
+        existing_rows = (
+            await db.execute(
+                select(DailyPlanItemRow)
+                .where(
+                    DailyPlanItemRow.intent_id == intent_id,
+                    DailyPlanItemRow.completed_at.is_(None),
+                    DailyPlanItemRow.cancelled_at.is_(None),
+                )
+                .order_by(DailyPlanItemRow.created_at.desc())
+            )
+        ).scalars().all()
+        if existing_rows:
+            row = existing_rows[0]
+            row.plan_date = date
+            row.title = body.title
+            row.quadrant = body.quadrant
+            row.minutes = body.minutes
+            row.priority = int(matrix_priority)
+            row.category = body.category.value if body.category is not None else row.category
+            row.schedule_enabled = body.schedule_enabled
+            now = datetime.now(UTC)
+            for duplicate in existing_rows[1:]:
+                duplicate.cancelled_at = now
+
+            decision = await db.get(DailyItemDecisionRow, row.id)
+            if decision is not None:
+                decision.defer_until = None
+                decision.acknowledged_date = None
+                decision.updated_at = now
+
+            meta = await db.get(DailyItemMetaRow, row.id)
+            if body.deadline_date is not None:
+                if meta is None:
+                    meta = DailyItemMetaRow(
+                        item_id=row.id,
+                        deadline_date=body.deadline_date,
+                    )
+                    db.add(meta)
+                else:
+                    meta.deadline_date = body.deadline_date
+
+            await db.commit()
+            intent_row = await db.get(IntentRow, intent_id)
+            intent_payload = intent_row.payload if intent_row else None
+            return _daily_item_dict(
+                row,
+                date,
+                intent_payload,
+                decision,
+                meta,
+            )
     elif body.schedule_enabled:
         intent_id = uuid.uuid4().hex[:12]
         wire = IntentIn(
