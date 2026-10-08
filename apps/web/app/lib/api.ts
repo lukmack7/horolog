@@ -177,6 +177,7 @@ export interface DailyItem {
   completed_at?: string | null;
   cancelled_at?: string | null;
   carried: boolean;
+  deferred_here?: boolean;
   carry_days: number;
   defer_until?: string | null;
   needs_decision?: boolean;
