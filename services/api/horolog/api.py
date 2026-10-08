@@ -2998,7 +2998,7 @@ async def _order_atomic_assistant_actions(
     creates = [
         action
         for action in actions
-        if action.action in ("create_task", "create_break", "create_meeting")
+        if action.action in ("create_task", "create_break", "create_meeting", "schedule_todo")
     ]
     daily = [action for action in actions if action.action == "update_daily_plan"]
     known = {id(action) for action in [*completes, *swaps, *moves, *creates, *daily]}
