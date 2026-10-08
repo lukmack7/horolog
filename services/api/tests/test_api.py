@@ -22,8 +22,8 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from horolog.api import IntentIn, _apply_explicit_user_date, app, origin
-from horolog.assistant import AssistantAction, AssistantDecision, AssistantMessage
+from horolog.api import (\n    IntentIn,\n    _apply_explicit_todo_timeline,\n    _apply_explicit_user_date,\n    app,\n    origin,\n)
+from horolog.assistant import (\n    AssistantAction,\n    AssistantDecision,\n    AssistantMessage,\n    AssistantReference,\n)
 from horolog.db import (
     BusyRow,
     ChangeSetRow,
@@ -103,6 +103,88 @@ def test_explicit_dd_mm_date_overrides_model_action_date() -> None:
     corrected = _apply_explicit_user_date(decision, messages)
 
     assert corrected.actions[0].date == "2026-10-10"
+
+
+def test_explicit_todo_timeline_preserves_existing_items_break_and_clock_ranges() -> None:
+    todos = [
+        {
+            "id": "todo-a",
+            "title": "Test Raport A",
+            "minutes": 60,
+            "category": "macheta_data",
+            "deadline_date": None,
+        },
+        {
+            "id": "todo-b",
+            "title": "Test Raport B",
+            "minutes": 60,
+            "category": "cmr",
+            "deadline_date": None,
+        },
+    ]
+    message = AssistantMessage(
+        role="user",
+        content=(
+            "10.10 ustaw @[Test Raport A] od 10:00 do 11:00, "
+            "następnie dodaj przerwę 30 minut i ustaw "
+            "@[Test Raport B] od 11:30 do 12:30."
+        ),
+        references=[
+            AssistantReference(
+                kind="todo",
+                token="@[Test Raport A]",
+                todo_id="todo-a",
+            ),
+            AssistantReference(
+                kind="todo",
+                token="@[Test Raport B]",
+                todo_id="todo-b",
+            ),
+        ],
+    )
+    wrong = AssistantDecision(
+        reply="Zaplanuję oba.",
+        actions=[
+            AssistantAction(
+                action="create_task",
+                title="Test Raport A",
+                date="2026-10-08",
+                minutes=60,
+                quadrant=1,
+            ),
+            AssistantAction(
+                action="create_task",
+                title="Test Raport B",
+                date="2026-10-08",
+                minutes=60,
+                quadrant=1,
+            ),
+        ],
+    )
+
+    corrected = _apply_explicit_todo_timeline(wrong, [message], todos)
+
+    assert [action.action for action in corrected.actions] == [
+        "schedule_todo",
+        "create_break",
+        "schedule_todo",
+    ]
+    first, pause, second = corrected.actions
+    assert first.todo_id == "todo-a"
+    assert first.date == "2026-10-10"
+    assert first.start_min == 10 * 60
+    assert first.minutes == 60
+    assert first.start_mode == "fixed"
+
+    assert pause.date == "2026-10-10"
+    assert pause.start_min == 11 * 60
+    assert pause.minutes == 30
+
+    assert second.todo_id == "todo-b"
+    assert second.date == "2026-10-10"
+    assert second.start_min == 11 * 60 + 30
+    assert second.minutes == 60
+    assert second.start_mode == "fixed"
 
 
 @pytest.mark.asyncio
