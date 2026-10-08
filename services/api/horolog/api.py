@@ -2375,6 +2375,16 @@ async def assistant_chat(
             }
         )
 
+    enriched_actions: list[AssistantAction] = []
+    for action in decision.actions:
+        if action.action == "schedule_todo" and action.todo_id and not action.title:
+            todo = await db.get(TodoInboxRow, action.todo_id)
+            if todo is not None and todo.assigned_at is None:
+                action = action.model_copy(update={"title": todo.title})
+        enriched_actions.append(action)
+    if enriched_actions != decision.actions:
+        decision = decision.model_copy(update={"actions": enriched_actions})
+
     return decision.model_dump(mode="json")
 
 
