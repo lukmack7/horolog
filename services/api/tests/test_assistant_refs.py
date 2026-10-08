@@ -6,16 +6,21 @@ from pydantic import ValidationError
 from horolog.assistant import AssistantAction, AssistantMessage
 
 
-def test_assistant_message_accepts_explicit_intent_and_category_references() -> None:
+def test_assistant_message_accepts_explicit_intent_todo_and_category_references() -> None:
     message = AssistantMessage.model_validate(
         {
             "role": "user",
-            "content": "Przesuń @[Raport] i dodaj #[CMR]",
+            "content": "Przesuń @[Raport], zaplanuj @[Oferta] i dodaj #[CMR]",
             "references": [
                 {
                     "kind": "intent",
                     "token": "@[Raport]",
                     "intent_id": "abc123",
+                },
+                {
+                    "kind": "todo",
+                    "token": "@[Oferta]",
+                    "todo_id": "todo456",
                 },
                 {
                     "kind": "category",
@@ -27,7 +32,8 @@ def test_assistant_message_accepts_explicit_intent_and_category_references() -> 
     )
 
     assert message.references[0].intent_id == "abc123"
-    assert message.references[1].category.value == "cmr"
+    assert message.references[1].todo_id == "todo456"
+    assert message.references[2].category.value == "cmr"
 
 
 def test_assistant_reference_requires_matching_payload() -> None:
@@ -42,6 +48,29 @@ def test_assistant_reference_requires_matching_payload() -> None:
                         "token": "@[Raport]",
                     }
                 ],
+            }
+        )
+
+
+def test_schedule_todo_requires_existing_reference_fields() -> None:
+    action = AssistantAction.model_validate(
+        {
+            "action": "schedule_todo",
+            "todo_id": "todo456",
+            "date": "2026-10-09",
+            "quadrant": 2,
+            "start_min": 10 * 60,
+            "start_mode": "fixed",
+        }
+    )
+    assert action.todo_id == "todo456"
+
+    with pytest.raises(ValidationError):
+        AssistantAction.model_validate(
+            {
+                "action": "schedule_todo",
+                "date": "2026-10-09",
+                "quadrant": 2,
             }
         )
 
