@@ -306,6 +306,7 @@ async def converse(
     context: dict[str, object],
     pending_actions: list[AssistantAction] | None = None,
     provider: Provider | None = None,
+    extra_instruction: str | None = None,
 ) -> AssistantDecision:
     now = datetime.now(settings().zone)
     transcript_lines: list[str] = []
@@ -321,11 +322,17 @@ async def converse(
             )
     transcript = "\n".join(transcript_lines)
     pending = [action.model_dump(mode="json") for action in (pending_actions or [])]
+    correction = (
+        f"\nSTRICT CORRECTION FOR THIS RETRY:\n{extra_instruction}\n"
+        if extra_instruction
+        else ""
+    )
     user = (
         f"Current local time: {now.isoformat(timespec='minutes')}\n"
         f"FACTUAL CONTEXT:\n{json.dumps(context, ensure_ascii=False)}\n"
         f"PENDING PROPOSAL:\n{json.dumps(pending, ensure_ascii=False)}\n"
         f"CONVERSATION:\n{transcript}\n"
+        f"{correction}"
         "Return the next assistant turn."
     )
     return await extract(AssistantDecision, SYSTEM, user, provider=provider)
