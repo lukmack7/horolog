@@ -18,6 +18,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # no effect. It has to be a build arg instead.
 ARG HOROLOG_API_URL=http://localhost:8000
 ENV HOROLOG_API_URL=$HOROLOG_API_URL
+ARG NEXT_PUBLIC_HOROLOG_EXPERIENCE=standard
+ENV NEXT_PUBLIC_HOROLOG_EXPERIENCE=$NEXT_PUBLIC_HOROLOG_EXPERIENCE
 RUN npm run build
 
 # ---- runtime -------------------------------------------------------------

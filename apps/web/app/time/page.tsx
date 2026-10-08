@@ -10,6 +10,8 @@ import { Skeleton } from "@/app/components/Skeleton";
 import { api, formatDuration, minutesBetween, numberBreakTitles, type DailyData, type IntentKind, type Plan, type WorkCategory } from "@/app/lib/api";
 import { ArrowRight, Sunrise, Target } from "lucide-react";
 import Link from "next/link";
+import { IS_ADHD_EXPERIENCE } from "@/app/lib/experience";
+import { AdhdTimePage } from "@/app/time/AdhdTimePage";
 
 function dayKey(iso: string): string {
   return iso.slice(0, 10);
@@ -26,6 +28,12 @@ function localDateKey(date: Date): string {
  *  what's in progress and what's next. Complements Planner (week grid) and
  *  Analytics (aggregate stats) rather than duplicating either. */
 export default function TimePage() {
+  if (IS_ADHD_EXPERIENCE) return <AdhdTimePage />;
+
+  return <StandardTimePage />;
+}
+
+function StandardTimePage() {
   const { t, language } = useLanguage();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [daily, setDaily] = useState<DailyData | null>(null);
@@ -59,7 +67,7 @@ export default function TimePage() {
 
   // `now` (not a frozen mount-time snapshot) so the day key rolls over if the
   // tab is left open past midnight instead of filtering forever for a stale day.
-  const todayKey = now.toISOString().slice(0, 10);
+  const todayKey = localDateKey(now);
 
   const displayBlocks = useMemo(
     () => (plan ? numberBreakTitles(plan.blocks) : []),

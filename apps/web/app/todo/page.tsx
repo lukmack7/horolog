@@ -13,6 +13,7 @@ import {
 } from "@/app/lib/api";
 import { useLanguage } from "@/app/components/LanguageProvider";
 import { CalendarDays, Check, Clock3, Inbox, Pencil, Plus, Sparkles, Trash2, X } from "lucide-react";
+import { IS_ADHD_EXPERIENCE, localDateKey } from "@/app/lib/experience";
 
 type Draft = {
   title: string;
@@ -44,6 +45,8 @@ export default function TodoPage() {
   const [editDraft, setEditDraft] = useState<Draft>(EMPTY);
   const [busy, setBusy] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<Record<string, TodoAISuggestion>>({});
+  const [scheduleDates, setScheduleDates] = useState<Record<string, string>>({});
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -166,6 +169,26 @@ export default function TodoPage() {
     }
   }
 
+  async function schedule(item: TodoInboxItem) {
+    const date = scheduleDates[item.id] || localDateKey();
+    setBusy(`schedule-${item.id}`);
+    try {
+      const assigned = await api.assignTodo(item.id, {
+        date,
+        quadrant: suggestions[item.id]?.quadrant ?? 2,
+      });
+      const firstStep = suggestions[item.id]?.first_step;
+      if (assigned.intent_id && firstStep) {
+        await api.patchIntent(assigned.intent_id, { first_step: firstStep });
+      }
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Nie udało się zaplanować zadania.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   const today = todayKey();
 
   return (
@@ -203,7 +226,17 @@ export default function TodoPage() {
             className="w-full border-0 bg-transparent px-1 py-2 text-[15px] font-semibold text-fg outline-none placeholder:text-fg-subtle"
           />
 
-          <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-black/[0.06] pt-3">
+          {IS_ADHD_EXPERIENCE && (
+            <button
+              type="button"
+              onClick={() => setDetailsOpen((open) => !open)}
+              className="mt-2 text-[11px] font-semibold text-amber-800"
+            >
+              {detailsOpen ? "Ukryj szczegóły" : "Dodaj czas, kategorię lub deadline"}
+            </button>
+          )}
+
+          <div className={`${IS_ADHD_EXPERIENCE && !detailsOpen ? "hidden" : "flex"} mt-3 flex-wrap items-end gap-2 border-t border-black/[0.06] pt-3`}>
             <label className="space-y-1">
               <span className="block text-[10px] font-semibold uppercase tracking-wide text-fg-subtle">Czas</span>
               <select
@@ -241,15 +274,25 @@ export default function TodoPage() {
               />
             </label>
 
-            <button
+            {!IS_ADHD_EXPERIENCE && <button
               type="button"
               onClick={() => void createItem()}
               disabled={!draft.title.trim() || busy === "new"}
               className="ml-auto inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent px-4 text-[12px] font-semibold text-on-accent disabled:opacity-40"
             >
               <Plus size={14} /> Dodaj
-            </button>
+            </button>}
           </div>
+          {IS_ADHD_EXPERIENCE && (
+            <button
+              type="button"
+              onClick={() => void createItem()}
+              disabled={!draft.title.trim() || busy === "new"}
+              className="mt-3 inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-amber-500 px-4 text-[12px] font-bold text-white disabled:opacity-40"
+            >
+              <Plus size={14} /> Zapisz do „Do zrobienia”
+            </button>
+          )}
         </section>
 
         <div className="mb-3 flex items-center justify-between">
@@ -351,6 +394,26 @@ export default function TodoPage() {
                             </span>
                           )}
                         </div>
+                        {IS_ADHD_EXPERIENCE && (
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <input
+                              type="date"
+                              min={today}
+                              value={scheduleDates[item.id] || today}
+                              onChange={(event) => setScheduleDates((current) => ({ ...current, [item.id]: event.target.value }))}
+                              aria-label={`Data planowania: ${item.title}`}
+                              className="h-9 rounded-lg border bg-white px-2 text-[11px] font-semibold"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => void schedule(item)}
+                              disabled={busy !== null}
+                              className="h-9 rounded-lg bg-amber-500 px-3 text-[11px] font-bold text-white disabled:opacity-40"
+                            >
+                              {busy === `schedule-${item.id}` ? "Planuję…" : "Zaplanuj"}
+                            </button>
+                          </div>
+                        )}
                       </div>
                       <button
                         type="button"
@@ -411,6 +474,15 @@ export default function TodoPage() {
                           <p className="mt-2 text-[11px] leading-relaxed text-violet-950/75">
                             {suggestions[item.id]!.rationale}
                           </p>
+                          {IS_ADHD_EXPERIENCE && (
+                            <div className="mt-3 rounded-lg bg-white/80 p-2.5">
+                              <div className="text-[10px] font-bold uppercase text-violet-800">Najmniejszy pierwszy krok</div>
+                              <p className="mt-1 text-[11px] font-semibold">{suggestions[item.id]!.first_step}</p>
+                              <ol className="mt-2 list-decimal space-y-1 pl-4 text-[10.5px] text-violet-950/75">
+                                {suggestions[item.id]!.steps.map((step) => <li key={step}>{step}</li>)}
+                              </ol>
+                            </div>
+                          )}
                           <div className="mt-3 flex gap-2">
                             <button
                               type="button"

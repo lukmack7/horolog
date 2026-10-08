@@ -24,6 +24,8 @@ import {
 } from "lucide-react";
 import { CommandBar } from "@/app/components/CommandBar";
 import { useLanguage } from "@/app/components/LanguageProvider";
+import { AdhdShell } from "@/app/components/AdhdShell";
+import { IS_ADHD_EXPERIENCE } from "@/app/lib/experience";
 
 const NAV = [
   { href: "/time", label: "Time", icon: Clock },
@@ -42,6 +44,20 @@ const NAV = [
  *  Apple-style pulsing live indicator, and ⌘K trigger.
  */
 export function Shell({
+  children,
+  onPlanChange,
+}: {
+  children: React.ReactNode;
+  onPlanChange?: () => void;
+}) {
+  if (IS_ADHD_EXPERIENCE) {
+    return <AdhdShell onPlanChange={onPlanChange}>{children}</AdhdShell>;
+  }
+
+  return <StandardShell onPlanChange={onPlanChange}>{children}</StandardShell>;
+}
+
+function StandardShell({
   children,
   onPlanChange,
 }: {

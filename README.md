@@ -238,6 +238,9 @@ at UTC on a machine that isn't, a 9-to-5 goal silently lands at 5am.
 
 ## Deployment
 
+For a separate ADHD experience running alongside the standard stack, see
+[Parallel ADHD deployment](docs/ADHD_DEPLOYMENT.md).
+
 ```bash
 docker compose up -d
 ```

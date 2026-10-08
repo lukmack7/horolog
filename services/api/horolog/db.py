@@ -101,6 +101,19 @@ class UserSettingsRow(Base):
     )
 
 
+class PlanningProfileRow(Base):
+    """Informational planning capacity and preferred energy windows."""
+
+    __tablename__ = "planning_profiles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    daily_capacity_minutes: Mapped[int] = mapped_column(Integer, default=8 * 60)
+    energy_windows: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
 class NotificationSettingsRow(Base):
     """Persistent notification preferences consumed by mobile clients."""
 

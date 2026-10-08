@@ -11,10 +11,12 @@ import {
   sync,
   type ChangeHistoryEntry,
   type NotificationPreferences,
+  type PlanningProfile,
   type Plan,
   type Provider,
   type SystemLogEntry,
 } from "@/app/lib/api";
+import { IS_ADHD_EXPERIENCE } from "@/app/lib/experience";
 import {
   AlertCircle,
   BellRing,
@@ -172,6 +174,11 @@ export default function SettingsPage() {
   const [workEnd, setWorkEnd] = useState("17:00");
   const [preferencesPending, setPreferencesPending] = useState(false);
   const [preferencesMessage, setPreferencesMessage] = useState<string | null>(null);
+  const [planningProfile, setPlanningProfile] = useState<PlanningProfile>({
+    daily_capacity_minutes: 6 * 60,
+    energy_windows: [],
+  });
+  const [profilePending, setProfilePending] = useState(false);
   const [notifications, setNotifications] = useState<NotificationPreferences>({
     task_enabled: true,
     task_minutes_before: 15,
@@ -239,6 +246,13 @@ export default function SettingsPage() {
       setWorkEnd(minutesToTime(preferences.preferred_workday_end_min));
     } catch (caught) {
       failure ??= caught instanceof Error ? caught.message : "Could not load settings.";
+    }
+    if (IS_ADHD_EXPERIENCE) {
+      try {
+        setPlanningProfile(await api.planningProfile());
+      } catch (caught) {
+        failure ??= caught instanceof Error ? caught.message : "Nie udało się wczytać profilu planowania.";
+      }
     }
     try {
       setNotifications(await api.notificationSettings());
@@ -322,6 +336,19 @@ export default function SettingsPage() {
       );
     } finally {
       setNotificationsPending(false);
+    }
+  }
+
+  async function saveAdhdPlanningProfile() {
+    setProfilePending(true);
+    setPreferencesMessage(null);
+    try {
+      setPlanningProfile(await api.savePlanningProfile(planningProfile));
+      setPreferencesMessage("Profil pojemności został zapisany.");
+    } catch (caught) {
+      setPreferencesMessage(caught instanceof Error ? caught.message : "Nie udało się zapisać profilu.");
+    } finally {
+      setProfilePending(false);
     }
   }
 
@@ -567,6 +594,54 @@ export default function SettingsPage() {
               </button>
             </div>
           </div>
+          {IS_ADHD_EXPERIENCE && (
+            <div className="border-t border-black/[0.06] pt-5">
+              <h3 className="text-[13px] font-bold text-fg">Realistyczna pojemność</h3>
+              <p className="mt-1 text-[11.5px] text-fg-muted">
+                To informacyjny limit pomagający zauważyć przeciążenie. Nie zmienia automatycznie planu.
+              </p>
+              <label className="mt-3 block max-w-xs space-y-1.5">
+                <span className="block text-[11px] font-medium text-fg-muted">Ile pracy planować dziennie</span>
+                <select
+                  value={planningProfile.daily_capacity_minutes}
+                  onChange={(event) => setPlanningProfile((current) => ({ ...current, daily_capacity_minutes: Number(event.target.value) }))}
+                  className="h-11 w-full rounded-xl border bg-bg px-3 text-[13px] font-semibold"
+                >
+                  {[240, 300, 360, 420, 480].map((minutes) => <option key={minutes} value={minutes}>{minutes / 60} godzin</option>)}
+                </select>
+              </label>
+              <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                {(["high", "medium", "low"] as const).map((energy) => {
+                  const fallback: [number, number] = energy === "high" ? [540, 720] : energy === "medium" ? [720, 900] : [900, 1020];
+                  const window = planningProfile.energy_windows.find((item) => item.energy === energy);
+                  const start = minutesToTime(window?.start_min ?? fallback[0]);
+                  const end = minutesToTime(window?.end_min ?? fallback[1]);
+                  const updateWindow = (field: "start_min" | "end_min", value: string) => {
+                    const minutes = timeToMinutes(value);
+                    setPlanningProfile((current) => ({
+                      ...current,
+                      energy_windows: [
+                        ...current.energy_windows.filter((item) => item.energy !== energy),
+                        { energy, start_min: field === "start_min" ? minutes : window?.start_min ?? fallback[0], end_min: field === "end_min" ? minutes : window?.end_min ?? fallback[1] },
+                      ],
+                    }));
+                  };
+                  return (
+                    <div key={energy} className="rounded-xl border bg-bg p-3">
+                      <div className="text-[11px] font-bold">{energy === "high" ? "Wysoka koncentracja" : energy === "medium" ? "Zwykła energia" : "Niska energia"}</div>
+                      <div className="mt-2 flex gap-2">
+                        <input type="time" value={start} onChange={(event) => updateWindow("start_min", event.target.value)} className="h-9 min-w-0 flex-1 rounded-lg border bg-white px-2 text-[11px]" />
+                        <input type="time" value={end} onChange={(event) => updateWindow("end_min", event.target.value)} className="h-9 min-w-0 flex-1 rounded-lg border bg-white px-2 text-[11px]" />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <button type="button" onClick={() => void saveAdhdPlanningProfile()} disabled={profilePending} className="mt-4 h-11 rounded-xl bg-amber-500 px-5 text-[13px] font-bold text-white disabled:opacity-50">
+                {profilePending ? "Zapisuję…" : "Zapisz profil pojemności"}
+              </button>
+            </div>
+          )}
         </section>
         )}
 

@@ -10,6 +10,7 @@ object NotificationChannels {
     const val DEADLINES = "horolog_deadlines"
     const val DAILY_REVIEW = "horolog_daily_review"
     const val ALARM = "horolog_alarm"
+    const val ACTIVE_TIMER = "horolog_active_timer"
 
     fun create(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -25,6 +26,16 @@ object NotificationChannels {
                     description = "Alarmy w chwili rozpoczęcia i na koniec dnia."
                     enableVibration(true)
                     lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+                },
+                NotificationChannel(
+                    ACTIVE_TIMER,
+                    "Aktywny timer",
+                    NotificationManager.IMPORTANCE_LOW,
+                ).apply {
+                    description = "Stały status uruchomionego lub wstrzymanego timera."
+                    setSound(null, null)
+                    enableVibration(false)
+                    setShowBadge(false)
                 },
                 NotificationChannel(
                     SCHEDULE,

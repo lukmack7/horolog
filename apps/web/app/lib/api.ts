@@ -8,6 +8,7 @@
 export type IntentKind = "task" | "habit" | "focus" | "buffer" | "meeting";
 export type Priority = 1 | 2 | 3 | 4;
 export type WorkCategory = "cmr" | "macheta_data" | "private";
+export type EnergyRequired = "low" | "medium" | "high";
 
 export const WORK_CATEGORY_LABEL: Record<WorkCategory, string> = {
   cmr: "CMR",
@@ -86,6 +87,11 @@ export interface Block {
   recurring?: boolean;
 }
 
+export interface NotNowBlock {
+  start: string;
+  end: string;
+}
+
 export function numberBreakTitles(blocks: Block[]): Block[] {
   const orderedBuffers = blocks
     .filter((block) => block.kind === "buffer")
@@ -152,6 +158,13 @@ export interface TodoAISuggestion {
   category?: WorkCategory | null;
   deadline_date?: string | null;
   rationale: string;
+  first_step: string;
+  steps: string[];
+}
+
+export interface IntentSuggestion {
+  first_step: string;
+  steps: string[];
 }
 
 export interface TodoInboxItem {
@@ -167,6 +180,7 @@ export interface TodoInboxItem {
 export interface DailyItem {
   id: string;
   plan_date: string;
+  original_date: string;
   title: string;
   quadrant: 1 | 2 | 3 | 4;
   minutes: number;
@@ -311,6 +325,34 @@ export interface UserPreferences {
   preferred_workday_end_min: number;
 }
 
+export interface EnergyWindow {
+  energy: EnergyRequired;
+  start_min: number;
+  end_min: number;
+}
+
+export interface PlanningProfile {
+  daily_capacity_minutes: number;
+  energy_windows: EnergyWindow[];
+}
+
+export interface DailyCapacity {
+  date: string;
+  workday: number;
+  busy: number;
+  scheduled: number;
+  free: number;
+  longest_free: number;
+  unmet: number;
+}
+
+export type DailyDecision = {
+  item_id: string;
+  action: "complete" | "keep" | "defer" | "to_todo" | "cancel";
+  date?: string;
+  until?: string;
+};
+
 export interface NotificationPreferences {
   task_enabled: boolean;
   task_minutes_before: number;
@@ -340,6 +382,9 @@ export interface Intent {
   kind: IntentKind;
   priority: Priority;
   category?: WorkCategory | null;
+  first_step?: string | null;
+  energy_required?: EnergyRequired | null;
+  original_date?: string | null;
   minutes_per_period: number;
   period_days: number | null;
   min_chunk_minutes: number;
@@ -352,6 +397,7 @@ export interface Intent {
   due_slot?: number | null;
   deadline_date?: string | null;
   preferred_start_min?: number | null;
+  not_now_blocks?: NotNowBlock[];
   /** Set once, on a one-shot task only - see `complete`/`uncomplete` below. */
   completed_at?: string | null;
   /** Slot ranges (not clock times) other attendees are busy - present only
@@ -382,6 +428,8 @@ export function intentToEditPayload(intent: Intent, origin: string): Record<stri
     kind: intent.kind,
     priority: intent.priority,
     category: intent.category ?? undefined,
+    first_step: intent.first_step ?? undefined,
+    energy_required: intent.energy_required ?? undefined,
     minutes_per_period: intent.minutes_per_period,
     period_days: intent.period_days ?? undefined,
     min_chunk_minutes: intent.min_chunk_minutes,
@@ -468,6 +516,8 @@ export const api = {
       priority?: Priority;
       category?: WorkCategory | null;
       deadline_date?: string | null;
+      first_step?: string | null;
+      energy_required?: EnergyRequired | null;
     },
   ) =>
     request<Intent>(`/api/intents/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
@@ -487,6 +537,23 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ start, end }),
     }),
+  rejectBlock: (id: string, start: string, end: string) =>
+    request<{ intent_id: string; decision: "not_now"; expected_start: string; expected_end: string; demand_minutes: number }>(
+      `/api/intents/${id}/blocks/not-now`,
+      { method: "POST", body: JSON.stringify({ expected_start: start, expected_end: end }) },
+    ),
+  undoRejectBlock: (id: string, start: string, end: string) =>
+    request<{ intent_id: string; status: string }>(`/api/intents/${id}/blocks/not-now`, {
+      method: "DELETE",
+      body: JSON.stringify({ expected_start: start, expected_end: end }),
+    }),
+  restoreIntentDate: (id: string) =>
+    request<{ intent_id: string; date: string; start: string; blocks: number }>(
+      `/api/intents/${id}/restore-date`,
+      { method: "POST" },
+    ),
+  suggestIntent: (id: string) =>
+    request<IntentSuggestion>(`/api/intents/${id}/suggest`, { method: "POST" }),
   uncompleteBlock: (id: string, start: string, end: string) =>
     request<Intent>(`/api/intents/${id}/complete-block`, {
       method: "DELETE",
@@ -596,6 +663,13 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  capacity: (date: string) => request<DailyCapacity>(`/api/capacity/${date}`),
+  planningProfile: () => request<PlanningProfile>("/api/settings/planning-profile"),
+  savePlanningProfile: (body: PlanningProfile) =>
+    request<PlanningProfile>("/api/settings/planning-profile", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
   daily: (date: string) => request<DailyData>(`/api/daily/${date}`),
   saveDailyPlan: (date: string, body: { win_condition: string; first_step: string }) =>
     request<{ date: string; win_condition: string; first_step: string }>(`/api/daily/${date}`, {
@@ -687,6 +761,16 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ quadrant, date }),
     }),
+  dailyDecisions: (decisions: DailyDecision[]) =>
+    request<{ count: number; atomic: true; change_set_id: string; results: Array<Record<string, unknown>> }>(
+      "/api/daily/decisions",
+      { method: "POST", body: JSON.stringify({ decisions }) },
+    ),
+  restoreDailyItemDate: (id: string) =>
+    request<{ item_id: string; date: string; status: string }>(
+      `/api/daily/items/${id}/restore-date`,
+      { method: "POST" },
+    ),
   saveDailyReview: (date: string, body: DailyReview) =>
     request<{ date: string } & DailyReview>(`/api/daily/${date}/review`, {
       method: "PUT",

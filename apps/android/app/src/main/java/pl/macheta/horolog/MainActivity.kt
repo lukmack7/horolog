@@ -149,7 +149,7 @@ class MainActivity : ComponentActivity() {
                     title = "Planer Horolog",
                     message = "Powiadomienia działają prawidłowo.",
                     channel = NotificationChannels.SCHEDULE,
-                    deepLink = "horolog://planner",
+                    deepLink = HorologDeepLinks.PLANNER,
                     notificationId = 20261007,
                 )
             }
@@ -182,6 +182,10 @@ class MainActivity : ComponentActivity() {
                         "Pełnoekranowy alarm Planera Horolog działa.",
                     )
                     putExtra(NotificationAlarmReceiver.EXTRA_NOTIFICATION_ID, 20261008)
+                    putExtra(
+                        NotificationAlarmReceiver.EXTRA_DEEP_LINK,
+                        HorologDeepLinks.time("test"),
+                    )
                 }
                 startActivity(testIntent)
             }
@@ -276,6 +280,11 @@ class MainActivity : ComponentActivity() {
                 "todo" -> "$baseUrl/todo"
                 "planner" -> "$baseUrl/planner"
                 "daily" -> "$baseUrl/daily"
+                "time" -> Uri.parse("$baseUrl/time").buildUpon().apply {
+                    deepLink.getQueryParameter("focus")
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let { appendQueryParameter("focus", it) }
+                }.build().toString()
                 else -> baseUrl
             }
         }

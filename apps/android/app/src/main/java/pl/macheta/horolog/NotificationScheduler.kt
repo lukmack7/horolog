@@ -75,6 +75,7 @@ object NotificationScheduler {
         title: String,
         message: String,
         minutes: Int,
+        deepLink: String,
     ) {
         val alarm = AlarmSpec(
             key = "snooze:${System.currentTimeMillis()}",
@@ -82,7 +83,7 @@ object NotificationScheduler {
             title = title,
             message = message,
             channel = NotificationChannels.ALARM,
-            deepLink = "horolog://planner",
+            deepLink = deepLink,
             fullScreen = true,
         )
 

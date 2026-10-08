@@ -32,6 +32,8 @@ import {
   CalendarRange,
   Brain,
 } from "lucide-react";
+import { IS_ADHD_EXPERIENCE } from "@/app/lib/experience";
+import { AdhdDailyPage } from "@/app/daily/AdhdDailyPage";
 
 type DailyMode = "plan" | "review" | "history";
 
@@ -98,6 +100,12 @@ function dateKey(date: Date): string {
 const dateKeyFromDate = dateKey;
 
 export default function DailyPage() {
+  if (IS_ADHD_EXPERIENCE) return <AdhdDailyPage />;
+
+  return <StandardDailyPage />;
+}
+
+function StandardDailyPage() {
   const { language, t } = useLanguage();
   const [date, setDate] = useState(() => {
     const now = new Date();

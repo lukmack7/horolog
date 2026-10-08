@@ -32,6 +32,12 @@ class WorkCategory(StrEnum):
     PRIVATE = "private"
 
 
+class EnergyRequired(StrEnum):
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
 class IntentKind(StrEnum):
     TASK = "task"
     HABIT = "habit"
@@ -82,6 +88,19 @@ class CompletedBlock(BaseModel):
         return self
 
 
+class NotNowBlock(BaseModel):
+    """A concrete placement the user explicitly rejected for this intent."""
+
+    start: datetime
+    end: datetime
+
+    @model_validator(mode="after")
+    def _ordered(self) -> NotNowBlock:
+        if self.end <= self.start:
+            raise ValueError("not-now block end must be after start")
+        return self
+
+
 class Intent(BaseModel):
     """A demand for time that the solver must satisfy."""
 
@@ -90,6 +109,9 @@ class Intent(BaseModel):
     title: str
     priority: Priority = Priority.P3
     category: WorkCategory | None = None
+    first_step: str | None = None
+    energy_required: EnergyRequired | None = None
+    original_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
 
     # How much time, over what repeating period.
     minutes_per_period: int = Field(gt=0)
@@ -146,6 +168,7 @@ class Intent(BaseModel):
     nothing here has to stay in sync with the placement engine."""
 
     completed_blocks: list[CompletedBlock] = Field(default_factory=list)
+    not_now_blocks: list[NotNowBlock] = Field(default_factory=list)
     """Concrete scheduled occurrences already completed by the user.
 
     Stored as absolute datetimes so completion remains stable when the

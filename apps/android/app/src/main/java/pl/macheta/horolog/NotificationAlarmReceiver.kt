@@ -18,7 +18,7 @@ class NotificationAlarmReceiver : BroadcastReceiver() {
             title = intent.getStringExtra(EXTRA_TITLE) ?: "Planer Horolog",
             message = intent.getStringExtra(EXTRA_MESSAGE) ?: "",
             channel = intent.getStringExtra(EXTRA_CHANNEL) ?: NotificationChannels.SCHEDULE,
-            deepLink = intent.getStringExtra(EXTRA_DEEP_LINK) ?: "horolog://planner",
+            deepLink = intent.getStringExtra(EXTRA_DEEP_LINK) ?: HorologDeepLinks.PLANNER,
             notificationId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, 0),
             fullScreen = intent.getBooleanExtra(EXTRA_FULL_SCREEN, false),
         )
@@ -84,6 +84,7 @@ class NotificationAlarmReceiver : BroadcastReceiver() {
                 .setContentText(message)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(message))
                 .setContentIntent(openPendingIntent)
+                .addAction(R.drawable.ic_horolog, "Otwórz zadanie", openPendingIntent)
                 .setCategory(
                     if (fullScreen) NotificationCompat.CATEGORY_ALARM
                     else NotificationCompat.CATEGORY_REMINDER,

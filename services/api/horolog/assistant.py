@@ -137,6 +137,8 @@ class TodoInboxSuggestion(BaseModel):
         pattern=r"^\d{4}-\d{2}-\d{2}$",
     )
     rationale: str = Field(min_length=1, max_length=800)
+    first_step: str = Field(min_length=1, max_length=500)
+    steps: list[str] = Field(min_length=2, max_length=5)
 
 
 TODO_SUGGEST_SYSTEM = """\
@@ -153,6 +155,9 @@ Rules:
 - deadline_date: preserve an existing explicit deadline. Infer a date only when
   the task text itself clearly contains a relative/absolute deadline. Otherwise null.
 - rationale should be short and in Polish.
+- first_step is one concrete, low-friction action that starts the task.
+- steps contains 2 to 5 concise proposed execution steps. These are suggestions
+  only and are never saved automatically.
 """
 
 
@@ -174,6 +179,33 @@ async def suggest_todo_item(
         "Suggest classification for this inbox task."
     )
     return await extract(TodoInboxSuggestion, TODO_SUGGEST_SYSTEM, user, provider=provider)
+
+
+class IntentSuggestion(BaseModel):
+    first_step: str = Field(min_length=1, max_length=500)
+    steps: list[str] = Field(min_length=2, max_length=5)
+
+
+INTENT_SUGGEST_SYSTEM = """\
+You propose a practical way to start one already scheduled task.
+Return only a structured suggestion. Do not claim that anything was saved.
+Write in Polish. first_step must be one concrete low-friction action and steps
+must contain 2 to 5 concise execution steps.
+"""
+
+
+async def suggest_intent_item(
+    *,
+    title: str,
+    current_first_step: str | None,
+    provider: Provider | None = None,
+) -> IntentSuggestion:
+    user = (
+        f"TITLE: {title}\n"
+        f"CURRENT FIRST STEP: {current_first_step}\n"
+        "Propose a first step and a short sequence."
+    )
+    return await extract(IntentSuggestion, INTENT_SUGGEST_SYSTEM, user, provider=provider)
 
 
 class AssistantDecision(BaseModel):

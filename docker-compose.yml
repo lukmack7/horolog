@@ -19,7 +19,7 @@
 # (the `api` service's HOROLOG_DATABASE_URL line already reads from the
 # environment first, so nothing else needs editing)
 
-name: horolog
+name: ${COMPOSE_PROJECT_NAME:-horolog}
 
 services:
   db:
@@ -88,12 +88,13 @@ services:
       HOROLOG_LLM_TIMEOUT_S: ${HOROLOG_LLM_TIMEOUT_S:-180}
       HOROLOG_TIMEZONE: ${HOROLOG_TIMEZONE:-UTC}
       HOROLOG_HORIZON_DAYS: ${HOROLOG_HORIZON_DAYS:-21}
-      HOROLOG_CORS_ORIGINS: '["http://localhost:3000"]'
+      HOROLOG_CORS_ORIGINS: '${HOROLOG_CORS_ORIGINS:-["http://localhost:3000"]}'
       # Where a provider's consent screen sends the browser back to — the
       # loopback-bound host port below, by default. Override both for a real
       # deployment; see .env.example.
       HOROLOG_PUBLIC_API_URL: ${HOROLOG_PUBLIC_API_URL:-http://localhost:8000}
       HOROLOG_PUBLIC_WEB_URL: ${HOROLOG_PUBLIC_WEB_URL:-http://localhost:3000}
+      HOROLOG_CALENDAR_WRITEBACK_ENABLED: ${HOROLOG_CALENDAR_WRITEBACK_ENABLED:-false}
       HOROLOG_GOOGLE_CLIENT_ID: ${HOROLOG_GOOGLE_CLIENT_ID:-}
       HOROLOG_GOOGLE_CLIENT_SECRET: ${HOROLOG_GOOGLE_CLIENT_SECRET:-}
       HOROLOG_OUTLOOK_CLIENT_ID: ${HOROLOG_OUTLOOK_CLIENT_ID:-}
@@ -107,7 +108,7 @@ services:
     volumes:
       - api-data:/app/data
     ports:
-      - "127.0.0.1:8000:8000"
+      - "${HOROLOG_API_BIND_ADDRESS:-127.0.0.1}:${HOROLOG_API_PORT:-8000}:8000"
     restart: unless-stopped
 
   web:
@@ -120,6 +121,7 @@ services:
         # `.next/`; `next start` never re-reads it, so setting this as a
         # runtime env var here would silently do nothing.
         HOROLOG_API_URL: http://api:8000
+        NEXT_PUBLIC_HOROLOG_EXPERIENCE: ${NEXT_PUBLIC_HOROLOG_EXPERIENCE:-standard}
     depends_on:
       api: { condition: service_healthy }
     environment:
@@ -127,7 +129,7 @@ services:
       # generic rewrite proxy (notably the local LLM assistant).
       HOROLOG_API_URL: http://api:8000
     ports:
-      - "3000:3000"
+      - "${HOROLOG_WEB_BIND_ADDRESS:-0.0.0.0}:${HOROLOG_WEB_PORT:-3000}:3000"
     restart: unless-stopped
 
 volumes:

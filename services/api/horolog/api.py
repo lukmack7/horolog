@@ -17,7 +17,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from datetime import date as Date
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from urllib.parse import urlencode
 
 import httpx
@@ -36,6 +36,7 @@ from horolog.assistant import (
     AssistantMessage,
     AssistantReference,
     converse,
+    suggest_intent_item,
     suggest_todo_item,
 )
 from horolog.capture import capture, capture_daily_actions, to_payload
@@ -49,6 +50,8 @@ from horolog.db import (
     DailyReviewRow,
     IntentRow,
     NotificationSettingsRow,
+    PlanningProfileRow,
+    PlanRow,
     SyncedBlockRow,
     SystemLogRow,
     TimeEntryRow,
@@ -65,8 +68,10 @@ from horolog.domain.events import BusyInterval
 from horolog.domain.intent import (
     CompletedBlock,
     DailyWindow,
+    EnergyRequired,
     Intent,
     IntentKind,
+    NotNowBlock,
     Priority,
     WorkCategory,
 )
@@ -196,6 +201,8 @@ class IntentIn(BaseModel):
     kind: IntentKind = IntentKind.TASK
     priority: Priority = Priority.P3
     category: WorkCategory | None = None
+    first_step: str | None = Field(default=None, max_length=1000)
+    energy_required: EnergyRequired | None = None
     minutes_per_period: int = Field(gt=0)
     period_days: int | None = Field(default=None, gt=0)
     min_chunk_minutes: int = Field(default=30, gt=0)
@@ -281,6 +288,8 @@ class IntentIn(BaseModel):
             title=self.title,
             priority=self.priority,
             category=self.category,
+            first_step=self.first_step,
+            energy_required=self.energy_required,
             minutes_per_period=self.minutes_per_period,
             period_days=self.period_days,
             min_chunk_minutes=self.min_chunk_minutes,
@@ -318,6 +327,28 @@ class MoveIntentIn(BaseModel):
     start: LocalDateTime
     end: LocalDateTime
     exact: bool = True
+
+
+class BlockDecisionIn(BaseModel):
+    expected_start: LocalDateTime
+    expected_end: LocalDateTime
+
+
+class EnergyWindowIn(BaseModel):
+    energy: EnergyRequired
+    start_min: int = Field(ge=0, lt=24 * 60)
+    end_min: int = Field(gt=0, le=24 * 60)
+
+    @model_validator(mode="after")
+    def _valid_window(self) -> EnergyWindowIn:
+        if self.end_min <= self.start_min:
+            raise ValueError("energy window end must be after start")
+        return self
+
+
+class PlanningProfileIn(BaseModel):
+    daily_capacity_minutes: int = Field(gt=0, le=24 * 60)
+    energy_windows: list[EnergyWindowIn] = Field(default_factory=list, max_length=12)
 
 
 class UserPreferencesIn(BaseModel):
@@ -368,6 +399,8 @@ class IntentPatchIn(BaseModel):
     priority: Priority | None = None
     category: WorkCategory | None = None
     deadline_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    first_step: str | None = Field(default=None, max_length=1000)
+    energy_required: EnergyRequired | None = None
 
 
 class BusyIn(BaseModel):
@@ -455,6 +488,28 @@ class DailyDecisionIn(BaseModel):
 class DailyMoveIn(BaseModel):
     quadrant: int = Field(ge=1, le=4)
     date: str = Field(min_length=10, max_length=10)
+
+
+class DailyBulkDecisionIn(BaseModel):
+    item_id: str
+    action: Literal["complete", "keep", "defer", "to_todo", "cancel"]
+    date: str | None = Field(default=None, min_length=10, max_length=10)
+    until: str | None = Field(default=None, min_length=10, max_length=10)
+
+
+class DailyBulkDecisionsIn(BaseModel):
+    decisions: list[DailyBulkDecisionIn] = Field(min_length=1, max_length=50)
+
+    @model_validator(mode="after")
+    def _valid_decisions(self) -> DailyBulkDecisionsIn:
+        if len({item.item_id for item in self.decisions}) != len(self.decisions):
+            raise ValueError("each daily item may appear only once")
+        for item in self.decisions:
+            if item.action == "keep" and item.date is None:
+                raise ValueError("keep requires date")
+            if item.action == "defer" and item.until is None:
+                raise ValueError("defer requires until")
+        return self
 
 
 class DailyReviewIn(BaseModel):
@@ -666,6 +721,7 @@ def _daily_item_dict(
     return {
         "id": row.id,
         "plan_date": row.plan_date,
+        "original_date": row.plan_date,
         "title": row.title,
         "quadrant": row.quadrant,
         "minutes": row.minutes,
@@ -754,12 +810,20 @@ async def _roll_daily_intent(
         max_per_day=intent.max_per_day,
         allowed_weekdays=[],
         earliest=earliest,
+        latest=day + timedelta(days=1),
         due=due,
         deadline_date=intent.deadline_date,
         preferred_start_min=intent.preferred_start_min,
     )
     moved = wire.to_domain(intent.id, origin(), await _preferred_workday(db)).model_copy(
         update={
+            "first_step": intent.first_step,
+            "energy_required": intent.energy_required,
+            "original_date": intent.original_date or row.plan_date,
+            "blocked_slots": intent.blocked_slots,
+            "not_now_blocks": intent.not_now_blocks,
+            "zoom_meeting_id": intent.zoom_meeting_id,
+            "zoom_join_url": intent.zoom_join_url,
             "completed_at": intent.completed_at,
             "completed_blocks": intent.completed_blocks,
         }
@@ -906,6 +970,30 @@ async def suggest_todo(
     return suggestion.model_dump(mode="json")
 
 
+@app.post("/api/intents/{intent_id}/suggest")
+async def suggest_intent(
+    intent_id: str,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    row = await db.get(IntentRow, intent_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"no intent {intent_id!r}")
+    intent = Intent.model_validate(row.payload)
+    try:
+        suggestion = await suggest_intent_item(
+            title=intent.title,
+            current_first_step=intent.first_step,
+        )
+    except ExtractionFailed as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (ProviderError, httpx.HTTPError, RuntimeError) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"language model unreachable: {exc}",
+        ) from exc
+    return suggestion.model_dump(mode="json")
+
+
 @app.patch("/api/todos/{todo_id}")
 async def patch_todo(
     todo_id: str,
@@ -1030,6 +1118,7 @@ async def assign_todo_to_daily(
 
 
 NOTIFICATION_SETTINGS_ID = 1
+PLANNING_PROFILE_ID = 1
 
 
 def _notification_settings_dict(
@@ -1076,6 +1165,36 @@ async def put_notification_preferences(
 
     await db.commit()
     return _notification_settings_dict(row)
+
+
+def _planning_profile_dict(row: PlanningProfileRow | None) -> dict[str, Any]:
+    return {
+        "daily_capacity_minutes": row.daily_capacity_minutes if row is not None else 8 * 60,
+        "energy_windows": row.energy_windows if row is not None else [],
+    }
+
+
+@app.get("/api/settings/planning-profile")
+async def get_planning_profile(
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    return _planning_profile_dict(await db.get(PlanningProfileRow, PLANNING_PROFILE_ID))
+
+
+@app.put("/api/settings/planning-profile")
+async def put_planning_profile(
+    body: PlanningProfileIn,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    row = await db.get(PlanningProfileRow, PLANNING_PROFILE_ID)
+    if row is None:
+        row = PlanningProfileRow(id=PLANNING_PROFILE_ID)
+        db.add(row)
+    row.daily_capacity_minutes = body.daily_capacity_minutes
+    row.energy_windows = [item.model_dump(mode="json") for item in body.energy_windows]
+    row.updated_at = datetime.now(UTC)
+    await db.commit()
+    return _planning_profile_dict(row)
 
 
 @app.get("/api/settings")
@@ -1704,7 +1823,6 @@ async def create_daily_item(date: str, body: DailyItemIn, db: AsyncSession = Dep
         ).scalars().all()
         if existing_rows:
             row = existing_rows[0]
-            row.plan_date = date
             row.title = body.title
             row.quadrant = body.quadrant
             row.minutes = body.minutes
@@ -1716,8 +1834,11 @@ async def create_daily_item(date: str, body: DailyItemIn, db: AsyncSession = Dep
                 duplicate.cancelled_at = now
 
             decision = await db.get(DailyItemDecisionRow, row.id)
+            if decision is None and date != row.plan_date:
+                decision = DailyItemDecisionRow(item_id=row.id)
+                db.add(decision)
             if decision is not None:
-                decision.defer_until = None
+                decision.defer_until = date if date != row.plan_date else None
                 decision.acknowledged_date = None
                 decision.updated_at = now
 
@@ -1754,6 +1875,7 @@ async def create_daily_item(date: str, body: DailyItemIn, db: AsyncSession = Dep
             max_chunk_minutes=body.minutes,
             max_per_day=1,
             earliest=day,
+            latest=day + timedelta(days=1),
             due=deadline_end or (day + timedelta(days=1)),
             deadline_date=body.deadline_date,
         )
@@ -1800,13 +1922,14 @@ async def complete_daily_item(item_id: str, db: AsyncSession = Depends(session))
         raise HTTPException(status_code=404, detail="daily item not found")
     if row.completed_at is None:
         row.completed_at = datetime.now(UTC)
-        await db.commit()
     if row.intent_id:
         intent_row = await db.get(IntentRow, row.intent_id)
         if intent_row:
             intent = Intent.model_validate(intent_row.payload)
             if intent.period_days is None and intent.completed_at is None:
                 await complete_intent(row.intent_id, db, record_history=False)
+    else:
+        await db.commit()
     after = await _planning_snapshot(db)
     await _save_change_set(
         db,
@@ -1859,6 +1982,18 @@ async def move_daily_item(
 
     row.quadrant = body.quadrant
     row.priority = body.quadrant
+    decision = await db.get(DailyItemDecisionRow, item_id)
+    if body.date != row.plan_date:
+        if decision is None:
+            decision = DailyItemDecisionRow(item_id=item_id)
+            db.add(decision)
+        decision.defer_until = body.date
+        decision.acknowledged_date = None
+        decision.updated_at = datetime.now(UTC)
+    elif decision is not None:
+        decision.defer_until = None
+        decision.acknowledged_date = None
+        decision.updated_at = datetime.now(UTC)
 
     meta = await db.get(DailyItemMetaRow, item_id)
     deadline_date = meta.deadline_date if meta is not None else None
@@ -1888,6 +2023,7 @@ async def move_daily_item(
             max_chunk_minutes=row.minutes,
             max_per_day=1,
             earliest=target_day,
+            latest=target_day + timedelta(days=1),
             due=deadline_end or (target_day + timedelta(days=1)),
             deadline_date=deadline_date,
         )
@@ -1913,6 +2049,36 @@ async def move_daily_item(
         intent_row = await db.get(IntentRow, row.intent_id)
         intent_payload = intent_row.payload if intent_row else None
     return _daily_item_dict(row, body.date, intent_payload, meta=meta)
+
+
+@app.post("/api/daily/items/{item_id}/restore-date")
+async def restore_daily_item_date(
+    item_id: str,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    before = await _planning_snapshot(db)
+    item = await db.get(DailyPlanItemRow, item_id)
+    if item is None or item.cancelled_at is not None:
+        raise HTTPException(status_code=404, detail="daily item not found")
+    decision = await db.get(DailyItemDecisionRow, item_id)
+    if decision is not None:
+        decision.defer_until = None
+        decision.acknowledged_date = None
+        decision.updated_at = datetime.now(UTC)
+    await _roll_daily_intent(item, item.plan_date, db)
+    await db.commit()
+    if item.intent_id:
+        await _replan(db)
+    after = await _planning_snapshot(db)
+    await _save_change_set(
+        db,
+        source="daily",
+        title=f"Przywrócono datę · {item.title}",
+        summary=[{"action": "daily_restore_date", "item_id": item_id, "date": item.plan_date}],
+        before=before,
+        after=after,
+    )
+    return {"item_id": item_id, "date": item.plan_date, "status": "restored"}
 
 
 @app.post("/api/daily/items/{item_id}/keep")
@@ -1991,13 +2157,10 @@ async def defer_daily_item(
     return {"item_id": item_id, "until": body.until, "status": "deferred"}
 
 
-@app.post("/api/daily/items/{item_id}/to-todo")
-async def daily_item_to_todo(
-    item_id: str,
-    db: AsyncSession = Depends(session),
-) -> dict[str, Any]:
-    before = await _planning_snapshot(db)
-    item = await db.get(DailyPlanItemRow, item_id)
+async def _daily_item_to_todo_state(
+    item: DailyPlanItemRow,
+    db: AsyncSession,
+) -> TodoInboxRow:
     if item is None or item.cancelled_at is not None:
         raise HTTPException(status_code=404, detail="daily item not found")
     if item.completed_at is not None:
@@ -2006,21 +2169,23 @@ async def daily_item_to_todo(
             detail="Wykonanego zadania nie przenosi się do Do zrobienia.",
         )
 
-    meta = await db.get(DailyItemMetaRow, item_id)
-    deadline_date = meta.deadline_date if meta is not None else None
-    if deadline_date is None and item.intent_id:
+    intent: Intent | None = None
+    if item.intent_id:
         intent_row = await db.get(IntentRow, item.intent_id)
         if intent_row is not None:
-            deadline_date = Intent.model_validate(intent_row.payload).deadline_date
+            intent = Intent.model_validate(intent_row.payload)
+            if intent.period_days is not None:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Cyklicznej aktywności nie przenosi się do Do zrobienia.",
+                )
 
-    todo = TodoInboxRow(
-        id=uuid.uuid4().hex[:16],
-        title=item.title,
-        minutes=item.minutes,
-        category=item.category,
-        deadline_date=deadline_date,
-    )
-    db.add(todo)
+    meta = await db.get(DailyItemMetaRow, item.id)
+    deadline_date = meta.deadline_date if meta is not None else None
+    if deadline_date is None and intent is not None:
+        deadline_date = intent.deadline_date
+
+    todo: TodoInboxRow | None = None
     cancelled_at = datetime.now(UTC)
     item.cancelled_at = cancelled_at
 
@@ -2038,10 +2203,33 @@ async def daily_item_to_todo(
             linked.cancelled_at = cancelled_at
 
         intent_row = await db.get(IntentRow, item.intent_id)
-        if intent_row is not None:
-            intent = Intent.model_validate(intent_row.payload)
-            if intent.period_days is None and intent.kind == IntentKind.TASK:
-                await db.delete(intent_row)
+        if intent_row is not None and intent is not None and intent.kind == IntentKind.TASK:
+            todo = await _return_task_to_todo(db, intent)
+            await db.delete(intent_row)
+
+    if todo is None:
+        todo = TodoInboxRow(
+            id=uuid.uuid4().hex[:16],
+            title=item.title,
+            minutes=item.minutes,
+            category=item.category,
+            deadline_date=deadline_date,
+        )
+        db.add(todo)
+    await db.execute(delete(TodoAssignmentRow).where(TodoAssignmentRow.daily_item_id == item.id))
+    return todo
+
+
+@app.post("/api/daily/items/{item_id}/to-todo")
+async def daily_item_to_todo(
+    item_id: str,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    before = await _planning_snapshot(db)
+    item = await db.get(DailyPlanItemRow, item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="daily item not found")
+    todo = await _daily_item_to_todo_state(item, db)
 
     await db.commit()
     await _replan(db)
@@ -2065,6 +2253,153 @@ async def daily_item_to_todo(
         "item_id": item_id,
         "todo_id": todo.id,
         "status": "moved_to_todo",
+    }
+
+
+async def _complete_daily_item_state(
+    item: DailyPlanItemRow,
+    db: AsyncSession,
+) -> None:
+    if not item.intent_id:
+        item.completed_at = item.completed_at or datetime.now(UTC)
+        return
+    intent_row = await db.get(IntentRow, item.intent_id)
+    if intent_row is None:
+        item.completed_at = item.completed_at or datetime.now(UTC)
+        return
+    intent = Intent.model_validate(intent_row.payload)
+    if intent.period_days is not None:
+        raise HTTPException(
+            status_code=422,
+            detail="Wystąpienie cykliczne oznacz jako wykonane z ekranu Teraz.",
+        )
+    completed_at = datetime.now(UTC)
+    item.completed_at = item.completed_at or completed_at
+    if intent.completed_at is not None:
+        return
+    previous_plan = await load_previous_plan(db)
+    archived = [
+        CompletedBlock(
+            start=from_slot(block.start_slot, origin()),
+            end=from_slot(block.end_slot, origin()),
+            completed_at=completed_at,
+        )
+        for block in (previous_plan.blocks if previous_plan is not None else [])
+        if block.intent_id == item.intent_id
+    ]
+    intent = intent.model_copy(
+        update={
+            "completed_at": completed_at,
+            "completed_blocks": archived or intent.completed_blocks,
+        }
+    )
+    intent_row.payload = intent.model_dump(mode="json")
+    linked = (
+        await db.execute(
+            select(DailyPlanItemRow).where(
+                DailyPlanItemRow.intent_id == item.intent_id,
+                DailyPlanItemRow.completed_at.is_(None),
+            )
+        )
+    ).scalars().all()
+    for row in linked:
+        row.completed_at = completed_at
+    await _stop_active_timer_state(db, item.intent_id)
+
+
+@app.post("/api/daily/decisions")
+async def bulk_daily_decisions(
+    body: DailyBulkDecisionsIn,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    items: dict[str, DailyPlanItemRow] = {}
+    for decision in body.decisions:
+        item = await db.get(DailyPlanItemRow, decision.item_id)
+        if item is None or item.cancelled_at is not None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"daily item {decision.item_id!r} not found",
+            )
+        if decision.date is not None:
+            _daily_date(decision.date)
+        if decision.until is not None:
+            target = _daily_date(decision.until)
+            if target.date() < origin().date():
+                raise HTTPException(
+                    status_code=422,
+                    detail="Nie można świadomie przenieść zadania do dnia w przeszłości.",
+                )
+        if decision.action == "to_todo" and item.completed_at is not None:
+            raise HTTPException(
+                status_code=422,
+                detail="Wykonanego zadania nie przenosi się do Do zrobienia.",
+            )
+        items[decision.item_id] = item
+
+    before = await _planning_snapshot(db)
+    summary: list[dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
+    now = datetime.now(UTC)
+    try:
+        for requested in body.decisions:
+            item = items[requested.item_id]
+            result: dict[str, Any] = {
+                "item_id": item.id,
+                "action": requested.action,
+            }
+            if requested.action == "complete":
+                await _complete_daily_item_state(item, db)
+            elif requested.action == "cancel":
+                item.cancelled_at = now
+            elif requested.action == "to_todo":
+                todo = await _daily_item_to_todo_state(item, db)
+                result["todo_id"] = todo.id
+            else:
+                stored_decision = await db.get(DailyItemDecisionRow, item.id)
+                if stored_decision is None:
+                    stored_decision = DailyItemDecisionRow(item_id=item.id)
+                    db.add(stored_decision)
+                if requested.action == "keep":
+                    stored_decision.acknowledged_date = requested.date
+                    stored_decision.defer_until = None
+                else:
+                    stored_decision.defer_until = requested.until
+                    stored_decision.acknowledged_date = None
+                    await _roll_daily_intent(item, requested.until or "", db)
+                stored_decision.updated_at = now
+            summary.append({**result, "title": item.title})
+            results.append(result)
+
+        plan = await _solve_current_plan(db)
+        plan_row = await db.get(PlanRow, 1)
+        if plan_row is None:
+            db.add(PlanRow(id=1, payload=plan.model_dump_json()))
+        else:
+            plan_row.payload = plan.model_dump_json()
+            plan_row.saved_at = now
+        after = await _planning_snapshot(db)
+        change = ChangeSetRow(
+            id=uuid.uuid4().hex[:16],
+            source="daily",
+            title=f"Decyzje Daily · {len(results)}",
+            summary=summary,
+            before_state=before,
+            after_state=after,
+        )
+        db.add(change)
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
+
+    bus.publish(json.dumps({"blocks": len(plan.blocks), "solve_ms": round(plan.solve_ms, 2)}))
+    if any(item.action == "complete" for item in body.decisions):
+        bus.publish(json.dumps({"event": "timer_stop"}))
+    return {
+        "count": len(results),
+        "atomic": True,
+        "change_set_id": change.id,
+        "results": results,
     }
 
 
@@ -4387,6 +4722,35 @@ async def _time_entry_dict(
     }
 
 
+async def _stop_active_timer_state(
+    db: AsyncSession,
+    intent_id: str,
+) -> TimeEntryRow | None:
+    row = (
+        await db.execute(
+            select(TimeEntryRow)
+            .where(
+                TimeEntryRow.intent_id == intent_id,
+                TimeEntryRow.status.in_(["running", "paused"]),
+            )
+            .order_by(TimeEntryRow.started_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        return None
+    now = datetime.now(UTC)
+    if row.status == "running" and row.last_resumed_at is not None:
+        row.accumulated_seconds += max(
+            0,
+            int((_utc_aware(now) - _utc_aware(row.last_resumed_at)).total_seconds()),
+        )
+    row.last_resumed_at = None
+    row.status = "stopped"
+    row.ended_at = now
+    return row
+
+
 async def _save_history_event(
     db: AsyncSession,
     *,
@@ -4543,6 +4907,7 @@ async def start_time_tracking(
     )
     db.add(row)
     await db.commit()
+    bus.publish(json.dumps({"event": "timer_start", "intent_id": intent_id}))
     await _save_history_event(
         db,
         source="timer",
@@ -4585,6 +4950,7 @@ async def pause_time_tracking(
     row.last_resumed_at = None
     row.status = "paused"
     await db.commit()
+    bus.publish(json.dumps({"event": "timer_pause", "intent_id": intent_id}))
     await _save_history_event(
         db,
         source="timer",
@@ -4616,6 +4982,7 @@ async def resume_time_tracking(
     row.status = "running"
     row.last_resumed_at = datetime.now(UTC)
     await db.commit()
+    bus.publish(json.dumps({"event": "timer_resume", "intent_id": intent_id}))
     await _save_history_event(
         db,
         source="timer",
@@ -4630,35 +4997,12 @@ async def stop_time_tracking(
     intent_id: str,
     db: AsyncSession = Depends(session),
 ) -> dict[str, Any]:
-    row = (
-        await db.execute(
-            select(TimeEntryRow)
-            .where(
-                TimeEntryRow.intent_id == intent_id,
-                TimeEntryRow.status.in_(["running", "paused"]),
-            )
-            .order_by(TimeEntryRow.started_at.desc())
-            .limit(1)
-        )
-    ).scalar_one_or_none()
+    row = await _stop_active_timer_state(db, intent_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Brak aktywnego timera dla tego zadania.")
 
-    now = datetime.now(UTC)
-    if row.status == "running" and row.last_resumed_at is not None:
-        row.accumulated_seconds += max(
-            0,
-            int(
-                (
-                    _utc_aware(now)
-                    - _utc_aware(row.last_resumed_at)
-                ).total_seconds()
-            ),
-        )
-    row.last_resumed_at = None
-    row.status = "stopped"
-    row.ended_at = now
     await db.commit()
+    bus.publish(json.dumps({"event": "timer_stop", "intent_id": intent_id}))
     payload = await _time_entry_dict(db, row)
     await _save_history_event(
         db,
@@ -5020,7 +5364,10 @@ async def complete_intent(
     ).scalars().all()
     for daily_row in daily_rows:
         daily_row.completed_at = completed_at
+    stopped_timer = await _stop_active_timer_state(db, intent_id)
     await db.commit()
+    if stopped_timer is not None:
+        bus.publish(json.dumps({"event": "timer_stop", "intent_id": intent_id}))
     await _replan(db)
     if before is not None:
         after = await _planning_snapshot(db)
@@ -5122,6 +5469,21 @@ async def move_intent(
     target_day_start = start.replace(hour=0, minute=0, second=0, microsecond=0)
     target_day_end = target_day_start + timedelta(days=1)
     start_min = start.hour * 60 + start.minute
+    previous_plan = await load_previous_plan(db)
+    original_block = next(
+        (
+            block
+            for block in (previous_plan.blocks if previous_plan is not None else [])
+            if block.intent_id == intent_id
+        ),
+        None,
+    )
+    original_date = intent.original_date
+    if original_date is None:
+        if original_block is not None:
+            original_date = from_slot(original_block.start_slot, base).date().isoformat()
+        elif intent.earliest_slot is not None:
+            original_date = from_slot(intent.earliest_slot, base).date().isoformat()
 
     if intent.kind == IntentKind.MEETING:
         requested_seconds = int((end - start).total_seconds())
@@ -5164,6 +5526,7 @@ async def move_intent(
                     )
                 ],
                 "allowed_weekdays": [],
+                "original_date": original_date,
             }
         )
     else:
@@ -5209,6 +5572,7 @@ async def move_intent(
                         )
                     ],
                     "allowed_weekdays": [],
+                    "original_date": original_date,
                 }
             )
         else:
@@ -5236,6 +5600,7 @@ async def move_intent(
                         DailyWindow(start_min=start_min, end_min=window_end)
                     ],
                     "allowed_weekdays": [],
+                    "original_date": original_date,
                 }
             )
 
@@ -5319,17 +5684,15 @@ async def move_intent(
     ).scalars().all()
     target_key = target_date.isoformat()
     for daily_row in linked_daily:
-        daily_row.plan_date = target_key
+        decision = await db.get(DailyItemDecisionRow, daily_row.id)
+        if decision is None:
+            decision = DailyItemDecisionRow(item_id=daily_row.id)
+            db.add(decision)
+        decision.defer_until = target_key if target_key != daily_row.plan_date else None
+        decision.acknowledged_date = None
+        decision.updated_at = datetime.now(UTC)
         if intent.kind == IntentKind.TASK and body.exact:
             daily_row.minutes = dragged_minutes
-        decision = await db.get(DailyItemDecisionRow, daily_row.id)
-        if decision is not None:
-            # A direct Planner move is authoritative. Any older "defer until"
-            # decision referred to the previous placement and must no longer
-            # project a virtual copy into Daily.
-            decision.defer_until = None
-            decision.acknowledged_date = None
-            decision.updated_at = datetime.now(UTC)
     if linked_daily:
         await db.commit()
 
@@ -5359,6 +5722,97 @@ async def move_intent(
             after=after,
         )
     return result
+
+
+@app.post("/api/intents/{intent_id}/blocks/not-now")
+async def reject_current_intent_block(
+    intent_id: str,
+    body: BlockDecisionIn,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    row = await db.get(IntentRow, intent_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"no intent {intent_id!r}")
+    plan = await load_previous_plan(db) or await _replan(db)
+    expected = (to_slot(body.expected_start, origin()), to_slot(body.expected_end, origin()))
+    if not any(
+        block.intent_id == intent_id
+        and (block.start_slot, block.end_slot) == expected
+        for block in plan.blocks
+    ):
+        raise HTTPException(status_code=409, detail="the expected block is no longer current")
+
+    intent = Intent.model_validate(row.payload)
+    rejected = NotNowBlock(start=body.expected_start, end=body.expected_end)
+    if not any(
+        block.start == rejected.start and block.end == rejected.end
+        for block in intent.not_now_blocks
+    ):
+        intent = intent.model_copy(update={"not_now_blocks": [*intent.not_now_blocks, rejected]})
+        row.payload = intent.model_dump(mode="json")
+        await db.commit()
+        await _replan(db)
+    return {
+        "intent_id": intent_id,
+        "decision": "not_now",
+        "expected_start": rejected.start.isoformat(),
+        "expected_end": rejected.end.isoformat(),
+        "demand_minutes": intent.minutes_per_period,
+    }
+
+
+@app.delete("/api/intents/{intent_id}/blocks/not-now")
+async def undo_rejected_intent_block(
+    intent_id: str,
+    body: BlockDecisionIn,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    row = await db.get(IntentRow, intent_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"no intent {intent_id!r}")
+    intent = Intent.model_validate(row.payload)
+    remaining = [
+        block
+        for block in intent.not_now_blocks
+        if not (block.start == body.expected_start and block.end == body.expected_end)
+    ]
+    if len(remaining) == len(intent.not_now_blocks):
+        raise HTTPException(status_code=404, detail="not-now decision not found")
+    intent = intent.model_copy(update={"not_now_blocks": remaining})
+    row.payload = intent.model_dump(mode="json")
+    await db.commit()
+    await _replan(db)
+    return {"intent_id": intent_id, "status": "restored"}
+
+
+@app.post("/api/intents/{intent_id}/restore-date")
+async def restore_intent_date(
+    intent_id: str,
+    db: AsyncSession = Depends(session),
+) -> dict[str, Any]:
+    row = await db.get(IntentRow, intent_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"no intent {intent_id!r}")
+    intent = Intent.model_validate(row.payload)
+    if intent.original_date is None:
+        raise HTTPException(status_code=409, detail="intent has no original date")
+    day = _daily_date(intent.original_date)
+    duration = timedelta(minutes=intent.minutes_per_period)
+    default_start = (await _preferred_workday(db))[0]
+    start_min = (
+        intent.preferred_start_min
+        if intent.preferred_start_min is not None
+        else intent.daily_windows[0].start_min
+        if intent.daily_windows
+        else default_start
+    )
+    start = day + timedelta(minutes=start_min)
+    end = start + duration
+    return await move_intent(
+        intent_id,
+        MoveIntentIn(start=start, end=end, exact=False),
+        db,
+    )
 
 
 @app.patch("/api/intents/{intent_id}")
@@ -5403,6 +5857,10 @@ async def patch_intent(
                 )
             updates["deadline_date"] = body.deadline_date
             updates["due_slot"] = deadline_slot
+    if "first_step" in body.model_fields_set:
+        updates["first_step"] = body.first_step
+    if "energy_required" in body.model_fields_set:
+        updates["energy_required"] = body.energy_required
 
     if not updates:
         return intent.model_dump(mode="json")
@@ -5454,6 +5912,18 @@ async def update_intent(
             "zoom_join_url": previous.zoom_join_url,
             "completed_blocks": previous.completed_blocks,
             "completed_at": previous.completed_at,
+            "original_date": previous.original_date,
+            "not_now_blocks": previous.not_now_blocks,
+            "first_step": (
+                body.first_step
+                if "first_step" in body.model_fields_set
+                else previous.first_step
+            ),
+            "energy_required": (
+                body.energy_required
+                if "energy_required" in body.model_fields_set
+                else previous.energy_required
+            ),
         }
     )
     row.payload = intent.model_dump(mode="json")
@@ -5506,6 +5976,61 @@ async def get_plan(db: AsyncSession = Depends(session)) -> PlanOut:
     if plan is None:
         plan = await _replan(db)
     return await _render(db, plan)
+
+
+def _merged_minutes(intervals: list[tuple[datetime, datetime]]) -> int:
+    merged: list[tuple[datetime, datetime]] = []
+    for start, end in sorted(intervals):
+        if not merged or start > merged[-1][1]:
+            merged.append((start, end))
+        else:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+    return sum(int((end - start).total_seconds() // 60) for start, end in merged)
+
+
+@app.get("/api/capacity/{date}")
+async def daily_capacity(date: str, db: AsyncSession = Depends(session)) -> dict[str, Any]:
+    day = _daily_date(date)
+    workday_start, workday_end = await _preferred_workday(db)
+    start = day + timedelta(minutes=workday_start)
+    end = day + timedelta(minutes=workday_end)
+    rendered = await get_plan(db)
+
+    def clipped(values: list[tuple[datetime, datetime]]) -> list[tuple[datetime, datetime]]:
+        return [
+            (max(item_start, start), min(item_end, end))
+            for item_start, item_end in values
+            if item_end > start and item_start < end
+        ]
+
+    busy = clipped([(item.start, item.end) for item in rendered.busy])
+    scheduled = clipped(
+        [(item.start, item.end) for item in rendered.blocks if not item.completed]
+    )
+    occupied = sorted([*busy, *scheduled])
+    merged: list[tuple[datetime, datetime]] = []
+    for item_start, item_end in occupied:
+        if not merged or item_start > merged[-1][1]:
+            merged.append((item_start, item_end))
+        else:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], item_end))
+    cursor = start
+    longest_free = 0
+    for item_start, item_end in merged:
+        longest_free = max(longest_free, int((item_start - cursor).total_seconds() // 60))
+        cursor = max(cursor, item_end)
+    longest_free = max(longest_free, int((end - cursor).total_seconds() // 60))
+    workday = max(0, int((end - start).total_seconds() // 60))
+    occupied_minutes = _merged_minutes(occupied)
+    return {
+        "date": date,
+        "workday": workday,
+        "busy": _merged_minutes(busy),
+        "scheduled": _merged_minutes(scheduled),
+        "free": max(0, workday - occupied_minutes),
+        "longest_free": max(0, longest_free),
+        "unmet": sum(item.shortfall_minutes for item in rendered.unmet),
+    }
 
 
 @app.post("/api/plan/solve")
@@ -6390,16 +6915,31 @@ async def _busy(db: AsyncSession) -> list[BusyInterval]:
     return busy
 
 
-async def _replan(db: AsyncSession) -> Plan:
+async def _solve_current_plan(db: AsyncSession) -> Plan:
     intents = await load_intents(db)
-    plan = solve(
-        intents,
+    base = origin()
+    solver_intents = []
+    for intent in intents:
+        not_now_slots = [
+            (to_slot(block.start, base), to_slot(block.end, base))
+            for block in intent.not_now_blocks
+            if to_slot(block.end, base) > 0 and to_slot(block.start, base) < horizon_slots()
+        ]
+        solver_intents.append(
+            intent.model_copy(update={"blocked_slots": [*intent.blocked_slots, *not_now_slots]})
+        )
+    return solve(
+        solver_intents,
         await _busy(db),
         horizon_slots(),
         previous=await load_previous_plan(db),
         origin_weekday=origin().weekday(),
         origin_at=origin(),
     )
+
+
+async def _replan(db: AsyncSession) -> Plan:
+    plan = await _solve_current_plan(db)
     await save_plan(db, plan)
     bus.publish(json.dumps({"blocks": len(plan.blocks), "solve_ms": round(plan.solve_ms, 2)}))
     return plan

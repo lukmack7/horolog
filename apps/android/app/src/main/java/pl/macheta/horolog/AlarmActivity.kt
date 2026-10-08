@@ -2,7 +2,9 @@ package pl.macheta.horolog
 
 import android.app.NotificationManager
 import android.content.Context
+import android.content.Intent
 import android.graphics.Color
+import android.net.Uri
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.media.RingtoneManager
@@ -51,6 +53,8 @@ class AlarmActivity : ComponentActivity() {
             ?: "Planer Horolog"
         val message = intent.getStringExtra(NotificationAlarmReceiver.EXTRA_MESSAGE)
             ?: "Czas na zaplanowane działanie."
+        val deepLink = intent.getStringExtra(NotificationAlarmReceiver.EXTRA_DEEP_LINK)
+            ?: HorologDeepLinks.PLANNER
 
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -83,6 +87,24 @@ class AlarmActivity : ComponentActivity() {
             })
 
             addView(Button(context).apply {
+                text = "Otwórz zadanie"
+                textSize = 17f
+                setOnClickListener {
+                    startActivity(
+                        Intent(
+                            Intent.ACTION_VIEW,
+                            Uri.parse(deepLink),
+                            this@AlarmActivity,
+                            MainActivity::class.java,
+                        ),
+                    )
+                    dismissNotification()
+                    stopAlarm()
+                    finish()
+                }
+            })
+
+            addView(Button(context).apply {
                 text = "Zamknij"
                 textSize = 17f
                 setOnClickListener {
@@ -101,6 +123,7 @@ class AlarmActivity : ComponentActivity() {
                         title = title,
                         message = "Ponowne przypomnienie: $message",
                         minutes = 10,
+                        deepLink = deepLink,
                     )
                     dismissNotification()
                     stopAlarm()

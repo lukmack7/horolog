@@ -1,0 +1,71 @@
+name: ${COMPOSE_PROJECT_NAME:-horolog-adhd}
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: horolog
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.adhd}
+      POSTGRES_DB: horolog
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U horolog -d horolog"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.api
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      HOROLOG_DATABASE_URL: postgresql+asyncpg://horolog:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.adhd}@db:5432/horolog
+      HOROLOG_LLM_PROVIDER: ${HOROLOG_LLM_PROVIDER:-openai}
+      HOROLOG_LLM_BASE_URL: ${HOROLOG_LLM_BASE_URL:?set HOROLOG_LLM_BASE_URL in .env.adhd}
+      HOROLOG_LLM_MODEL: ${HOROLOG_LLM_MODEL:-qwen3:8b}
+      HOROLOG_LLM_API_KEY: ${HOROLOG_LLM_API_KEY:-}
+      HOROLOG_LLM_TIMEOUT_S: ${HOROLOG_LLM_TIMEOUT_S:-180}
+      HOROLOG_TIMEZONE: ${HOROLOG_TIMEZONE:-UTC}
+      HOROLOG_HORIZON_DAYS: ${HOROLOG_HORIZON_DAYS:-21}
+      HOROLOG_CORS_ORIGINS: '${HOROLOG_CORS_ORIGINS:-["http://localhost:3200"]}'
+      HOROLOG_PUBLIC_API_URL: ${HOROLOG_PUBLIC_API_URL:-http://localhost:8200}
+      HOROLOG_PUBLIC_WEB_URL: ${HOROLOG_PUBLIC_WEB_URL:-http://localhost:3200}
+      HOROLOG_CALENDAR_WRITEBACK_ENABLED: "false"
+      HOROLOG_GOOGLE_CLIENT_ID: ${HOROLOG_GOOGLE_CLIENT_ID:-}
+      HOROLOG_GOOGLE_CLIENT_SECRET: ${HOROLOG_GOOGLE_CLIENT_SECRET:-}
+      HOROLOG_OUTLOOK_CLIENT_ID: ${HOROLOG_OUTLOOK_CLIENT_ID:-}
+      HOROLOG_OUTLOOK_CLIENT_SECRET: ${HOROLOG_OUTLOOK_CLIENT_SECRET:-}
+      HOROLOG_LINEAR_CLIENT_ID: ${HOROLOG_LINEAR_CLIENT_ID:-}
+      HOROLOG_LINEAR_CLIENT_SECRET: ${HOROLOG_LINEAR_CLIENT_SECRET:-}
+      HOROLOG_TODOIST_CLIENT_ID: ${HOROLOG_TODOIST_CLIENT_ID:-}
+      HOROLOG_TODOIST_CLIENT_SECRET: ${HOROLOG_TODOIST_CLIENT_SECRET:-}
+      HOROLOG_GITHUB_CLIENT_ID: ${HOROLOG_GITHUB_CLIENT_ID:-}
+      HOROLOG_GITHUB_CLIENT_SECRET: ${HOROLOG_GITHUB_CLIENT_SECRET:-}
+    volumes:
+      - api-data:/app/data
+    ports:
+      - "${HOROLOG_API_BIND_ADDRESS:-127.0.0.1}:${HOROLOG_API_PORT:-8200}:8000"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.web
+      args:
+        HOROLOG_API_URL: http://api:8000
+        NEXT_PUBLIC_HOROLOG_EXPERIENCE: adhd
+    depends_on:
+      api: { condition: service_healthy }
+    environment:
+      HOROLOG_API_URL: http://api:8000
+    ports:
+      - "${HOROLOG_WEB_BIND_ADDRESS:-0.0.0.0}:${HOROLOG_WEB_PORT:-3200}:3000"
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  api-data:

@@ -14,14 +14,15 @@ from zoneinfo import ZoneInfo
 import httpx
 import pytest
 import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
 
 _tmpdir = tempfile.mkdtemp()
 os.environ["HOROLOG_DATABASE_URL"] = f"sqlite+aiosqlite:///{_tmpdir}/test.db"
 
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import horolog.api as api_module
 from horolog.api import (
     IntentIn,
     _apply_explicit_todo_timeline,
@@ -48,6 +49,7 @@ from horolog.db import (
     DailyReviewRow,
     IntentRow,
     NotificationSettingsRow,
+    PlanningProfileRow,
     PlanRow,
     SlotOriginRow,
     SystemLogRow,
@@ -93,6 +95,7 @@ async def client() -> AsyncIterator[AsyncClient]:
         await db.execute(delete(DailyPlanRow))
         await db.execute(delete(DailyReviewRow))
         await db.execute(delete(NotificationSettingsRow))
+        await db.execute(delete(PlanningProfileRow))
         await db.execute(delete(UserSettingsRow))
         await db.commit()
         await gen.aclose()
@@ -2336,6 +2339,441 @@ async def test_planner_can_retime_and_resize_break(client: AsyncClient) -> None:
     block = next(item for item in plan["blocks"] if item["intent_id"] == ident)
     assert datetime.fromisoformat(block["start"]) == new_start
     assert datetime.fromisoformat(block["end"]) == new_end
+
+
+@pytest.mark.asyncio
+async def test_explicit_daily_task_cannot_spill_into_the_next_day(
+    client: AsyncClient,
+) -> None:
+    target = origin() + timedelta(days=1)
+    created = await client.post(
+        f"/api/daily/{target.date().isoformat()}/items",
+        json={
+            "title": "Stay on selected day",
+            "quadrant": 1,
+            "minutes": 60,
+            "schedule_enabled": True,
+        },
+    )
+    assert created.status_code == 201, created.text
+    intent_id = created.json()["intent_id"]
+    await client.put(
+        "/api/busy",
+        json=[
+            {
+                "label": "No room that day",
+                "start": target.replace(hour=0, minute=0).isoformat(),
+                "end": (target + timedelta(days=1)).replace(hour=0, minute=0).isoformat(),
+            }
+        ],
+    )
+
+    plan = (await client.get("/api/plan")).json()
+    assert not any(block["intent_id"] == intent_id for block in plan["blocks"])
+    assert any(item["intent_id"] == intent_id for item in plan["unmet"])
+    intent = next(
+        item
+        for item in (await client.get("/api/intents")).json()
+        if item["id"] == intent_id
+    )
+    assert intent["latest_slot"] == int((target.date() - origin().date()).days + 1) * 96
+
+
+@pytest.mark.asyncio
+async def test_daily_defer_and_restore_preserve_original_date_without_duplicates(
+    client: AsyncClient,
+) -> None:
+    original = (origin() + timedelta(days=1)).date().isoformat()
+    deferred = (origin() + timedelta(days=2)).date().isoformat()
+    created = (
+        await client.post(
+            f"/api/daily/{original}/items",
+            json={
+                "title": "Return to original day",
+                "quadrant": 2,
+                "minutes": 30,
+                "schedule_enabled": True,
+            },
+        )
+    ).json()
+
+    moved = await client.post(
+        f"/api/daily/items/{created['id']}/defer",
+        json={"until": deferred},
+    )
+    assert moved.status_code == 200, moved.text
+    intent = next(
+        item
+        for item in (await client.get("/api/intents")).json()
+        if item["id"] == created["intent_id"]
+    )
+    assert intent["original_date"] == original
+    deferred_view = (await client.get(f"/api/daily/{deferred}")).json()
+    item = next(item for item in deferred_view["items"] if item["id"] == created["id"])
+    assert item["plan_date"] == original
+
+    restored = await client.post(f"/api/daily/items/{created['id']}/restore-date")
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["date"] == original
+    intents = (await client.get("/api/intents")).json()
+    assert sum(item["id"] == created["intent_id"] for item in intents) == 1
+    original_view = (await client.get(f"/api/daily/{original}")).json()
+    assert sum(item["id"] == created["id"] for item in original_view["items"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_intent_move_restore_and_put_preserve_adhd_metadata(
+    client: AsyncClient,
+) -> None:
+    original_day = origin() + timedelta(days=1)
+    start = original_day.replace(hour=10, minute=0, second=0, microsecond=0)
+    created = await client.post(
+        "/api/intents",
+        json={
+            "title": "Standalone move",
+            "minutes_per_period": 30,
+            "min_chunk_minutes": 30,
+            "max_chunk_minutes": 30,
+            "earliest": start.isoformat(),
+            "latest": (start + timedelta(minutes=30)).isoformat(),
+            "first_step": "Open the source file",
+            "energy_required": "high",
+        },
+    )
+    ident = created.json()["id"]
+    moved_start = start + timedelta(days=2)
+    moved = await client.post(
+        f"/api/intents/{ident}/move",
+        json={
+            "start": moved_start.isoformat(),
+            "end": (moved_start + timedelta(minutes=30)).isoformat(),
+        },
+    )
+    assert moved.status_code == 200, moved.text
+
+    replaced = await client.put(
+        f"/api/intents/{ident}",
+        json={
+            "title": "Standalone move edited",
+            "minutes_per_period": 30,
+            "min_chunk_minutes": 30,
+            "max_chunk_minutes": 30,
+        },
+    )
+    assert replaced.status_code == 200, replaced.text
+    assert replaced.json()["original_date"] == original_day.date().isoformat()
+    assert replaced.json()["first_step"] == "Open the source file"
+    assert replaced.json()["energy_required"] == "high"
+
+    restored = await client.post(f"/api/intents/{ident}/restore-date")
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["date"] == original_day.date().isoformat()
+    intents = (await client.get("/api/intents")).json()
+    assert sum(item["id"] == ident for item in intents) == 1
+
+
+@pytest.mark.asyncio
+async def test_daily_to_todo_reuses_source_todo_and_clears_assignment(
+    client: AsyncClient,
+) -> None:
+    day = (origin() + timedelta(days=1)).date().isoformat()
+    todo = (await client.post("/api/todos", json={"title": "Round trip", "minutes": 30})).json()
+    assigned = (
+        await client.post(
+            f"/api/todos/{todo['id']}/assign",
+            json={"date": day, "quadrant": 1},
+        )
+    ).json()
+    returned = await client.post(f"/api/daily/items/{assigned['id']}/to-todo")
+    assert returned.status_code == 200, returned.text
+    assert returned.json()["todo_id"] == todo["id"]
+    assert [item["id"] for item in (await client.get("/api/todos")).json()] == [todo["id"]]
+
+    gen = cast("AsyncGenerator[AsyncSession, None]", session())
+    db = await anext(gen)
+    try:
+        assignments = (await db.execute(select(TodoAssignmentRow))).scalars().all()
+        assert assignments == []
+    finally:
+        await gen.aclose()
+
+
+@pytest.mark.asyncio
+async def test_daily_to_todo_does_not_merge_an_unrelated_identical_todo(
+    client: AsyncClient,
+) -> None:
+    day = origin().date().isoformat()
+    existing = (
+        await client.post("/api/todos", json={"title": "Same title", "minutes": 30})
+    ).json()
+    item = (
+        await client.post(
+            f"/api/daily/{day}/items",
+            json={
+                "title": "Same title",
+                "quadrant": 3,
+                "minutes": 30,
+                "schedule_enabled": False,
+            },
+        )
+    ).json()
+
+    returned = await client.post(f"/api/daily/items/{item['id']}/to-todo")
+    assert returned.status_code == 200, returned.text
+    assert returned.json()["todo_id"] != existing["id"]
+    assert len((await client.get("/api/todos")).json()) == 2
+
+
+@pytest.mark.asyncio
+async def test_bulk_rejects_recurring_completion_and_to_todo(
+    client: AsyncClient,
+) -> None:
+    day = origin().date().isoformat()
+    recurring = (
+        await client.post(
+            "/api/intents",
+            json={
+                "title": "Recurring routine",
+                "kind": "habit",
+                "minutes_per_period": 30,
+                "period_days": 1,
+            },
+        )
+    ).json()
+    item = (
+        await client.post(
+            f"/api/daily/{day}/items",
+            json={
+                "title": "Recurring routine",
+                "quadrant": 2,
+                "minutes": 30,
+                "schedule_enabled": True,
+                "intent_id": recurring["id"],
+            },
+        )
+    ).json()
+
+    for action in ("complete", "to_todo"):
+        response = await client.post(
+            "/api/daily/decisions",
+            json={"decisions": [{"item_id": item["id"], "action": action}]},
+        )
+        assert response.status_code == 422, response.text
+
+    intents = (await client.get("/api/intents")).json()
+    assert any(intent["id"] == recurring["id"] for intent in intents)
+
+
+@pytest.mark.asyncio
+async def test_bulk_daily_decisions_are_atomic_and_create_one_change_set(
+    client: AsyncClient,
+) -> None:
+    day = origin().date().isoformat()
+    first = (
+        await client.post(
+            f"/api/daily/{day}/items",
+            json={"title": "Bulk first", "quadrant": 3, "schedule_enabled": False},
+        )
+    ).json()
+    second = (
+        await client.post(
+            f"/api/daily/{day}/items",
+            json={"title": "Bulk second", "quadrant": 4, "schedule_enabled": False},
+        )
+    ).json()
+
+    failed = await client.post(
+        "/api/daily/decisions",
+        json={
+            "decisions": [
+                {"item_id": first["id"], "action": "complete"},
+                {"item_id": "missing", "action": "cancel"},
+            ]
+        },
+    )
+    assert failed.status_code == 404
+    view = (await client.get(f"/api/daily/{day}")).json()
+    unchanged = next(item for item in view["items"] if item["id"] == first["id"])
+    assert unchanged["completed_at"] is None
+
+    before_history = len((await client.get("/api/history")).json())
+    applied = await client.post(
+        "/api/daily/decisions",
+        json={
+            "decisions": [
+                {"item_id": first["id"], "action": "complete"},
+                {"item_id": second["id"], "action": "cancel"},
+            ]
+        },
+    )
+    assert applied.status_code == 200, applied.text
+    assert applied.json()["atomic"] is True
+    assert len((await client.get("/api/history")).json()) == before_history + 1
+
+
+@pytest.mark.asyncio
+async def test_not_now_rejects_only_expected_block_without_reducing_demand(
+    client: AsyncClient,
+) -> None:
+    tomorrow = origin() + timedelta(days=1)
+    created = await client.post(
+        "/api/intents",
+        json={
+            "title": "Move this block later",
+            "minutes_per_period": 60,
+            "min_chunk_minutes": 60,
+            "max_chunk_minutes": 60,
+            "earliest": tomorrow.replace(hour=9, minute=0).isoformat(),
+            "latest": tomorrow.replace(hour=17, minute=0).isoformat(),
+        },
+    )
+    ident = created.json()["id"]
+    before = next(
+        item
+        for item in (await client.get("/api/plan")).json()["blocks"]
+        if item["intent_id"] == ident
+    )
+    rejected = await client.post(
+        f"/api/intents/{ident}/blocks/not-now",
+        json={"expected_start": before["start"], "expected_end": before["end"]},
+    )
+    assert rejected.status_code == 200, rejected.text
+    assert rejected.json()["demand_minutes"] == 60
+    after = next(
+        item
+        for item in (await client.get("/api/plan")).json()["blocks"]
+        if item["intent_id"] == ident
+    )
+    assert after["start"] != before["start"]
+    intent = next(
+        item for item in (await client.get("/api/intents")).json() if item["id"] == ident
+    )
+    assert intent["minutes_per_period"] == 60
+    assert len(intent["not_now_blocks"]) == 1
+
+    stale = await client.post(
+        f"/api/intents/{ident}/blocks/not-now",
+        json={"expected_start": before["start"], "expected_end": before["end"]},
+    )
+    assert stale.status_code == 409
+    undone = await client.request(
+        "DELETE",
+        f"/api/intents/{ident}/blocks/not-now",
+        json={"expected_start": before["start"], "expected_end": before["end"]},
+    )
+    assert undone.status_code == 200, undone.text
+    intent = next(
+        item for item in (await client.get("/api/intents")).json() if item["id"] == ident
+    )
+    assert intent["not_now_blocks"] == []
+
+
+@pytest.mark.asyncio
+async def test_suggestions_include_steps_without_persisting_them(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Suggestion:
+        def model_dump(self, mode: str) -> dict[str, typing.Any]:
+            assert mode == "json"
+            return {
+                "minutes": 30,
+                "quadrant": 2,
+                "category": None,
+                "deadline_date": None,
+                "rationale": "Propozycja",
+                "first_step": "Otwórz plik",
+                "steps": ["Otwórz plik", "Zrób szkic"],
+            }
+
+    async def fake_todo(**_: typing.Any) -> Suggestion:
+        return Suggestion()
+
+    async def fake_intent(**_: typing.Any) -> Suggestion:
+        return Suggestion()
+
+    monkeypatch.setattr(api_module, "suggest_todo_item", fake_todo)
+    monkeypatch.setattr(api_module, "suggest_intent_item", fake_intent)
+    todo = (await client.post("/api/todos", json={"title": "Suggest todo"})).json()
+    intent = (
+        await client.post(
+            "/api/intents",
+            json={"title": "Suggest intent", "minutes_per_period": 30},
+        )
+    ).json()
+
+    todo_suggestion = (await client.post(f"/api/todos/{todo['id']}/suggest")).json()
+    intent_suggestion = (await client.post(f"/api/intents/{intent['id']}/suggest")).json()
+    assert todo_suggestion["first_step"] == "Otwórz plik"
+    assert len(intent_suggestion["steps"]) == 2
+    unchanged = next(
+        item
+        for item in (await client.get("/api/intents")).json()
+        if item["id"] == intent["id"]
+    )
+    assert unchanged["first_step"] is None
+
+
+@pytest.mark.asyncio
+async def test_capacity_and_planning_profile_are_informational(
+    client: AsyncClient,
+) -> None:
+    defaults = (await client.get("/api/settings/planning-profile")).json()
+    assert defaults == {"daily_capacity_minutes": 480, "energy_windows": []}
+    saved = await client.put(
+        "/api/settings/planning-profile",
+        json={
+            "daily_capacity_minutes": 360,
+            "energy_windows": [
+                {"energy": "high", "start_min": 540, "end_min": 720},
+                {"energy": "low", "start_min": 900, "end_min": 1020},
+            ],
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["daily_capacity_minutes"] == 360
+
+    day = (origin() + timedelta(days=1)).replace(hour=9, minute=0)
+    await client.put(
+        "/api/busy",
+        json=[
+            {
+                "label": "Busy hour",
+                "start": day.isoformat(),
+                "end": (day + timedelta(hours=1)).isoformat(),
+            }
+        ],
+    )
+    capacity = (await client.get(f"/api/capacity/{day.date().isoformat()}")).json()
+    assert capacity["workday"] == 480
+    assert capacity["busy"] == 60
+    assert capacity["free"] <= 420
+    assert capacity["longest_free"] <= capacity["free"]
+
+
+@pytest.mark.asyncio
+async def test_completing_active_task_stops_timer_atomically(client: AsyncClient) -> None:
+    intent = (
+        await client.post(
+            "/api/intents",
+            json={"title": "Timed completion", "minutes_per_period": 30},
+        )
+    ).json()
+    started = await client.post(f"/api/time-tracking/{intent['id']}/start")
+    assert started.status_code == 201, started.text
+    completed = await client.post(f"/api/intents/{intent['id']}/complete")
+    assert completed.status_code == 200, completed.text
+    assert (await client.get("/api/time-tracking/active")).json() is None
+
+    gen = cast("AsyncGenerator[AsyncSession, None]", session())
+    db = await anext(gen)
+    try:
+        entry = await db.get(TimeEntryRow, started.json()["id"])
+        assert entry is not None
+        assert entry.status == "stopped"
+        assert entry.ended_at is not None
+    finally:
+        await gen.aclose()
 
 
 @pytest.mark.asyncio

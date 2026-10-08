@@ -31,6 +31,7 @@ class NotificationSyncWorker(
             val plan = getJson("/api/plan")
             val intents = getArray("/api/intents")
             val todos = getArray("/api/todos")
+            val activeTimer = getNullableJson("/api/time-tracking/active")
 
             val alarms = mutableListOf<AlarmSpec>()
             appendScheduleAlarms(settings, plan, alarms)
@@ -39,6 +40,7 @@ class NotificationSyncWorker(
             appendEndOfDayAlarm(settings, alarms)
 
             NotificationScheduler.replaceAll(applicationContext, alarms)
+            ActiveTimerNotification.update(applicationContext, activeTimer)
             Result.success()
         } catch (_: Exception) {
             // Keep the previous alarms intact. WorkManager will try again later.
@@ -95,6 +97,7 @@ class NotificationSyncWorker(
                 "task", "focus", "habit" -> {
                     if (!settings.optBoolean("task_enabled", true)) continue
                     val before = settings.optInt("task_minutes_before", 15)
+                    val deepLink = HorologDeepLinks.time(intentId)
                     if (before > 0) {
                         alarms += AlarmSpec(
                             key = "task-before:$intentId:$occurrence:$chunk:$before",
@@ -102,7 +105,7 @@ class NotificationSyncWorker(
                             title = title,
                             message = "Zaplanowany blok rozpocznie się za $before min.",
                             channel = NotificationChannels.SCHEDULE,
-                            deepLink = "horolog://planner",
+                            deepLink = deepLink,
                         )
                     }
                     if (settings.optBoolean("task_at_start", true)) {
@@ -112,7 +115,7 @@ class NotificationSyncWorker(
                             title = title,
                             message = "Czas rozpocząć ten blok.",
                             channel = NotificationChannels.ALARM,
-                            deepLink = "horolog://planner",
+                            deepLink = deepLink,
                             fullScreen = true,
                         )
                     }
@@ -201,6 +204,9 @@ class NotificationSyncWorker(
     private fun getJson(path: String): JSONObject = JSONObject(get(path))
 
     private fun getArray(path: String): JSONArray = JSONArray(get(path))
+
+    private fun getNullableJson(path: String): JSONObject? =
+        get(path).trim().takeUnless { it == "null" }?.let(::JSONObject)
 
     private fun get(path: String): String {
         val connection = URL(BuildConfig.HOROLOG_BASE_URL.trimEnd('/') + path)

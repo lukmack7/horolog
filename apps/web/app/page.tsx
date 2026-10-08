@@ -12,6 +12,7 @@ import { WorkflowSection } from "@/components/ui/workflow-section"
 import { FaqSection } from "@/components/ui/faq-section"
 import { CtaSection } from "@/components/ui/cta-section"
 import { Footer } from "@/components/ui/footer"
+import { IS_ADHD_EXPERIENCE } from "@/app/lib/experience"
 
 const INTEGRATIONS = [
   "Google Calendar", "Outlook / Exchange", "Apple Calendar", "iCalendar", "CalDAV",
@@ -49,7 +50,7 @@ export default function Landing() {
   // should take the user straight to the primary Planner. Keep the public
   // Vercel deployment as the project landing page.
   if (!LANDING_ONLY) {
-    redirect("/planner")
+    redirect(IS_ADHD_EXPERIENCE ? "/time" : "/planner")
   }
 
   return (
