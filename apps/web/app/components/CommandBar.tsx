@@ -28,6 +28,7 @@ import {
   type AssistantMessage,
   type AssistantReference,
   type Block,
+  type TodoInboxItem,
 } from "@/app/lib/api";
 
 type MentionTrigger = {
@@ -238,12 +239,13 @@ export function CommandBar({
     {
       role: "assistant",
       content:
-        "Co chcesz zaplanować albo zmienić? Użyj @, aby wskazać konkretny wpis z dziś/jutra, oraz #, aby wskazać kategorię. Niczego nie zmienię bez Twojego potwierdzenia.",
+        "Co chcesz zaplanować albo zmienić? Użyj @, aby wskazać wpis z Plannera lub „Do zrobienia”, oraz #, aby wskazać kategorię. Niczego nie zmienię bez Twojego potwierdzenia.",
     },
   ]);
   const [input, setInput] = useState("");
   const [inputReferences, setInputReferences] = useState<AssistantReference[]>([]);
   const [mentionBlocks, setMentionBlocks] = useState<Block[]>([]);
+  const [mentionTodos, setMentionTodos] = useState<TodoInboxItem[]>([]);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [pendingActions, setPendingActions] = useState<AssistantAction[]>([]);
   const [busy, setBusy] = useState(false);
@@ -258,13 +260,16 @@ export function CommandBar({
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    void api
-      .plan()
-      .then((plan) => {
-        if (!cancelled) setMentionBlocks(plan.blocks);
+    void Promise.all([api.plan(), api.todos()])
+      .then(([plan, todos]) => {
+        if (cancelled) return;
+        setMentionBlocks(plan.blocks);
+        setMentionTodos(todos);
       })
       .catch(() => {
-        if (!cancelled) setMentionBlocks([]);
+        if (cancelled) return;
+        setMentionBlocks([]);
+        setMentionTodos([]);
       });
     return () => {
       cancelled = true;
@@ -316,7 +321,7 @@ export function CommandBar({
       duplicateTitles.set(key, (duplicateTitles.get(key) ?? 0) + 1);
     }
 
-    return candidates
+    const plannerOptions = candidates
       .map((block) => {
         const start = new Date(block.start);
         const dateLabel =
@@ -369,10 +374,54 @@ export function CommandBar({
           },
         };
       })
-      .filter((option) => !query || option.searchable.includes(query))
-      .slice(0, 8)
-      .map(({ searchable: _searchable, ...option }) => option);
-  }, [mentionBlocks, mentionTrigger]);
+      .filter((option) => !query || option.searchable.includes(query));
+
+    const todoOptions = mentionTodos
+      .map((todo) => {
+        const categoryLabel = todo.category
+          ? WORK_CATEGORY_LABEL[todo.category]
+          : null;
+        const deadlineLabel = todo.deadline_date
+          ? `max ${new Date(`${todo.deadline_date}T12:00:00`).toLocaleDateString("pl-PL")}`
+          : null;
+        const searchable = normalizeSearch(
+          [
+            todo.title,
+            "Do zrobienia",
+            categoryLabel ?? "",
+            deadlineLabel ?? "",
+            `${todo.minutes} min`,
+          ].join(" "),
+        );
+        const token = `@[${safeTokenLabel(todo.title)}]`;
+
+        return {
+          key: `todo:${todo.id}`,
+          label: todo.title,
+          meta: [
+            "Do zrobienia",
+            `${todo.minutes} min`,
+            categoryLabel,
+            deadlineLabel,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+          searchable,
+          reference: {
+            kind: "todo" as const,
+            token,
+            todo_id: todo.id,
+          },
+        };
+      })
+      .filter((option) => !query || option.searchable.includes(query));
+
+    const selected = query
+      ? [...plannerOptions, ...todoOptions].slice(0, 10)
+      : [...plannerOptions.slice(0, 6), ...todoOptions.slice(0, 6)];
+
+    return selected.map(({ searchable: _searchable, ...option }) => option);
+  }, [mentionBlocks, mentionTodos, mentionTrigger]);
 
   useEffect(() => {
     setMentionIndex(0);
@@ -391,6 +440,11 @@ export function CommandBar({
             reference.kind === "intent" &&
             option.reference.kind === "intent" &&
             reference.intent_id === option.reference.intent_id
+          ) &&
+          !(
+            reference.kind === "todo" &&
+            option.reference.kind === "todo" &&
+            reference.todo_id === option.reference.todo_id
           ) &&
           !(
             reference.kind === "category" &&
@@ -498,9 +552,11 @@ export function CommandBar({
       ]);
       setPendingActions([]);
       onCaptured();
-      void api
-        .plan()
-        .then((plan) => setMentionBlocks(plan.blocks))
+      void Promise.all([api.plan(), api.todos()])
+        .then(([plan, todos]) => {
+          setMentionBlocks(plan.blocks);
+          setMentionTodos(todos);
+        })
         .catch(() => undefined);
       scrollDown();
     } catch (caught) {
@@ -520,7 +576,7 @@ export function CommandBar({
       {
         role: "assistant",
         content:
-          "Nowa rozmowa. Możesz użyć @ do wskazania wpisu z planu i # do wskazania kategorii.",
+          "Nowa rozmowa. Możesz użyć @ do wskazania wpisu z Plannera lub „Do zrobienia” i # do wskazania kategorii.",
       },
     ]);
     setPendingActions([]);
@@ -725,7 +781,7 @@ export function CommandBar({
                         <Hash size={11} />
                       )}
                       {mentionTrigger.kind === "intent"
-                        ? "Wpisy z dzisiaj i jutra"
+                        ? "Planner + Do zrobienia"
                         : "Kategorie"}
                     </div>
                     <div className="space-y-0.5">
@@ -808,7 +864,7 @@ export function CommandBar({
                 />
                 <div className="flex items-center justify-between gap-2 px-1 pb-0.5">
                   <span className="text-[9.5px] text-fg-subtle">
-                    @ wpis z planu · # kategoria · Enter wysyła
+                    @ Planner/Do zrobienia · # kategoria · Enter wysyła
                   </span>
                   <button
                     type="button"
