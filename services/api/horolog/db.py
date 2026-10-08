@@ -152,6 +152,28 @@ class ChangeSetRow(Base):
     )
 
 
+class SystemLogRow(Base):
+    """A bounded, sanitised diagnostic event visible in Settings."""
+
+    __tablename__ = "system_logs"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True
+    )
+    level: Mapped[str] = mapped_column(String(10), index=True)
+    category: Mapped[str] = mapped_column(String(32), index=True)
+    event: Mapped[str] = mapped_column(String(64), index=True)
+    message: Mapped[str] = mapped_column(String(300))
+    correlation_id: Mapped[str | None] = mapped_column(String(32), default=None, index=True)
+    method: Mapped[str | None] = mapped_column(String(10), default=None)
+    path: Mapped[str | None] = mapped_column(String(300), default=None)
+    provider: Mapped[str | None] = mapped_column(String(32), default=None, index=True)
+    status_code: Mapped[int | None] = mapped_column(Integer, default=None)
+    exception_type: Mapped[str | None] = mapped_column(String(128), default=None)
+    details: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+
 class TimeEntryRow(Base):
     """One real-work timer session attached to an existing Horolog intent."""
 

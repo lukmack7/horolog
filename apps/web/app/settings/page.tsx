@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useLanguage } from "@/app/components/LanguageProvider";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Shell } from "@/app/components/Shell";
 import {
   api,
@@ -13,6 +13,7 @@ import {
   type NotificationPreferences,
   type Plan,
   type Provider,
+  type SystemLogEntry,
 } from "@/app/lib/api";
 import {
   AlertCircle,
@@ -24,8 +25,14 @@ import {
   Copy,
   Download,
   History,
+  ListTree,
   LogIn,
+  Palette,
+  PlugZap,
+  RefreshCw,
   RotateCcw,
+  Settings2,
+  Trash2,
   Timer,
   Server,
   Unplug,
@@ -36,6 +43,25 @@ type Result =
   | { ok: true; count: number; label: string; kind?: "sync" | "push" }
   | { ok: false; message: string }
   | null;
+
+type SettingsSection =
+  | "style"
+  | "planning"
+  | "notifications"
+  | "history"
+  | "logs"
+  | "integrations"
+  | "other";
+
+const SETTINGS_SECTIONS = [
+  { id: "style" as const, label: "Style", icon: Palette },
+  { id: "planning" as const, label: "Planning", icon: Settings2 },
+  { id: "notifications" as const, label: "Notifications", icon: BellRing },
+  { id: "history" as const, label: "Change history", icon: History },
+  { id: "logs" as const, label: "Logs", icon: ListTree },
+  { id: "integrations" as const, label: "Integrations & sync", icon: PlugZap },
+  { id: "other" as const, label: "Other", icon: BookOpenText },
+];
 
 const CALENDAR_PROVIDERS: { id: Provider; label: string; icon: React.ReactNode }[] = [
   {
@@ -164,6 +190,32 @@ export default function SettingsPage() {
   const [history, setHistory] = useState<ChangeHistoryEntry[]>([]);
   const [historyFilter, setHistoryFilter] = useState<"all" | "assistant" | "timer" | "daily" | "manual">("all");
   const [historyPending, setHistoryPending] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState<SettingsSection>("style");
+  const [systemLogs, setSystemLogs] = useState<SystemLogEntry[]>([]);
+  const [logLevel, setLogLevel] = useState("all");
+  const [logCategory, setLogCategory] = useState("all");
+  const [logsPending, setLogsPending] = useState(false);
+  const [logsError, setLogsError] = useState<string | null>(null);
+  const logsRequest = useRef(0);
+
+  const loadSystemLogs = useCallback(async (level = "all", category = "all") => {
+    const requestId = ++logsRequest.current;
+    setLogsPending(true);
+    setLogsError(null);
+    try {
+      const entries = await api.systemLogs({
+        level: level === "all" ? undefined : level,
+        category: category === "all" ? undefined : category,
+      });
+      if (requestId === logsRequest.current) setSystemLogs(entries);
+    } catch (caught) {
+      if (requestId === logsRequest.current) {
+        setLogsError(caught instanceof Error ? caught.message : "Nie udało się pobrać logów.");
+      }
+    } finally {
+      if (requestId === logsRequest.current) setLogsPending(false);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     // Two independent calls, so one failing doesn't have to take down a page
@@ -203,6 +255,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     void load();
+    void loadSystemLogs();
     setFeedUrl(`${window.location.origin}/api/plan.ics`);
 
     const params = new URLSearchParams(window.location.search);
@@ -222,7 +275,7 @@ export default function SettingsPage() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [load]);
+  }, [load, loadSystemLogs]);
 
   async function savePreferences() {
     const start = timeToMinutes(workStart);
@@ -283,6 +336,20 @@ export default function SettingsPage() {
       );
     } finally {
       setHistoryPending(null);
+    }
+  }
+
+  async function clearLogs() {
+    if (!window.confirm(t("Clear all diagnostic logs?"))) return;
+    setLogsPending(true);
+    setLogsError(null);
+    try {
+      await api.clearSystemLogs();
+      setSystemLogs([]);
+    } catch (caught) {
+      setLogsError(caught instanceof Error ? caught.message : "Nie udało się wyczyścić logów.");
+    } finally {
+      setLogsPending(false);
     }
   }
 
@@ -395,7 +462,7 @@ export default function SettingsPage() {
 
   return (
     <Shell onPlanChange={load}>
-      <main className="mx-auto max-w-[800px] space-y-6 px-6 py-8">
+      <main className="mx-auto max-w-[1120px] px-4 py-8 sm:px-6">
         <header className="mb-4">
           <h1 className="text-[28px] font-bold text-fg">{t("Settings")}</h1>
           <p className="mt-1 text-[13.5px] font-medium text-fg-muted">
@@ -403,6 +470,33 @@ export default function SettingsPage() {
           </p>
         </header>
 
+        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+          <nav
+            aria-label="Sekcje ustawień"
+            className="sticky top-4 z-10 flex gap-1 overflow-x-auto rounded-2xl border border-black/[0.08] bg-surface/95 p-1.5 shadow-sm backdrop-blur lg:flex-col"
+          >
+            {SETTINGS_SECTIONS.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setActiveSection(item.id)}
+                  aria-current={activeSection === item.id ? "page" : undefined}
+                  className={`flex shrink-0 items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[12.5px] font-semibold transition-colors lg:w-full ${
+                    activeSection === item.id
+                      ? "bg-accent text-on-accent shadow-sm"
+                      : "text-fg-muted hover:bg-sunk hover:text-fg"
+                  }`}
+                >
+                  <Icon size={15} className="shrink-0" />
+                  {t(item.label)}
+                </button>
+              );
+            })}
+          </nav>
+
+          <div className="min-w-0 space-y-6">
         {loadError && (
           <div className="flex items-center gap-2.5 rounded-card border border-red-200 bg-red-50 p-4 text-[13.5px] font-medium text-danger shadow-sm">
             <AlertCircle size={18} className="shrink-0" />
@@ -441,11 +535,12 @@ export default function SettingsPage() {
           </div>
         )}
 
-        <section className="space-y-5 overflow-hidden rounded-card border border-black/[0.08] bg-surface p-6 shadow-sm">
+        {activeSection === "style" && (
+        <section className="space-y-5 overflow-hidden rounded-card border border-black/[0.08] bg-surface p-4 shadow-sm sm:p-6">
           <div>
-            <h2 className="text-[15px] font-bold text-fg">{t("Planning preferences")}</h2>
+            <h2 className="text-[15px] font-bold text-fg">{t("Style")}</h2>
             <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">
-              {t("Set the hours Horolog should prefer for automatically scheduled work. Manual fixed times can still be outside this range.")}
+              {t("Choose the interface language. More appearance options will live here in the future.")}
             </p>
           </div>
 
@@ -471,6 +566,17 @@ export default function SettingsPage() {
                 {t("English")}
               </button>
             </div>
+          </div>
+        </section>
+        )}
+
+        {activeSection === "planning" && (
+        <section className="space-y-5 overflow-hidden rounded-card border border-black/[0.08] bg-surface p-4 shadow-sm sm:p-6">
+          <div>
+            <h2 className="text-[15px] font-bold text-fg">{t("Planning")}</h2>
+            <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">
+              {t("Set the hours Horolog should prefer for automatically scheduled work. Manual fixed times can still be outside this range.")}
+            </p>
           </div>
 
           <div className="border-t border-black/[0.06] pt-5">
@@ -515,8 +621,10 @@ export default function SettingsPage() {
             )}
           </div>
         </section>
+        )}
 
-        <section className="space-y-5 overflow-hidden rounded-card border border-black/[0.08] bg-surface p-6 shadow-sm">
+        {activeSection === "notifications" && (
+        <section className="space-y-5 overflow-hidden rounded-card border border-black/[0.08] bg-surface p-4 shadow-sm sm:p-6">
           <div className="flex items-start gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sunk text-fg">
               <BellRing size={18} />
@@ -826,8 +934,10 @@ export default function SettingsPage() {
             )}
           </div>
         </section>
+        )}
 
-        <section className="space-y-4 overflow-hidden rounded-card border border-black/[0.08] bg-surface p-6 shadow-sm">
+        {activeSection === "history" && (
+        <section className="space-y-4 overflow-hidden rounded-card border border-black/[0.08] bg-surface p-4 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex items-start gap-3">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sunk text-fg">
@@ -939,8 +1049,145 @@ export default function SettingsPage() {
             )}
           </div>
         </section>
+        )}
 
-        <section className="space-y-5 overflow-hidden rounded-card border border-black/[0.08] bg-surface p-6 shadow-sm">
+        {activeSection === "logs" && (
+        <section className="space-y-5 overflow-hidden rounded-card border border-black/[0.08] bg-surface p-4 shadow-sm sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white">
+                <ListTree size={18} />
+              </span>
+              <div>
+                <h2 className="text-[15px] font-bold text-fg">{t("System logs")}</h2>
+                <p className="mt-1 max-w-[560px] text-[13px] leading-relaxed text-fg-muted">
+                  {t("API and sync failures stored without task content, passwords or tokens. A correlation ID links an entry to the full traceback in server logs.")}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => void loadSystemLogs(logLevel, logCategory)}
+                disabled={logsPending}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-black/[0.08] bg-white px-3 text-[11px] font-semibold text-fg hover:bg-sunk disabled:opacity-50"
+              >
+                <RefreshCw size={13} className={logsPending ? "animate-spin" : ""} />
+                {t("Refresh")}
+              </button>
+              <button
+                type="button"
+                onClick={() => void clearLogs()}
+                disabled={logsPending || systemLogs.length === 0}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 text-[11px] font-semibold text-danger hover:bg-red-100 disabled:opacity-40"
+              >
+                <Trash2 size={13} />
+                {t("Clear")}
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2 border-t border-black/[0.06] pt-4">
+            <label className="text-[11px] font-medium text-fg-muted">
+              {t("Level")}
+              <select
+                value={logLevel}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setLogLevel(value);
+                  void loadSystemLogs(value, logCategory);
+                }}
+                className="ml-2 h-9 rounded-lg border border-black/[0.08] bg-bg px-2.5 text-[12px] font-semibold text-fg"
+              >
+                <option value="all">{t("All")}</option>
+                <option value="error">{t("Errors")}</option>
+                <option value="warning">{t("Warnings")}</option>
+                <option value="info">{t("Information")}</option>
+              </select>
+            </label>
+            <label className="text-[11px] font-medium text-fg-muted">
+              {t("Category")}
+              <select
+                value={logCategory}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setLogCategory(value);
+                  void loadSystemLogs(logLevel, value);
+                }}
+                className="ml-2 h-9 rounded-lg border border-black/[0.08] bg-bg px-2.5 text-[12px] font-semibold text-fg"
+              >
+                <option value="all">{t("All")}</option>
+                <option value="api">API</option>
+                <option value="sync">{t("Synchronization")}</option>
+                <option value="calendar">{t("Calendar")}</option>
+                <option value="oauth">OAuth</option>
+                <option value="llm">AI / LLM</option>
+                <option value="database">Baza danych</option>
+              </select>
+            </label>
+          </div>
+
+          {logsError && (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-[12px] font-medium text-danger">
+              {logsError}
+            </div>
+          )}
+
+          <div className="space-y-2">
+            {systemLogs.map((entry) => (
+              <details key={entry.id} className="group rounded-xl border border-black/[0.07] bg-bg">
+                <summary className="flex cursor-pointer list-none items-start gap-3 p-3.5">
+                  <span
+                    className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${
+                      entry.level === "error"
+                        ? "bg-red-500"
+                        : entry.level === "warning"
+                          ? "bg-amber-500"
+                          : "bg-sky-500"
+                    }`}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span className="text-[12.5px] font-semibold text-fg">{t(entry.message)}</span>
+                      <span className="rounded-full bg-sunk px-2 py-0.5 text-[9.5px] font-semibold uppercase text-fg-muted">
+                        {entry.category}
+                      </span>
+                      {entry.provider && (
+                        <span className="text-[10.5px] font-medium text-fg-subtle">{entry.provider}</span>
+                      )}
+                    </span>
+                    <span className="mt-1 block text-[10.5px] text-fg-subtle">
+                      {new Date(entry.created_at).toLocaleString(language === "pl" ? "pl-PL" : "en-US")}
+                      {entry.status_code ? ` · HTTP ${entry.status_code}` : ""}
+                      {entry.correlation_id ? ` · ID ${entry.correlation_id}` : ""}
+                    </span>
+                  </span>
+                </summary>
+                <div className="grid gap-2 border-t border-black/[0.06] px-4 py-3 text-[11px] text-fg-muted sm:grid-cols-2">
+                  <div><span className="font-semibold text-fg">{t("Event")}:</span> {entry.event}</div>
+                  <div><span className="font-semibold text-fg">{t("Exception")}:</span> {entry.exception_type || "—"}</div>
+                  <div className="sm:col-span-2"><span className="font-semibold text-fg">{t("Path")}:</span> {[entry.method, entry.path].filter(Boolean).join(" ") || "—"}</div>
+                  {Object.keys(entry.details).length > 0 && (
+                    <code className="overflow-x-auto rounded-lg bg-sunk p-2 font-mono text-[10px] sm:col-span-2">
+                      {JSON.stringify(entry.details)}
+                    </code>
+                  )}
+                </div>
+              </details>
+            ))}
+            {!logsPending && systemLogs.length === 0 && !logsError && (
+              <div className="rounded-xl border border-dashed border-black/[0.1] p-8 text-center">
+                <CheckCircle2 size={20} className="mx-auto text-emerald-600" />
+                <div className="mt-2 text-[12.5px] font-semibold text-fg">{t("No recorded problems")}</div>
+                <p className="mt-1 text-[11.5px] text-fg-muted">{t("New diagnostic failures will appear here automatically.")}</p>
+              </div>
+            )}
+          </div>
+        </section>
+        )}
+
+        {activeSection === "other" && (
+        <section className="space-y-5 overflow-hidden rounded-card border border-black/[0.08] bg-surface p-4 shadow-sm sm:p-6">
           <div>
             <h2 className="text-[15px] font-bold text-fg">{t("Access & Manifesto")}</h2>
             <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">
@@ -1020,10 +1267,13 @@ export default function SettingsPage() {
             </div>
           </details>
         </section>
+        )}
 
+        {activeSection === "integrations" && (
+        <>
         <div className="flex items-center justify-between px-1">
           <div>
-            <h2 className="text-[17px] font-bold text-fg">{t("Calendars & Sync")}</h2>
+            <h2 className="text-[17px] font-bold text-fg">{t("Integrations & sync")}</h2>
             <p className="mt-0.5 text-[12px] text-fg-muted">
               {mirrored} {mirrored === 1 ? t("event mirrored") : t("events mirrored")} ·{" "}
               {Object.keys(bySource).length || 0} {t("active sources")}
@@ -1032,7 +1282,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Calendars — OAuth, or paste an ICS/CalDAV address directly */}
-        <section className="space-y-5 overflow-hidden rounded-card border border-black/[0.08] bg-surface p-6 shadow-sm">
+        <section className="space-y-5 overflow-hidden rounded-card border border-black/[0.08] bg-surface p-4 shadow-sm sm:p-6">
           <div>
             <h2 className="text-[15px] font-bold text-fg">{t("Connect a calendar")}</h2>
             <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">
@@ -1044,7 +1294,7 @@ export default function SettingsPage() {
             {CALENDAR_PROVIDERS.map((p) => {
               const isConnected = connected[p.id];
               return (
-                <div key={p.id} className="flex items-center gap-2">
+                <div key={p.id} className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={() => (isConnected ? runSync(p.id) : (window.location.href = `/api/auth/${p.id}`))}
@@ -1165,7 +1415,7 @@ export default function SettingsPage() {
         </section>
 
         {/* Trackers — OAuth, or paste a personal key */}
-        <section className="space-y-4 overflow-hidden rounded-card border border-black/[0.08] bg-surface p-6 shadow-sm">
+        <section className="space-y-4 overflow-hidden rounded-card border border-black/[0.08] bg-surface p-4 shadow-sm sm:p-6">
           <div>
             <h2 className="text-[15px] font-bold text-fg">{t("Connect a tracker")}</h2>
             <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">
@@ -1234,7 +1484,7 @@ export default function SettingsPage() {
         </section>
 
         {/* Subscribable Plan Feed */}
-        <section className="overflow-hidden rounded-card border border-black/[0.08] bg-surface p-6 shadow-sm">
+        <section className="overflow-hidden rounded-card border border-black/[0.08] bg-surface p-4 shadow-sm sm:p-6">
           <div>
             <h2 className="text-[15px] font-bold text-fg">{t("Subscribe to your Horolog plan")}</h2>
             <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">
@@ -1262,6 +1512,10 @@ export default function SettingsPage() {
             </a>
           </div>
         </section>
+        </>
+        )}
+          </div>
+        </div>
       </main>
     </Shell>
   );

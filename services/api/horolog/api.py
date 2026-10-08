@@ -11,7 +11,6 @@ import contextlib
 import json
 import logging
 import re
-import sys
 import time
 import uuid
 from collections.abc import AsyncIterator
@@ -51,6 +50,7 @@ from horolog.db import (
     IntentRow,
     NotificationSettingsRow,
     SyncedBlockRow,
+    SystemLogRow,
     TimeEntryRow,
     TodoAssignmentRow,
     TodoInboxRow,
@@ -105,6 +105,7 @@ from horolog.providers import (
 )
 from horolog.settings import settings
 from horolog.solver.solve import merge_busy, solve
+from horolog.system_logs import record_system_log
 
 logger = logging.getLogger(__name__)
 
@@ -560,6 +561,32 @@ app.add_middleware(
 )
 
 
+def _request_route(request: Request) -> str:
+    route = request.scope.get("route")
+    path = getattr(route, "path", None)
+    return path if isinstance(path, str) else request.url.path
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    if exc.status_code >= 500:
+        await record_system_log(
+            level="error",
+            category="api",
+            event="api.http_error",
+            message="Service request failed.",
+            method=request.method,
+            path=_request_route(request),
+            status_code=exc.status_code,
+            exception_type=type(exc.__cause__).__name__ if exc.__cause__ else type(exc).__name__,
+        )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers=exc.headers,
+    )
+
+
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Turn opaque FastAPI 500s into traceable incidents.
@@ -574,6 +601,17 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
         request.method,
         request.url.path,
         exc_info=exc,
+    )
+    await record_system_log(
+        level="error",
+        category="api",
+        event="api.unhandled",
+        message="Unhandled API error.",
+        correlation_id=error_id,
+        method=request.method,
+        path=_request_route(request),
+        status_code=500,
+        exception_type=type(exc).__name__,
     )
     return JSONResponse(
         status_code=500,
@@ -594,7 +632,11 @@ async def health(db: AsyncSession = Depends(session)) -> dict[str, str]:
     try:
         await db.execute(select(1))
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"database unreachable: {exc}") from exc
+        logger.exception("Database health check failed", exc_info=exc)
+        raise HTTPException(
+            status_code=503,
+            detail="database unreachable; see API server logs for diagnostic details",
+        ) from exc
     return {"status": "ok"}
 
 
@@ -4680,6 +4722,54 @@ async def change_history(
     ]
 
 
+@app.get("/api/system-logs")
+async def system_logs(
+    limit: int = 100,
+    level: str | None = None,
+    category: str | None = None,
+    db: AsyncSession = Depends(session),
+) -> list[dict[str, Any]]:
+    limit = max(1, min(limit, 200))
+    cutoff = datetime.now(UTC) - timedelta(days=settings().system_log_retention_days)
+    await db.execute(delete(SystemLogRow).where(SystemLogRow.created_at < cutoff))
+    await db.commit()
+    query = select(SystemLogRow)
+    if level:
+        query = query.where(SystemLogRow.level == level)
+    if category:
+        query = query.where(SystemLogRow.category == category)
+    rows = (
+        await db.execute(
+            query.order_by(SystemLogRow.created_at.desc(), SystemLogRow.id.desc()).limit(limit)
+        )
+    ).scalars().all()
+    return [
+        {
+            "id": row.id,
+            "created_at": _stable_iso(row.created_at),
+            "level": row.level,
+            "category": row.category,
+            "event": row.event,
+            "message": row.message,
+            "correlation_id": row.correlation_id,
+            "method": row.method,
+            "path": row.path,
+            "provider": row.provider,
+            "status_code": row.status_code,
+            "exception_type": row.exception_type,
+            "details": row.details,
+        }
+        for row in rows
+    ]
+
+
+@app.delete("/api/system-logs", status_code=204)
+async def clear_system_logs(db: AsyncSession = Depends(session)) -> Response:
+    await db.execute(delete(SystemLogRow))
+    await db.commit()
+    return Response(status_code=204)
+
+
 @app.post("/api/history/{change_id}/undo")
 async def undo_change_set(
     change_id: str,
@@ -6043,7 +6133,16 @@ async def _sync_connected_calendars(db: AsyncSession) -> None:
         try:
             await _mirror(db, provider, provider_name)
         except Exception as exc:  # see docstring: a scheduled tick must never kill the loop
-            print(f"background sync: {provider_name} failed: {exc}", file=sys.stderr)
+            logger.exception("Background sync failed for %s", provider_name, exc_info=exc)
+            await record_system_log(
+                level="error",
+                category="sync",
+                event="sync.background_failed",
+                message="Automatic calendar sync failed.",
+                provider=provider_name,
+                exception_type=type(exc).__name__,
+                details={"operation": "pull"},
+            )
 
 
 async def _push_connected_calendars(db: AsyncSession) -> None:
@@ -6062,7 +6161,16 @@ async def _push_connected_calendars(db: AsyncSession) -> None:
         try:
             await _push_calendar(db, provider_name)
         except Exception as exc:  # a scheduled tick must never kill the loop
-            print(f"background push: {provider_name} failed: {exc}", file=sys.stderr)
+            logger.exception("Background push failed for %s", provider_name, exc_info=exc)
+            await record_system_log(
+                level="error",
+                category="sync",
+                event="sync.background_failed",
+                message="Automatic calendar plan push failed.",
+                provider=provider_name,
+                exception_type=type(exc).__name__,
+                details={"operation": "push"},
+            )
 
 
 async def _sync_loop() -> None:
@@ -6146,6 +6254,7 @@ async def _push_calendar(db: AsyncSession, provider_name: str) -> dict[str, int]
     )
 
     created = moved = removed = 0
+    failures: dict[tuple[str, str], int] = {}
     async with httpx.AsyncClient(timeout=20.0) as client:
         try:
             calendar_id = await writer.ensure_calendar(client)
@@ -6193,6 +6302,8 @@ async def _push_calendar(db: AsyncSession, provider_name: str) -> dict[str, int]
                 logger.warning(
                     "push %s: could not create event for %r: %s", provider_name, title, exc
                 )
+                failure = ("create", type(exc).__name__)
+                failures[failure] = failures.get(failure, 0) + 1
                 continue
             db.add(
                 SyncedBlockRow(
@@ -6223,6 +6334,8 @@ async def _push_calendar(db: AsyncSession, provider_name: str) -> dict[str, int]
                 logger.warning(
                     "push %s: could not move event %s: %s", provider_name, row.event_id, exc
                 )
+                failure = ("move", type(exc).__name__)
+                failures[failure] = failures.get(failure, 0) + 1
                 continue
             row.start_slot, row.end_slot = start_slot, end_slot
             moved += 1
@@ -6235,11 +6348,23 @@ async def _push_calendar(db: AsyncSession, provider_name: str) -> dict[str, int]
                 logger.warning(
                     "push %s: could not remove event %s: %s", provider_name, row.event_id, exc
                 )
+                failure = ("remove", type(exc).__name__)
+                failures[failure] = failures.get(failure, 0) + 1
                 continue
             await db.delete(row)
             removed += 1
 
     await db.commit()
+    for (operation, exception_type), count in failures.items():
+        await record_system_log(
+            level="warning",
+            category="calendar",
+            event="calendar.write_failed",
+            message="Could not write part of the plan to the external calendar.",
+            provider=provider_name,
+            exception_type=exception_type,
+            details={"operation": operation, "failed_events": count},
+        )
     return {"created": created, "moved": moved, "removed": removed}
 
 

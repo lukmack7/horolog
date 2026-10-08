@@ -7,7 +7,7 @@ import os
 import tempfile
 import typing
 from collections.abc import AsyncGenerator, AsyncIterator
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import cast
 from zoneinfo import ZoneInfo
 
@@ -50,6 +50,7 @@ from horolog.db import (
     NotificationSettingsRow,
     PlanRow,
     SlotOriginRow,
+    SystemLogRow,
     TimeEntryRow,
     TodoAssignmentRow,
     TodoInboxRow,
@@ -58,6 +59,7 @@ from horolog.db import (
     rebase_slot_origin,
     session,
 )
+from horolog.system_logs import record_system_log
 
 
 @pytest_asyncio.fixture
@@ -81,6 +83,7 @@ async def client() -> AsyncIterator[AsyncClient]:
         db = await anext(gen)
         await db.execute(delete(BusyRow))
         await db.execute(delete(ChangeSetRow))
+        await db.execute(delete(SystemLogRow))
         await db.execute(delete(TimeEntryRow))
         await db.execute(delete(TodoAssignmentRow))
         await db.execute(delete(DailyItemDecisionRow))
@@ -94,6 +97,53 @@ async def client() -> AsyncIterator[AsyncClient]:
         await db.commit()
         await gen.aclose()
         yield http
+
+
+@pytest.mark.asyncio
+async def test_system_logs_are_filterable_sanitised_and_clearable(client: AsyncClient) -> None:
+    await record_system_log(
+        level="error",
+        category="sync",
+        event="sync.test_failed",
+        message="Test sync failed.",
+        provider="google",
+        status_code=502,
+        exception_type="SyncError",
+        details={"operation": "pull", "token": "never-store-this"},
+    )
+    await record_system_log(
+        level="warning",
+        category="calendar",
+        event="calendar.test_warning",
+        message="Test warning.",
+    )
+    gen = cast("AsyncGenerator[AsyncSession, None]", session())
+    db = await anext(gen)
+    db.add(
+        SystemLogRow(
+            id="expired-system-log",
+            created_at=datetime.now(UTC) - timedelta(days=31),
+            level="error",
+            category="api",
+            event="api.expired",
+            message="Expired.",
+        )
+    )
+    await db.commit()
+    await gen.aclose()
+
+    response = await client.get("/api/system-logs?level=error&category=sync")
+    assert response.status_code == 200, response.text
+    assert len(response.json()) == 1
+    entry = response.json()[0]
+    assert entry["provider"] == "google"
+    assert entry["details"] == {"operation": "pull", "token": "[redacted]"}
+    assert "never-store-this" not in response.text
+    assert "expired-system-log" not in (await client.get("/api/system-logs")).text
+
+    cleared = await client.delete("/api/system-logs")
+    assert cleared.status_code == 204, cleared.text
+    assert (await client.get("/api/system-logs")).json() == []
 
 
 def test_explicit_dd_mm_date_overrides_model_action_date() -> None:

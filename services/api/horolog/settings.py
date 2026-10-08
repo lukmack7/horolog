@@ -93,6 +93,11 @@ class Settings(BaseSettings):
     without being asked is not a default anyone should ship. Also needs the
     connection reconnected once — see CHANGELOG.md 0.2.0."""
 
+    system_log_retention_days: int = Field(default=30, ge=1, le=365)
+    system_log_max_rows: int = Field(default=5000, ge=100, le=100_000)
+    """Bound the diagnostic log by both age and volume. Log records contain
+    allowlisted metadata only, but should still not grow without limit."""
+
     llm_provider: Literal["openai", "anthropic"] = "openai"
     """`openai` covers every OpenAI-compatible server — Ollama, vLLM, SGLang,
     llama.cpp, OpenAI itself. `anthropic` uses the official Claude SDK, which

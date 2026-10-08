@@ -289,6 +289,22 @@ export interface ChangeHistoryEntry {
   can_undo: boolean;
 }
 
+export interface SystemLogEntry {
+  id: string;
+  created_at: string;
+  level: "info" | "warning" | "error";
+  category: string;
+  event: string;
+  message: string;
+  correlation_id?: string | null;
+  method?: string | null;
+  path?: string | null;
+  provider?: string | null;
+  status_code?: number | null;
+  exception_type?: string | null;
+  details: Record<string, unknown>;
+}
+
 
 export interface UserPreferences {
   preferred_workday_start_min: number;
@@ -532,6 +548,14 @@ export const api = {
       `/api/history/${id}/undo`,
       { method: "POST" },
     ),
+  systemLogs: (filters?: { level?: string; category?: string; limit?: number }) => {
+    const params = new URLSearchParams();
+    params.set("limit", String(filters?.limit ?? 100));
+    if (filters?.level) params.set("level", filters.level);
+    if (filters?.category) params.set("category", filters.category);
+    return request<SystemLogEntry[]>(`/api/system-logs?${params.toString()}`);
+  },
+  clearSystemLogs: () => request<void>("/api/system-logs", { method: "DELETE" }),
   setBusy: (events: Omit<Busy, "source">[]) =>
     request<{ events: number; blocks: number }>("/api/busy", {
       method: "PUT",
