@@ -205,7 +205,7 @@ export default function DailyPage() {
                 </span>
                 {data.summary.carry_over > 0 && (
                   <span className="rounded-full bg-amber-50 px-2.5 py-1 text-amber-700">
-                    {data.summary.carry_over} przeniesione
+                    {data.summary.carry_over} do rozważenia
                   </span>
                 )}
               </div>
