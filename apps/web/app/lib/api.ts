@@ -240,6 +240,7 @@ export interface DailyData {
     closed_at?: string | null;
   };
   items: DailyItem[];
+  carry_suggestions: DailyItem[];
   suggestions: DailySuggestion[];
   yesterday: {
     improve: string;
