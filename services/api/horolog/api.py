@@ -1272,6 +1272,34 @@ async def get_daily(date: str, db: AsyncSession = Depends(session)) -> dict[str,
             )
         ]
 
+    # Legacy versions could leave more than one active Daily row linked to the
+    # same one-shot Planner intent. Render exactly one card per intent without
+    # mutating history on read. Prefer the row explicitly belonging to this day,
+    # then a row deliberately deferred here, then the newest surviving row.
+    unique_rows: list[DailyPlanItemRow] = []
+    grouped_by_intent: dict[str, list[DailyPlanItemRow]] = {}
+    for row in rows:
+        if row.intent_id is None:
+            unique_rows.append(row)
+        else:
+            grouped_by_intent.setdefault(row.intent_id, []).append(row)
+
+    for intent_rows_for_view in grouped_by_intent.values():
+        chosen = max(
+            intent_rows_for_view,
+            key=lambda candidate: (
+                candidate.plan_date == date,
+                bool(
+                    (decision := decision_map.get(candidate.id))
+                    and decision.defer_until == date
+                ),
+                candidate.created_at,
+            ),
+        )
+        unique_rows.append(chosen)
+
+    rows = unique_rows
+
     # Reading Daily must never mutate Planner dates.
 
     meta_rows = (
