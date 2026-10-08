@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from horolog.settings import ENV_FILES, PROJECT_ROOT
+from horolog.settings import ENV_FILES, PROJECT_ROOT, _project_root
 
 
 def test_documented_root_dotenv_is_loaded() -> None:
@@ -12,3 +12,7 @@ def test_documented_root_dotenv_is_loaded() -> None:
 
 def test_api_local_dotenv_can_override_the_root_file() -> None:
     assert ENV_FILES[-1] == Path(".env")
+
+
+def test_project_root_supports_container_layout() -> None:
+    assert _project_root(Path("/app/horolog/settings.py")) == Path("/app")
