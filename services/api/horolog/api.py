@@ -646,7 +646,17 @@ def _daily_item_dict(
         "schedule_enabled": row.schedule_enabled,
         "completed_at": completed_at.isoformat() if completed_at else None,
         "cancelled_at": row.cancelled_at.isoformat() if row.cancelled_at else None,
-        "carried": row.plan_date < requested_date and completed_at is None and row.cancelled_at is None,
+        "carried": (
+            row.plan_date < requested_date
+            and completed_at is None
+            and row.cancelled_at is None
+            and (decision is None or decision.defer_until != requested_date)
+        ),
+        "deferred_here": bool(
+            row.plan_date < requested_date
+            and decision is not None
+            and decision.defer_until == requested_date
+        ),
         "carry_days": max(
             0,
             (_daily_date(requested_date).date() - _daily_date(row.plan_date).date()).days,
@@ -656,6 +666,7 @@ def _daily_item_dict(
             completed_at is None
             and row.cancelled_at is None
             and row.plan_date < requested_date
+            and (decision is None or decision.defer_until != requested_date)
             and (_daily_date(requested_date).date() - _daily_date(row.plan_date).date()).days >= 2
             and (decision is None or decision.acknowledged_date != requested_date)
         ),
@@ -1170,10 +1181,25 @@ async def get_daily(date: str, db: AsyncSession = Depends(session)) -> dict[str,
         )
     ]
 
-    # Reading Daily must never mutate Planner dates. Unfinished items are
-    # rendered as carry-over until the user explicitly chooses to defer/move
-    # them. In particular, opening tomorrow while planning ahead must not
-    # silently move today's unfinished Planner tasks to tomorrow.
+    # Future planning must be deliberate. Merely opening Friday/Saturday may
+    # not project every unfinished item from today into that future matrix.
+    # A future Daily view contains only:
+    #   1) items originally assigned to that date, or
+    #   2) older items explicitly deferred to exactly that date.
+    # Today (and historical views) may still surface genuine unfinished
+    # carry-over so the user can consciously decide what to do with it.
+    if requested.date() > today:
+        rows = [
+            row
+            for row in rows
+            if row.plan_date == date
+            or (
+                (decision := decision_map.get(row.id))
+                and decision.defer_until == date
+            )
+        ]
+
+    # Reading Daily must never mutate Planner dates.
 
     meta_rows = (
         (
