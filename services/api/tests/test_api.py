@@ -407,6 +407,66 @@ async def test_planner_move_clears_stale_daily_defer_projection(
 
 
 @pytest.mark.asyncio
+async def test_todo_assignment_reuses_matching_legacy_planner_task(
+    client: AsyncClient,
+) -> None:
+    tomorrow = (origin() + timedelta(days=1)).replace(
+        hour=10,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+    existing = await client.post(
+        "/api/intents",
+        json={
+            "title": "Legacy duplicate task",
+            "kind": "task",
+            "priority": 2,
+            "category": "cmr",
+            "minutes_per_period": 60,
+            "min_chunk_minutes": 60,
+            "max_chunk_minutes": 60,
+            "max_per_day": 1,
+            "earliest": tomorrow.isoformat(),
+            "latest": (tomorrow + timedelta(hours=1)).isoformat(),
+            "due": (tomorrow + timedelta(hours=1)).isoformat(),
+            "window_start_min": 10 * 60,
+            "window_end_min": 11 * 60,
+        },
+    )
+    assert existing.status_code == 201, existing.text
+    existing_id = existing.json()["id"]
+
+    todo_response = await client.post(
+        "/api/todos",
+        json={
+            "title": "Legacy duplicate task",
+            "minutes": 60,
+            "category": "cmr",
+        },
+    )
+    assert todo_response.status_code == 201
+    todo = todo_response.json()
+
+    assigned = await client.post(
+        f"/api/todos/{todo['id']}/assign",
+        json={
+            "date": tomorrow.date().isoformat(),
+            "quadrant": 2,
+        },
+    )
+    assert assigned.status_code == 201, assigned.text
+    assert assigned.json()["intent_id"] == existing_id
+
+    todos = (await client.get("/api/todos")).json()
+    assert not any(item["id"] == todo["id"] for item in todos)
+
+    intents = (await client.get("/api/intents")).json()
+    matching = [item for item in intents if item["title"] == "Legacy duplicate task"]
+    assert len(matching) == 1
+
+
+@pytest.mark.asyncio
 async def test_time_tracking_start_pause_resume_stop(client: AsyncClient) -> None:
     tomorrow = (origin() + timedelta(days=1)).replace(hour=10, minute=0, second=0, microsecond=0)
     created = await client.post(
