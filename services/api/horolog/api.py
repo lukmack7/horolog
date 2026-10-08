@@ -2678,7 +2678,10 @@ def _todo_referents_from_conversation(
         for item in todo_items
         if _normalise_task_title(item["title"]) in previous_norm
     ]
-    return matched
+    return sorted(
+        matched,
+        key=lambda item: previous_norm.find(_normalise_task_title(item["title"])),
+    )
 
 
 def _assistant_semantic_problem(
@@ -2960,6 +2963,143 @@ def _apply_explicit_todo_timeline(
     )
 
 
+def _apply_sequential_todo_followup(
+    decision: Any,
+    messages: list[AssistantMessage],
+    todo_items: list[dict[str, Any]],
+) -> Any:
+    """Deterministically expand "plan them from 10:00 with a 30 min break".
+
+    This covers the common follow-up after Horolog has just listed several
+    Do zrobienia items. Their stored durations are authoritative; the backend
+    calculates the clock sequence instead of asking the local model to perform
+    schedule arithmetic.
+    """
+
+    latest = _latest_user_message(messages)
+    if latest is None:
+        return decision
+
+    # Explicit @todo timelines are handled by the stronger token/range parser.
+    if any(reference.kind == "todo" for reference in latest.references):
+        return decision
+
+    referents = _todo_referents_from_conversation(messages, todo_items)
+    if len(referents) < 2:
+        return decision
+
+    text = latest.content
+    lowered = text.casefold()
+    if not any(cue in lowered for cue in ("zaplanuj", "ustaw", "wstaw", "wrzuć", "dodaj do plan")):
+        return decision
+
+    explicit_date = _explicit_date_from_latest_user_message(messages)
+    if explicit_date is None:
+        return decision
+
+    start_match = re.search(
+        r"\bod\s+(\d{1,2})[:.](\d{2})(?!\s*(?:do|[-–—])\s*\d)",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if start_match is None:
+        return decision
+    hour, minute = map(int, start_match.groups())
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        return decision
+    cursor_min = hour * 60 + minute
+
+    break_minutes = _break_minutes_between(text, 0, len(text))
+    if break_minutes is None:
+        return decision
+
+    existing_schedule = {
+        action.todo_id: action
+        for action in decision.actions
+        if action.action == "schedule_todo" and action.todo_id
+    }
+
+    ordered: list[AssistantAction] = []
+    referent_ids = {item["id"] for item in referents}
+    referent_titles = {
+        _normalise_task_title(item["title"])
+        for item in referents
+    }
+
+    for index, item in enumerate(referents):
+        duration = max(
+            SLOT_MINUTES,
+            minutes_to_slots(int(item["minutes"])) * SLOT_MINUTES,
+        )
+        previous = existing_schedule.get(item["id"])
+        quadrant = previous.quadrant if previous and previous.quadrant else 2
+        category = previous.category if previous else None
+        ordered.append(
+            AssistantAction(
+                action="schedule_todo",
+                title=item["title"],
+                todo_id=item["id"],
+                date=explicit_date,
+                minutes=duration,
+                quadrant=quadrant,
+                start_min=cursor_min,
+                start_mode="fixed",
+                category=category,
+            )
+        )
+        cursor_min += duration
+        if index < len(referents) - 1:
+            ordered.append(
+                AssistantAction(
+                    action="create_break",
+                    title="Przerwa",
+                    date=explicit_date,
+                    minutes=break_minutes,
+                    start_min=cursor_min,
+                    start_mode="fixed",
+                )
+            )
+            cursor_min += break_minutes
+
+    preserved: list[AssistantAction] = []
+    for action in decision.actions:
+        if action.action == "schedule_todo" and action.todo_id in referent_ids:
+            continue
+        if (
+            action.action == "create_task"
+            and action.title
+            and _normalise_task_title(action.title) in referent_titles
+        ):
+            continue
+        if action.action == "create_break":
+            continue
+        preserved.append(action)
+
+    display_date = datetime.strptime(explicit_date, "%Y-%m-%d").strftime("%d.%m")
+    lines: list[str] = []
+    for action in ordered:
+        if action.start_min is None or action.minutes is None:
+            continue
+        sh, sm = divmod(action.start_min, 60)
+        eh, em = divmod(action.start_min + action.minutes, 60)
+        lines.append(
+            f"• {action.title or 'Zadanie'} — {display_date} "
+            f"{sh:02d}:{sm:02d}–{eh:02d}:{em:02d}"
+        )
+
+    return decision.model_copy(
+        update={
+            "reply": (
+                "Proponuję dokładnie ten pakiet:\n"
+                + "\n".join(lines)
+                + "\n\nWykorzystam istniejące wpisy z „Do zrobienia”; "
+                "nie utworzę kopii. Zmiany zostaną wykonane dopiero po potwierdzeniu."
+            ),
+            "actions": [*ordered, *preserved],
+        }
+    )
+
+
 async def _coerce_exact_todo_creates(
     decision: Any,
     db: AsyncSession,
@@ -3018,6 +3158,11 @@ async def assistant_chat(
             body.messages,
             context.get("todo_items", []),
         )
+        decision = _apply_sequential_todo_followup(
+            decision,
+            body.messages,
+            context.get("todo_items", []),
+        )
 
         todo_referents = _todo_referents_from_conversation(
             body.messages,
@@ -3053,6 +3198,11 @@ async def assistant_chat(
             decision = _apply_explicit_user_date(decision, body.messages)
             decision = await _coerce_exact_todo_creates(decision, db)
             decision = _apply_explicit_todo_timeline(
+                decision,
+                body.messages,
+                context.get("todo_items", []),
+            )
+            decision = _apply_sequential_todo_followup(
                 decision,
                 body.messages,
                 context.get("todo_items", []),
