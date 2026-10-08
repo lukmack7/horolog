@@ -27,13 +27,15 @@ export type AssistantActionKind =
   | "reschedule_break"
   | "reschedule_meeting"
   | "complete_task"
+  | "schedule_todo"
   | "update_daily_plan"
   | "find_time";
 
 export interface AssistantReference {
-  kind: "intent" | "category";
+  kind: "intent" | "todo" | "category";
   token: string;
   intent_id?: string | null;
+  todo_id?: string | null;
   category?: WorkCategory | null;
 }
 
@@ -48,6 +50,7 @@ export interface AssistantAction {
   title?: string | null;
   intent_id?: string | null;
   second_intent_id?: string | null;
+  todo_id?: string | null;
   date?: string | null;
   minutes?: number | null;
   quadrant?: 1 | 2 | 3 | 4 | null;
