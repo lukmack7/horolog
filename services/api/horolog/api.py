@@ -3221,6 +3221,11 @@ async def _execute_assistant_action(
         for daily_row in linked_daily:
             if daily_row.intent_id in target_dates:
                 daily_row.plan_date = target_dates[daily_row.intent_id]
+                decision = await db.get(DailyItemDecisionRow, daily_row.id)
+                if decision is not None:
+                    decision.defer_until = None
+                    decision.acknowledged_date = None
+                    decision.updated_at = datetime.now(UTC)
         if linked_daily:
             await db.commit()
 
@@ -4479,6 +4484,14 @@ async def move_intent(
         daily_row.plan_date = target_key
         if intent.kind == IntentKind.TASK and body.exact:
             daily_row.minutes = dragged_minutes
+        decision = await db.get(DailyItemDecisionRow, daily_row.id)
+        if decision is not None:
+            # A direct Planner move is authoritative. Any older "defer until"
+            # decision referred to the previous placement and must no longer
+            # project a virtual copy into Daily.
+            decision.defer_until = None
+            decision.acknowledged_date = None
+            decision.updated_at = datetime.now(UTC)
     if linked_daily:
         await db.commit()
 
