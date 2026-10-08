@@ -370,9 +370,9 @@ function PlanView({
           <div className="flex items-start gap-3">
             <RotateCcw size={17} className="mt-0.5 shrink-0 text-amber-700" />
             <div>
-              <h2 className="text-[13px] font-bold text-amber-900">{t("Przeniesione z wcześniejszych dni")}</h2>
+              <h2 className="text-[13px] font-bold text-amber-900">{t("Zaległe z wcześniejszych dni")}</h2>
               <p className="mt-0.5 text-[11.5px] leading-relaxed text-amber-800">
-                Nic nie znika. Niewykonane zadania pozostają aktywne aż je wykonasz albo świadomie usuniesz.
+                To są niewykonane pozycje wymagające decyzji. Nie zostały automatycznie przeniesione na ten dzień.
               </p>
             </div>
           </div>
@@ -640,11 +640,15 @@ function QuadrantCard({
                   )}
                   <span className="hidden rounded-full bg-sunk px-2 py-0.5 text-fg-subtle sm:inline">{t("przeciągnij")}</span>
                   {item.schedule_enabled && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">Planner</span>}
-                  {item.carried && (
-                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">
-                      przeniesione {item.carry_days}d
+                  {item.deferred_here ? (
+                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">
+                      przeniesione świadomie
                     </span>
-                  )}
+                  ) : item.carried ? (
+                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">
+                      zaległe {item.carry_days}d
+                    </span>
+                  ) : null}
                 </div>
 
                 {item.needs_decision && (
