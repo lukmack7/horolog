@@ -2452,18 +2452,237 @@ def _apply_explicit_user_date(
     return decision.model_copy(update={"actions": actions}) if changed else decision
 
 
+def _latest_user_message(messages: list[AssistantMessage]) -> AssistantMessage | None:
+    return next(
+        (message for message in reversed(messages) if message.role == "user"),
+        None,
+    )
+
+
+def _normalise_task_title(value: str) -> str:
+    return " ".join(value.strip().casefold().split())
+
+
+def _daily_requested_explicitly(messages: list[AssistantMessage]) -> bool:
+    latest = _latest_user_message(messages)
+    if latest is None:
+        return False
+    text = latest.content.casefold()
+    cues = (
+        "daily",
+        "dziennik",
+        "dzienniku",
+        "plan dnia",
+        "dzisiaj wygrywam",
+        "zaczynam od",
+        "pierwszy krok",
+    )
+    return any(cue in text for cue in cues)
+
+
+def _todo_referents_from_conversation(
+    messages: list[AssistantMessage],
+    todo_items: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Resolve explicit @todo refs and safe plural follow-ups such as "zaplanuj je"."""
+
+    latest = _latest_user_message(messages)
+    if latest is None:
+        return []
+
+    by_id = {item["id"]: item for item in todo_items}
+    explicit: list[dict[str, Any]] = []
+    for reference in latest.references:
+        if reference.kind == "todo" and reference.todo_id in by_id:
+            explicit.append(by_id[reference.todo_id])
+    if explicit:
+        return explicit
+
+    latest_text = latest.content.casefold()
+    plural_cues = (
+        " je ",
+        " oba ",
+        " obydwa ",
+        " wszystkie ",
+        " te zadania",
+        " te wpisy",
+        " powyższe",
+    )
+    padded = f" {latest_text} "
+    if not any(cue in padded for cue in plural_cues):
+        return []
+
+    previous_assistant = next(
+        (
+            message.content
+            for message in reversed(messages[:-1])
+            if message.role == "assistant"
+        ),
+        "",
+    )
+    previous_norm = _normalise_task_title(previous_assistant)
+    matched = [
+        item
+        for item in todo_items
+        if _normalise_task_title(item["title"]) in previous_norm
+    ]
+    return matched
+
+
+def _assistant_semantic_problem(
+    decision: Any,
+    messages: list[AssistantMessage],
+    todo_referents: list[dict[str, Any]],
+) -> str | None:
+    latest = _latest_user_message(messages)
+    latest_text = latest.content.casefold() if latest is not None else ""
+
+    if (
+        any(action.action == "update_daily_plan" for action in decision.actions)
+        and not _daily_requested_explicitly(messages)
+    ):
+        return (
+            "The user is scheduling ordinary tasks, not editing Daily. "
+            "update_daily_plan is forbidden for this request."
+        )
+
+    schedule_cues = (
+        "zaplanuj",
+        "ustaw",
+        "wrzuć",
+        "wstaw",
+        "dodaj do plan",
+        "harmonogram",
+    )
+    if todo_referents and any(cue in latest_text for cue in schedule_cues):
+        expected = {item["id"] for item in todo_referents}
+        actual = {
+            action.todo_id
+            for action in decision.actions
+            if action.action == "schedule_todo" and action.todo_id
+        }
+        missing = expected - actual
+        if missing:
+            labels = [
+                f'{item["title"]} (todo_id={item["id"]})'
+                for item in todo_referents
+                if item["id"] in missing
+            ]
+            return (
+                "The user refers to existing Do zrobienia items. "
+                "Use schedule_todo for EACH referenced item and never create_task "
+                "or update_daily_plan for them. Missing: "
+                + ", ".join(labels)
+                + ". Preserve the user's exact order, times, durations and requested breaks."
+            )
+
+    return None
+
+
+async def _coerce_exact_todo_creates(
+    decision: Any,
+    db: AsyncSession,
+) -> Any:
+    """Never duplicate an inbox item when the model emits create_task by title."""
+
+    todo_rows = (
+        await db.execute(
+            select(TodoInboxRow).where(TodoInboxRow.assigned_at.is_(None))
+        )
+    ).scalars().all()
+    by_title: dict[str, list[TodoInboxRow]] = {}
+    for row in todo_rows:
+        by_title.setdefault(_normalise_task_title(row.title), []).append(row)
+
+    changed = False
+    actions: list[AssistantAction] = []
+    for action in decision.actions:
+        if action.action == "create_task" and action.title:
+            matches = by_title.get(_normalise_task_title(action.title), [])
+            if len(matches) == 1 and action.date and action.quadrant:
+                todo = matches[0]
+                action = AssistantAction(
+                    action="schedule_todo",
+                    title=todo.title,
+                    todo_id=todo.id,
+                    date=action.date,
+                    minutes=action.minutes,
+                    quadrant=action.quadrant,
+                    start_min=action.start_min,
+                    start_mode=action.start_mode,
+                    category=action.category,
+                )
+                changed = True
+        actions.append(action)
+
+    return decision.model_copy(update={"actions": actions}) if changed else decision
+
+
 @app.post("/api/assistant/chat")
 async def assistant_chat(
     body: AssistantChatIn,
     db: AsyncSession = Depends(session),
 ) -> dict[str, Any]:
     try:
+        context = await _assistant_context(db, body.context_page, body.messages)
         decision = await converse(
             body.messages,
-            await _assistant_context(db, body.context_page, body.messages),
+            context,
             pending_actions=body.pending_actions,
         )
         decision = _apply_explicit_user_date(decision, body.messages)
+        decision = await _coerce_exact_todo_creates(decision, db)
+
+        todo_referents = _todo_referents_from_conversation(
+            body.messages,
+            context.get("todo_items", []),
+        )
+        semantic_problem = _assistant_semantic_problem(
+            decision,
+            body.messages,
+            todo_referents,
+        )
+        if semantic_problem:
+            referents = [
+                {
+                    "todo_id": item["id"],
+                    "title": item["title"],
+                    "minutes": item["minutes"],
+                    "category": item["category"],
+                    "deadline_date": item["deadline_date"],
+                }
+                for item in todo_referents
+            ]
+            correction = (
+                semantic_problem
+                + "\nExisting todo referents: "
+                + json.dumps(referents, ensure_ascii=False)
+            )
+            decision = await converse(
+                body.messages,
+                context,
+                pending_actions=body.pending_actions,
+                extra_instruction=correction,
+            )
+            decision = _apply_explicit_user_date(decision, body.messages)
+            decision = await _coerce_exact_todo_creates(decision, db)
+
+            remaining_problem = _assistant_semantic_problem(
+                decision,
+                body.messages,
+                todo_referents,
+            )
+            if remaining_problem:
+                decision = decision.model_copy(
+                    update={
+                        "reply": (
+                            "Nie przygotowałem bezpiecznej propozycji zmian. "
+                            "Nie wykonam operacji na Daily ani nie utworzę kopii zadań. "
+                            "Proszę wskazać wpisy przez @ albo spróbować ponownie."
+                        ),
+                        "actions": [],
+                    }
+                )
     except ExtractionFailed as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except (ProviderError, httpx.HTTPError, RuntimeError) as exc:
