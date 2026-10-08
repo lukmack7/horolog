@@ -2143,7 +2143,24 @@ async def _assistant_context(
             "scheduled": scheduled.get(intent.id, []),
         })
 
+    todo_rows = (
+        await db.execute(
+            select(TodoInboxRow).where(TodoInboxRow.assigned_at.is_(None))
+        )
+    ).scalars().all()
+    todo_items = [
+        {
+            "id": row.id,
+            "title": row.title,
+            "minutes": row.minutes,
+            "category": row.category,
+            "deadline_date": row.deadline_date,
+        }
+        for row in todo_rows
+    ]
+
     active_by_id = {item["id"]: item for item in active}
+    todo_by_id = {item["id"]: item for item in todo_items}
     explicit_references: list[dict[str, Any]] = []
     for message in messages or []:
         for reference in message.references:
@@ -2154,6 +2171,17 @@ async def _assistant_context(
                         "token": reference.token,
                         "kind": "intent",
                         "intent_id": reference.intent_id,
+                        "resolved": item is not None,
+                        "item": item,
+                    }
+                )
+            elif reference.kind == "todo":
+                item = todo_by_id.get(reference.todo_id or "")
+                explicit_references.append(
+                    {
+                        "token": reference.token,
+                        "kind": "todo",
+                        "todo_id": reference.todo_id,
                         "resolved": item is not None,
                         "item": item,
                     }
@@ -2179,6 +2207,7 @@ async def _assistant_context(
         "workday_start_min": workday_start_min,
         "workday_end_min": workday_end_min,
         "active_items": active[:80],
+        "todo_items": todo_items[:80],
         "explicit_references": explicit_references[-24:],
         "unmet": [
             {
@@ -2485,6 +2514,78 @@ async def _execute_assistant_action(
             "date": action.date,
             "item_id": item["id"],
             "intent_id": item.get("intent_id"),
+        }
+
+    if action.action == "schedule_todo":
+        if not action.todo_id or not action.date or not action.quadrant:
+            raise HTTPException(
+                status_code=422,
+                detail="schedule_todo proposal is incomplete",
+            )
+
+        todo = await db.get(TodoInboxRow, action.todo_id)
+        if todo is None or todo.assigned_at is not None:
+            raise HTTPException(
+                status_code=404,
+                detail="Ten wpis nie jest już dostępny w „Do zrobienia”.",
+            )
+
+        item = await assign_todo_to_daily(
+            action.todo_id,
+            TodoAssignIn(date=action.date, quadrant=action.quadrant),
+            db,
+        )
+        intent_id = item.get("intent_id")
+
+        if action.start_min is not None:
+            if action.quadrant > 2 or not intent_id:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Godzinę można ustawić tylko dla zadania trafiającego do Plannera.",
+                )
+
+            day = _daily_date(action.date)
+            start_min = (action.start_min // SLOT_MINUTES) * SLOT_MINUTES
+            start = day.replace(
+                hour=start_min // 60,
+                minute=start_min % 60,
+                second=0,
+                microsecond=0,
+            )
+            duration = max(SLOT_MINUTES, minutes_to_slots(todo.minutes) * SLOT_MINUTES)
+            end = start + timedelta(minutes=duration)
+            if end.date() != start.date():
+                raise HTTPException(
+                    status_code=422,
+                    detail="To zadanie nie mieści się w wybranym dniu.",
+                )
+
+            if action.start_mode == "fixed":
+                await move_intent(
+                    intent_id,
+                    MoveIntentIn(start=start, end=end, exact=True),
+                    db,
+                    record_history=False,
+                )
+            else:
+                intent_row = await db.get(IntentRow, intent_id)
+                if intent_row is None:
+                    raise HTTPException(status_code=404, detail="Planner task disappeared")
+                intent = Intent.model_validate(intent_row.payload)
+                intent_row.payload = intent.model_copy(
+                    update={"preferred_start_min": start_min}
+                ).model_dump(mode="json")
+                await db.commit()
+                await _replan(db)
+
+        return {
+            "action": action.action,
+            "status": "done",
+            "title": todo.title,
+            "todo_id": action.todo_id,
+            "date": action.date,
+            "item_id": item["id"],
+            "intent_id": intent_id,
         }
 
     if action.action == "create_break":
