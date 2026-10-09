@@ -6970,6 +6970,59 @@ async def _render(db: AsyncSession, plan: Plan) -> PlanOut:
         for b in plan.blocks
     ]
 
+    historical_rows = (
+        await db.execute(
+            select(DailyPlanItemRow).where(
+                DailyPlanItemRow.plan_date < base.date().isoformat(),
+                DailyPlanItemRow.completed_at.is_(None),
+                DailyPlanItemRow.cancelled_at.is_(None),
+                DailyPlanItemRow.intent_id.is_not(None),
+                DailyPlanItemRow.schedule_enabled.is_(True),
+            )
+        )
+    ).scalars().all()
+    historical_intent_ids = {
+        row.intent_id for row in historical_rows if row.intent_id is not None
+    }
+    rendered_blocks = [
+        block
+        for block in rendered_blocks
+        if block.intent_id not in historical_intent_ids
+    ]
+    rendered_keys = {
+        (block.intent_id, block.start, block.end) for block in rendered_blocks
+    }
+    for row in historical_rows:
+        intent = titles.get(row.intent_id or "")
+        if intent is None or intent.kind != IntentKind.TASK or intent.period_days is not None:
+            continue
+        if intent.completed_at is not None or not intent.daily_windows:
+            continue
+        day = _daily_date(row.plan_date)
+        window = intent.daily_windows[0]
+        start = day + timedelta(minutes=window.start_min)
+        end = day + timedelta(minutes=window.end_min)
+        key = (intent.id, start, end)
+        if key in rendered_keys:
+            continue
+        rendered_keys.add(key)
+        rendered_blocks.append(
+            BlockOut(
+                intent_id=intent.id,
+                title=intent.title,
+                kind=intent.kind,
+                priority=intent.priority,
+                category=intent.category,
+                occurrence=-1,
+                chunk=0,
+                start=start,
+                end=end,
+                moved_from=None,
+                completed=False,
+                recurring=False,
+            )
+        )
+
     # Completed blocks no longer consume solver capacity, but remain visible
     # in the calendar as historical, completed occurrences.
     for intent in titles.values():

@@ -1063,6 +1063,37 @@ async def test_create_intent_schedules_it(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_unfinished_past_daily_task_remains_visible_in_planner(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first_day = origin()
+    monkeypatch.setattr(api_module, "origin", lambda: first_day)
+    created = (
+        await client.post(
+            f"/api/daily/{first_day.date().isoformat()}/items",
+            json={
+                "title": "Still belongs to yesterday",
+                "quadrant": 1,
+                "minutes": 60,
+                "schedule_enabled": True,
+            },
+        )
+    ).json()
+
+    next_day = first_day + timedelta(days=1)
+    monkeypatch.setattr(api_module, "origin", lambda: next_day)
+
+    plan = (await client.post("/api/plan/solve")).json()
+    block = next(
+        item for item in plan["blocks"] if item["intent_id"] == created["intent_id"]
+    )
+
+    assert block["start"].startswith(first_day.date().isoformat())
+    assert block["completed"] is False
+
+
+@pytest.mark.asyncio
 async def test_existing_scheduled_task_category_patches_without_moving_it(
     client: AsyncClient,
 ) -> None:
