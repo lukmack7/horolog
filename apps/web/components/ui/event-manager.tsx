@@ -17,7 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
-import { ChevronLeft, ChevronRight, Plus, Calendar, Clock, Grid3x3, List, Search, Filter, X, Play, Pause, Square } from "lucide-react"
+import { ChevronLeft, ChevronRight, Plus, Calendar, Clock, Grid3x3, List, Search, Filter, X, Play, Pause, Square, Check, FastForward, Lightbulb } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   DropdownMenu,
@@ -30,11 +30,14 @@ import {
 import { Glyph } from "@/app/components/Glyph"
 import { WorkCategoryMedal } from "@/app/components/WorkCategoryMedal"
 import { FILL, RULE } from "@/app/components/Grid"
+import { IS_ADHD_EXPERIENCE } from "@/app/lib/experience"
 import {
   api,
+  formatDuration,
   WORK_CATEGORIES,
   WORK_CATEGORY_LABEL,
   type IntentKind,
+  type IntentSuggestion,
   type Priority,
   type TimeTrackingEntry,
   type TimeTrackingStats,
@@ -816,10 +819,14 @@ export function EventManager({
             setSelectedEvent(event)
             setIsDialogOpen(true)
           }}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-          onDrop={handleDrop}
-          getColorClasses={getColorClasses}
+          timeTracking={timeTracking}
+          trackingElapsedSeconds={trackingElapsedSeconds}
+          trackingClock={trackingClock}
+          onEventComplete={onEventComplete}
+          onTimeTrackingStart={onTimeTrackingStart}
+          onTimeTrackingPause={onTimeTrackingPause}
+          onTimeTrackingResume={onTimeTrackingResume}
+          onTimeTrackingStop={onTimeTrackingStop}
         />
       )}
 
@@ -1845,31 +1852,32 @@ function DayView({
   currentDate,
   events,
   onEventClick,
-  onDragStart,
-  onDragEnd,
-  onDrop,
-  getColorClasses,
+  timeTracking,
+  trackingElapsedSeconds,
+  trackingClock,
+  onEventComplete,
+  onTimeTrackingStart,
+  onTimeTrackingPause,
+  onTimeTrackingResume,
+  onTimeTrackingStop,
 }: {
   currentDate: Date
   events: Event[]
   onEventClick: (event: Event) => void
-  onDragStart: (event: Event) => void
-  onDragEnd: () => void
-  onDrop: (date: Date, hour: number, eventId?: string, minute?: number) => void
-  getColorClasses: (color: string) => { bg: string; text: string }
+  timeTracking: TimeTrackingEntry | null
+  trackingElapsedSeconds: number
+  trackingClock: (seconds: number) => string
+  onEventComplete?: (event: Event) => void | Promise<void>
+  onTimeTrackingStart?: (event: Event) => void | Promise<void>
+  onTimeTrackingPause?: (event: Event) => void | Promise<void>
+  onTimeTrackingResume?: (event: Event) => void | Promise<void>
+  onTimeTrackingStop?: (event: Event) => void | Promise<void>
 }) {
   const { language } = useLanguage()
-  const slotMinutes = 15
-  const slotHeight = 24
-  const slots = Array.from({ length: (24 * 60) / slotMinutes }, (_, index) => {
-    const minuteOfDay = index * slotMinutes
-    return {
-      index,
-      hour: Math.floor(minuteOfDay / 60),
-      minute: minuteOfDay % 60,
-    }
-  })
-  const timelineHeight = slots.length * slotHeight
+  const [pending, setPending] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [suggestion, setSuggestion] = useState<IntentSuggestion | null>(null)
+  const [dismissedIds, setDismissedIds] = useState<string[]>([])
 
   const sameDay = (date: Date) =>
     date.getDate() === currentDate.getDate() &&
@@ -1877,9 +1885,21 @@ function DayView({
     date.getFullYear() === currentDate.getFullYear()
 
   const dayEvents = events
-    .filter((event) => sameDay(event.startTime))
+    .filter((event) => sameDay(event.startTime) && !event.completed && !dismissedIds.includes(event.id))
     .slice()
     .sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
+
+  const now = Date.now()
+  const isToday = sameDay(new Date(now))
+  const current = isToday
+    ? dayEvents.find((event) => event.startTime.getTime() <= now && now < event.endTime.getTime())
+    : undefined
+  const next = isToday ? dayEvents.find((event) => event.startTime.getTime() > now) : undefined
+  const primary = current ?? next ?? dayEvents[0]
+  const active = Boolean(primary?.intentId && timeTracking?.intent_id === primary.intentId)
+  const durationMinutes = primary
+    ? Math.max(1, Math.round((primary.endTime.getTime() - primary.startTime.getTime()) / 60000))
+    : 0
 
   const formatTime = (date: Date) =>
     date.toLocaleTimeString(language === "pl" ? "pl-PL" : "en-US", {
@@ -1887,179 +1907,100 @@ function DayView({
       minute: "2-digit",
     })
 
+  async function perform(key: string, action: () => void | Promise<unknown>) {
+    setPending(key)
+    setError(null)
+    try {
+      await action()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Nie udało się wykonać działania.")
+    } finally {
+      setPending(null)
+    }
+  }
+
+  async function rejectPrimary() {
+    if (!primary?.intentId) return
+    await api.rejectBlock(
+      primary.intentId,
+      primary.startTime.toISOString(),
+      primary.endTime.toISOString(),
+    )
+    setDismissedIds((ids) => [...ids, primary.id])
+    setSuggestion(null)
+  }
+
   return (
-    <Card className="max-h-[76vh] overflow-auto bg-white">
-      <div className="flex min-w-0">
-        <div
-          className="relative w-[70px] shrink-0 border-r bg-muted/10 sm:w-20"
-          style={{ height: timelineHeight }}
-        >
-          {slots.map(({ index, hour, minute }) => {
-            const major = minute === 0
-            const half = minute === 30
-            return (
-              <div
-                key={index}
-                className={cn(
-                  "absolute inset-x-0 border-t",
-                  major
-                    ? "border-black/10"
-                    : half
-                      ? "border-black/[0.06]"
-                      : "border-black/[0.035]",
-                )}
-                style={{ top: index * slotHeight, height: slotHeight }}
-              >
-                <span
-                  className={cn(
-                    "tabular absolute -top-2 right-1 rounded bg-white/95 px-1 leading-none",
-                    major
-                      ? "text-[10.5px] font-semibold text-muted-foreground"
-                      : "text-[8.5px] font-medium text-muted-foreground/70",
-                  )}
-                >
-                  {String(hour).padStart(2, "0")}:{String(minute).padStart(2, "0")}
-                </span>
+    <div className="rounded-[28px] bg-[#f5f3ee] p-4 sm:p-6">
+      <header className="mb-6">
+        {IS_ADHD_EXPERIENCE && (
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Tryb wykonawczy</p>
+        )}
+        <h2 className="mt-1 font-serif text-4xl font-bold">Dzień</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Jedna rzecz. Jeden następny krok.</p>
+      </header>
+
+      {error && <div role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div>}
+
+      {!primary && (
+        <section className="rounded-[28px] border border-emerald-200 bg-emerald-50 p-8 text-center">
+          <h3 className="text-xl font-bold">Plan na ten dzień jest pusty</h3>
+          <p className="mt-2 text-sm text-muted-foreground">Nie masz żadnego bloku do wykonania.</p>
+        </section>
+      )}
+
+      {primary && (
+        <section className="rounded-[28px] border border-black/10 bg-[#fffdf8] p-5 shadow-sm sm:p-8">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <button className="min-w-0 text-left" onClick={() => onEventClick(primary)}>
+              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                {current?.id === primary.id ? "W tej chwili" : "Następny blok"}
+              </span>
+              <span className="mt-2 block text-2xl font-bold leading-tight sm:text-3xl">{primary.title}</span>
+              <span className="mt-2 block text-sm text-muted-foreground">
+                {formatTime(primary.startTime)}–{formatTime(primary.endTime)} · {formatDuration(durationMinutes)}
+              </span>
+            </button>
+            {active && (
+              <div className="rounded-2xl bg-amber-100 px-4 py-2 text-center">
+                <div className="text-[10px] font-bold uppercase text-amber-800">Timer</div>
+                <div className="font-mono text-2xl tabular-nums">{trackingClock(trackingElapsedSeconds)}</div>
               </div>
-            )
-          })}
-        </div>
+            )}
+          </div>
 
-        <div className="relative min-w-0 flex-1" style={{ height: timelineHeight }}>
-          {slots.map(({ index, hour, minute }) => {
-            const major = minute === 0
-            const half = minute === 30
-            return (
-              <div
-                key={index}
-                className={cn(
-                  "absolute inset-x-0 border-t transition-colors hover:bg-accent/20",
-                  major
-                    ? "border-black/10"
-                    : half
-                      ? "border-black/[0.06]"
-                      : "border-black/[0.035]",
+          <div className="mt-6 flex flex-wrap gap-2">
+            {!active && primary.intentId && onTimeTrackingStart && (
+              <>
+                <button disabled={pending !== null} onClick={() => void perform("start", () => onTimeTrackingStart(primary))} className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-amber-500 px-5 font-bold text-white disabled:opacity-50"><Play size={18} /> Start</button>
+                <button disabled={pending !== null} onClick={() => void perform("start-five", () => onTimeTrackingStart(primary))} className="min-h-12 rounded-xl border border-amber-300 bg-white px-4 font-bold text-amber-900 disabled:opacity-50">Zacznij 5 min</button>
+              </>
+            )}
+            {active && (
+              <>
+                {timeTracking?.status === "paused" ? (
+                  onTimeTrackingResume && <button disabled={pending !== null} onClick={() => void perform("resume", () => onTimeTrackingResume(primary))} className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-amber-500 px-5 font-bold text-white disabled:opacity-50"><Play size={18} /> Wznów</button>
+                ) : (
+                  onTimeTrackingPause && <button disabled={pending !== null} onClick={() => void perform("pause", () => onTimeTrackingPause(primary))} className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-amber-500 px-5 font-bold text-white disabled:opacity-50"><Pause size={18} /> Pauza</button>
                 )}
-                style={{ top: index * slotHeight, height: slotHeight }}
-                onDragOver={(e) => {
-                  e.preventDefault()
-                  e.dataTransfer.dropEffect = "move"
-                }}
-                onDrop={(e) => {
-                  e.preventDefault()
-                  onDrop(
-                    currentDate,
-                    hour,
-                    e.dataTransfer.getData("application/x-horolog-event"),
-                    minute,
-                  )
-                }}
-              />
-            )
-          })}
+                {onTimeTrackingStop && <button disabled={pending !== null} onClick={() => void perform("stop", () => onTimeTrackingStop(primary))} className="inline-flex min-h-12 items-center gap-2 rounded-xl border bg-white px-4 font-semibold disabled:opacity-50"><Square size={16} /> Stop</button>}
+              </>
+            )}
+            {primary.intentId && onEventComplete && (primary.kind === "task" || primary.recurring) && <button disabled={pending !== null} onClick={() => void perform("complete", () => onEventComplete(primary))} className="inline-flex min-h-12 items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 font-semibold text-emerald-900 disabled:opacity-50"><Check size={17} /> Gotowe</button>}
+            {primary.intentId && <button disabled={pending !== null} onClick={() => void perform("not-now", rejectPrimary)} className="inline-flex min-h-12 items-center gap-2 rounded-xl border bg-white px-4 font-semibold disabled:opacity-50"><FastForward size={17} /> Nie teraz</button>}
+            {primary.intentId && <button disabled={pending !== null} onClick={() => void perform("suggest", async () => setSuggestion(await api.suggestIntent(primary.intentId!)))} className="inline-flex min-h-12 items-center gap-2 rounded-xl border bg-white px-4 font-semibold disabled:opacity-50"><Lightbulb size={17} /> Utknąłem</button>}
+          </div>
 
-          {dayEvents.map((event) => {
-            const startMinutes =
-              event.startTime.getHours() * 60 + event.startTime.getMinutes()
-            const durationMinutes = Math.max(
-              slotMinutes,
-              (event.endTime.getTime() - event.startTime.getTime()) / 60000,
-            )
-            const top = (startMinutes / slotMinutes) * slotHeight
-            const height = Math.max(
-              slotHeight,
-              (durationMinutes / slotMinutes) * slotHeight,
-            )
-            const priority = event.priority
-            const colorClasses = getColorClasses(event.color)
-            const moved = event.tags?.includes("Moved") ?? false
-            const ruleColor = priority ? RULE[priority] : undefined
-            const showTime = height >= slotHeight * 1.5
-            const showDescription = height >= slotHeight * 3
-
-            return (
-              <div
-                key={event.id}
-                draggable
-                onDragStart={(nativeEvent) => {
-                  nativeEvent.dataTransfer.effectAllowed = "move"
-                  nativeEvent.dataTransfer.setData(
-                    "application/x-horolog-event",
-                    event.id,
-                  )
-                  nativeEvent.dataTransfer.setData("text/plain", event.id)
-                  onDragStart(event)
-                }}
-                onDragEnd={onDragEnd}
-                onClick={() => onEventClick(event)}
-                title={`${event.title} · ${formatTime(event.startTime)}–${formatTime(event.endTime)}`}
-                style={{
-                  top,
-                  height,
-                  ...(priority
-                    ? {
-                        background: FILL[priority],
-                        borderLeft: `3px ${moved ? "dashed" : "solid"} ${ruleColor}`,
-                      }
-                    : {}),
-                }}
-                className={cn(
-                  "absolute inset-x-1 z-10 cursor-pointer overflow-hidden rounded-lg border border-black/[0.08] px-2.5 py-1 text-left shadow-sm transition-all hover:z-20 hover:shadow-md",
-                  !priority && colorClasses.bg,
-                  !priority && "text-white",
-                  event.completed && "opacity-65",
-                )}
-              >
-                <div className="flex min-w-0 items-center gap-1.5">
-                  {event.completed && <span className="shrink-0 text-[10px] font-bold">✓</span>}
-                  {event.kind && (
-                    <span
-                      className="shrink-0"
-                      style={priority ? { color: ruleColor } : undefined}
-                      aria-hidden
-                    >
-                      <Glyph kind={event.kind} size={12} />
-                    </span>
-                  )}
-                  <WorkCategoryMedal category={event.workCategory} size="xs" />
-                  <span
-                    className={cn(
-                      "truncate text-[11px] font-semibold leading-tight",
-                      event.completed && "line-through",
-                    )}
-                  >
-                    {event.title}
-                  </span>
-                  {!showTime && (
-                    <span className="tabular ml-auto shrink-0 text-[9px] opacity-75">
-                      {formatTime(event.startTime)}–{formatTime(event.endTime)}
-                    </span>
-                  )}
-                </div>
-
-                {showTime && (
-                  <div className={cn(
-                    "tabular mt-0.5 truncate text-[9.5px]",
-                    priority ? "text-fg-muted" : "text-white/80",
-                  )}>
-                    {formatTime(event.startTime)}–{formatTime(event.endTime)}
-                  </div>
-                )}
-
-                {showDescription && event.description && (
-                  <div className={cn(
-                    "mt-0.5 truncate text-[9px]",
-                    priority ? "text-fg-subtle" : "text-white/70",
-                  )}>
-                    {event.description}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    </Card>
+          {suggestion && (
+            <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <h3 className="font-bold">Proponowany start</h3>
+              <p className="mt-1 text-sm font-semibold">{suggestion.first_step}</p>
+              <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm">{suggestion.steps.map((step) => <li key={step}>{step}</li>)}</ol>
+            </div>
+          )}
+        </section>
+      )}
+    </div>
   )
 }
 
