@@ -23,6 +23,7 @@ import {
   BookOpenCheck,
 } from "lucide-react";
 import { CommandBar } from "@/app/components/CommandBar";
+import { ActiveTimerBadge } from "@/app/components/ActiveTimerBadge";
 import { useLanguage } from "@/app/components/LanguageProvider";
 import { AdhdShell } from "@/app/components/AdhdShell";
 import { IS_ADHD_EXPERIENCE } from "@/app/lib/experience";
@@ -51,7 +52,7 @@ export function Shell({
   onPlanChange?: () => void;
 }) {
   if (IS_ADHD_EXPERIENCE) {
-    return <AdhdShell onPlanChange={onPlanChange}>{children}</AdhdShell>;
+    return <AdhdShell onPlanChange={onPlanChange}>{children}<ActiveTimerBadge /></AdhdShell>;
   }
 
   return <StandardShell onPlanChange={onPlanChange}>{children}</StandardShell>;
@@ -313,6 +314,7 @@ function StandardShell({
       >
         {children}
       </main>
+      <ActiveTimerBadge />
       <CommandBar
         open={commandOpen}
         onClose={() => setCommandOpen(false)}
