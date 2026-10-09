@@ -60,22 +60,25 @@ export function AdhdTimePage({ standard = false }: { standard?: boolean }) {
   const todayBlocks = useMemo(() => (plan?.blocks ?? []).filter((block) => localDateKey(new Date(block.start)) === day).sort((a, b) => Date.parse(a.start) - Date.parse(b.start)), [day, plan]);
   const blocks = useMemo(() => todayBlocks.filter((block) => !block.completed), [todayBlocks]);
   const completed = useMemo(() => {
-    const completedBlocks = todayBlocks.filter((block) => block.completed).map((block) => ({
-      id: block.intent_id + ":" + block.start,
-      title: block.title,
-      intentId: block.intent_id,
-      start: block.start,
-      end: block.end,
-      recurring: Boolean(block.recurring),
-      finishedAt: intents.find((item) => item.id === block.intent_id)?.completed_at ?? null,
-    }));
-    // Completed one-shot intents can disappear from the solver's plan entirely.
-    for (const intent of intents) {
-      if (!intent.completed_at || localDateKey(new Date(intent.completed_at)) !== day) continue;
-      if (completedBlocks.some((item) => item.intentId === intent.id)) continue;
-      completedBlocks.push({ id: intent.id, title: intent.title, intentId: intent.id, start: "", end: "", recurring: false, finishedAt: intent.completed_at });
+    const finished = new Map<string, { id: string; title: string; intentId: string; start: string; end: string; recurring: boolean; finishedAt: string | null }>();
+    const add = (id: string, title: string, intentId: string, start: string, end: string, recurring: boolean, finishedAt: string | null) => {
+      if (localDateKey(new Date(start)) !== day) return;
+      finished.set(id, { id, title, intentId, start, end, recurring, finishedAt });
+    };
+    // A task belongs to its scheduled date, NOT the day somebody clicked Gotowe.
+    for (const block of todayBlocks.filter((item) => item.completed)) {
+      const intent = intents.find((item) => item.id === block.intent_id);
+      const archive = intent?.completed_blocks?.find((item) => item.start === block.start && item.end === block.end);
+      add(`${block.intent_id}:${block.start}`, block.title, block.intent_id, block.start, block.end, Boolean(block.recurring), archive?.completed_at ?? intent?.completed_at ?? null);
     }
-    return completedBlocks.sort((a, b) => Date.parse((b.finishedAt ?? b.end ?? day)) - Date.parse((a.finishedAt ?? a.end ?? day)));
+    for (const intent of intents) {
+      for (const archived of intent.completed_blocks ?? []) {
+        add(`${intent.id}:${archived.start}`, intent.title, intent.id, archived.start, archived.end, intent.period_days !== null, archived.completed_at);
+      }
+      // Legacy completions without archived schedule cannot reliably be
+      // attributed to a planned day. Never infer that day from completed_at.
+    }
+    return [...finished.values()].sort((left, right) => Date.parse(right.start) - Date.parse(left.start));
   }, [todayBlocks, intents, day]);
   const nowMs = now.getTime();
   const current = blocks.find((block) => Date.parse(block.start) <= nowMs && nowMs < Date.parse(block.end));
