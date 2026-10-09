@@ -75,7 +75,7 @@ export function AdhdTimePage({ standard = false }: { standard?: boolean }) {
       if (completedBlocks.some((item) => item.intentId === intent.id)) continue;
       completedBlocks.push({ id: intent.id, title: intent.title, intentId: intent.id, start: "", end: "", recurring: false, finishedAt: intent.completed_at });
     }
-    return completedBlocks.sort((a, b) => Date.parse(b.finishedAt ?? b.end || day) - Date.parse(a.finishedAt ?? a.end || day));
+    return completedBlocks.sort((a, b) => Date.parse((b.finishedAt ?? b.end ?? day)) - Date.parse((a.finishedAt ?? a.end ?? day)));
   }, [todayBlocks, intents, day]);
   const nowMs = now.getTime();
   const current = blocks.find((block) => Date.parse(block.start) <= nowMs && nowMs < Date.parse(block.end));
