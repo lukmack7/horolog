@@ -400,6 +400,8 @@ export interface Intent {
   not_now_blocks?: NotNowBlock[];
   /** Set once, on a one-shot task only - see `complete`/`uncomplete` below. */
   completed_at?: string | null;
+  /** Archived scheduled occurrences; their dates remain authoritative after completion. */
+  completed_blocks?: Array<{ start: string; end: string; completed_at: string }>;
   /** Slot ranges (not clock times) other attendees are busy - present only
    *  on meeting-kind intents. Its length is the useful part for display. */
   blocked_slots?: [number, number][];
