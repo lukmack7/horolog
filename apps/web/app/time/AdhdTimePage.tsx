@@ -16,7 +16,7 @@ function formatClock(seconds: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-export function AdhdTimePage() {
+export function AdhdTimePage({ standard = false }: { standard?: boolean }) {
   const [plan, setPlan] = useState<Plan | null>(null);
   const [daily, setDaily] = useState<DailyData | null>(null);
   const [intents, setIntents] = useState<Intent[]>([]);
@@ -96,10 +96,10 @@ export function AdhdTimePage() {
 
   return (
     <Shell onPlanChange={load}>
-      <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-10">
+      <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
         <header className="mb-6">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Tryb wykonawczy</p>
-          <h1 className="mt-1 font-serif text-4xl font-bold">Teraz</h1>
+          {!standard && <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Tryb wykonawczy</p>}
+          <h1 className="mt-1 text-[28px] font-bold text-fg">{standard ? "Czas" : "Teraz"}</h1>
           <p className="mt-1 text-sm text-fg-muted">Jedna rzecz. Jeden następny krok.</p>
         </header>
 
@@ -109,25 +109,25 @@ export function AdhdTimePage() {
         {plan && !primary && <section className="rounded-3xl border border-emerald-200 bg-emerald-50 p-8 text-center"><h2 className="text-xl font-bold">Plan na dziś jest pusty</h2><p className="mt-2 text-sm text-fg-muted">Możesz spokojnie wybrać coś z Do zrobienia.</p></section>}
 
         {primary && (
-          <section className="rounded-[28px] border border-black/10 bg-[#fffdf8] p-5 shadow-sm sm:p-8">
+          <section className="rounded-card border border-black/[0.08] bg-surface p-5 shadow-sm sm:p-8">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-xs font-bold uppercase tracking-wider text-fg-subtle">{current?.intent_id === primary.intent_id ? "W tej chwili" : "Następny blok"}</div>
                 <h2 className="mt-2 text-2xl font-bold leading-tight sm:text-3xl">{primary.title}</h2>
                 <p className="mt-2 text-sm text-fg-muted">{new Date(primary.start).toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit" })}–{new Date(primary.end).toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit" })} · {formatDuration(plannedMinutes)}</p>
               </div>
-              {active?.intent_id === primary.intent_id && <div className="rounded-2xl bg-amber-100 px-4 py-2 text-center"><div className="text-[10px] font-bold uppercase text-amber-800">Timer</div><div className="font-mono text-2xl tabular-nums">{formatClock(elapsedSeconds)}</div></div>}
+              {active?.intent_id === primary.intent_id && <div className="rounded-xl bg-sunk px-4 py-2 text-center"><div className="text-[10px] font-bold uppercase text-fg-muted">Timer</div><div className="font-mono text-2xl tabular-nums">{formatClock(elapsedSeconds)}</div></div>}
             </div>
 
             {firstStep && <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4"><div className="text-[11px] font-bold uppercase tracking-wider text-amber-800">Pierwszy krok</div><p className="mt-1 text-base font-semibold">{firstStep}</p></div>}
 
             <div className="mt-6 flex flex-wrap gap-2">
               {(!active || active.intent_id !== primary.intent_id) && (primary.kind === "task" || primary.kind === "focus") && <>
-                <button disabled={pending !== null} onClick={() => void perform("start", () => api.startTimeTracking(primary.intent_id))} className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-amber-500 px-5 font-bold text-white disabled:opacity-50"><Play size={18} /> Start</button>
-                <button disabled={pending !== null} onClick={() => void perform("start-five", () => api.startTimeTracking(primary.intent_id))} className="min-h-12 rounded-xl border border-amber-300 bg-white px-4 font-bold text-amber-900 disabled:opacity-50">Zacznij 5 minut</button>
+                <button disabled={pending !== null} onClick={() => void perform("start", () => api.startTimeTracking(primary.intent_id))} className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-fg px-5 font-bold text-white disabled:opacity-50"><Play size={18} /> Start</button>
+                <button disabled={pending !== null} onClick={() => void perform("start-five", () => api.startTimeTracking(primary.intent_id))} className="min-h-12 rounded-xl border border-black/10 bg-surface px-4 font-bold text-fg disabled:opacity-50">Zacznij 5 minut</button>
               </>}
               {active?.intent_id === primary.intent_id && <>
-                <button disabled={pending !== null} onClick={() => void perform("toggle", () => active.status === "paused" ? api.resumeTimeTracking(primary.intent_id) : api.pauseTimeTracking(primary.intent_id))} className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-amber-500 px-5 font-bold text-white"><>{active.status === "paused" ? <Play size={18} /> : <Pause size={18} />}</>{active.status === "paused" ? "Wznów" : "Pauza"}</button>
+                <button disabled={pending !== null} onClick={() => void perform("toggle", () => active.status === "paused" ? api.resumeTimeTracking(primary.intent_id) : api.pauseTimeTracking(primary.intent_id))} className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-fg px-5 font-bold text-white"><>{active.status === "paused" ? <Play size={18} /> : <Pause size={18} />}</>{active.status === "paused" ? "Wznów" : "Pauza"}</button>
                 <button disabled={pending !== null} onClick={() => void perform("stop", () => api.stopTimeTracking(primary.intent_id))} className="inline-flex min-h-12 items-center gap-2 rounded-xl border bg-white px-4 font-semibold"><Square size={16} /> Stop</button>
               </>}
               {primary.kind === "task" && !primary.recurring && <button disabled={pending !== null} onClick={() => void perform("complete", () => api.complete(primary.intent_id))} className="inline-flex min-h-12 items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 font-semibold text-emerald-900"><Check size={17} /> Gotowe</button>}
