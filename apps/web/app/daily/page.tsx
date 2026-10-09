@@ -109,7 +109,6 @@ function StandardDailyPage() {
   const { language, t } = useLanguage();
   const [date, setDate] = useState(() => {
     const now = new Date();
-    now.setDate(now.getDate() + 1);
     return now;
   });
   const [mode, setMode] = useState<DailyMode>("plan");
