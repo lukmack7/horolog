@@ -1083,6 +1083,12 @@ async def test_unfinished_past_daily_task_remains_visible_in_planner(
 
     next_day = first_day + timedelta(days=1)
     monkeypatch.setattr(api_module, "origin", lambda: next_day)
+    gen = session()
+    db = await anext(gen)
+    try:
+        await rebase_slot_origin(db, next_day.date().isoformat())
+    finally:
+        await gen.aclose()
 
     plan = (await client.post("/api/plan/solve")).json()
     block = next(
@@ -1091,6 +1097,126 @@ async def test_unfinished_past_daily_task_remains_visible_in_planner(
 
     assert block["start"].startswith(first_day.date().isoformat())
     assert block["completed"] is False
+
+
+@pytest.mark.asyncio
+async def test_unfinished_past_day_keeps_explicit_break_layout(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first_day = origin()
+    monkeypatch.setattr(api_module, "origin", lambda: first_day)
+    day = first_day.date().isoformat()
+    first_start = first_day.replace(hour=9, minute=0, second=0, microsecond=0)
+    first_end = first_start + timedelta(minutes=30)
+    second_start = first_day.replace(hour=10, minute=0, second=0, microsecond=0)
+    second_end = second_start + timedelta(minutes=30)
+
+    first = (
+        await client.post(
+            "/api/intents",
+            json={
+                "title": "Before break",
+                "kind": "task",
+                "priority": 1,
+                "minutes_per_period": 30,
+                "min_chunk_minutes": 30,
+                "max_chunk_minutes": 30,
+                "max_per_day": 1,
+                "earliest": first_start.isoformat(),
+                "latest": first_end.isoformat(),
+                "due": first_end.isoformat(),
+                "preferred_start_min": 9 * 60,
+                "window_start_min": 9 * 60,
+                "window_end_min": 9 * 60 + 30,
+            },
+        )
+    ).json()
+    break_response = await client.post(
+        "/api/assistant/execute",
+        json={
+            "actions": [
+                {
+                    "action": "create_break",
+                    "title": "Przerwa",
+                    "date": day,
+                    "minutes": 30,
+                    "start_min": 9 * 60 + 30,
+                }
+            ]
+        },
+    )
+    assert break_response.status_code == 200
+    break_id = break_response.json()["results"][0]["intent_id"]
+    second = (
+        await client.post(
+            "/api/intents",
+            json={
+                "title": "After break",
+                "kind": "task",
+                "priority": 1,
+                "minutes_per_period": 30,
+                "min_chunk_minutes": 30,
+                "max_chunk_minutes": 30,
+                "max_per_day": 1,
+                "earliest": second_start.isoformat(),
+                "latest": second_end.isoformat(),
+                "due": second_end.isoformat(),
+                "preferred_start_min": 10 * 60,
+                "window_start_min": 10 * 60,
+                "window_end_min": 10 * 60 + 30,
+            },
+        )
+    ).json()
+    gen = session()
+    db = await anext(gen)
+    try:
+        db.add(
+            DailyPlanItemRow(
+                id="past-first-layout",
+                plan_date=day,
+                title="Before break",
+                quadrant=1,
+                minutes=30,
+                priority=1,
+                intent_id=first["id"],
+                schedule_enabled=True,
+                created_at=first_day,
+            )
+        )
+        db.add(
+            DailyPlanItemRow(
+                id="past-second-layout",
+                plan_date=day,
+                title="After break",
+                quadrant=1,
+                minutes=30,
+                priority=1,
+                intent_id=second["id"],
+                schedule_enabled=True,
+                created_at=first_day,
+            )
+        )
+        await db.commit()
+    finally:
+        await gen.aclose()
+
+    next_day = first_day + timedelta(days=1)
+    monkeypatch.setattr(api_module, "origin", lambda: next_day)
+    gen = session()
+    db = await anext(gen)
+    try:
+        await rebase_slot_origin(db, next_day.date().isoformat())
+    finally:
+        await gen.aclose()
+
+    plan = (await client.post("/api/plan/solve")).json()
+    blocks = {item["intent_id"]: item for item in plan["blocks"]}
+
+    assert blocks[first["id"]]["start"].startswith(day)
+    assert blocks[break_id]["start"].startswith(day)
+    assert blocks[break_id]["kind"] == "buffer"
+    assert blocks[second["id"]]["start"].startswith(day)
 
 
 @pytest.mark.asyncio

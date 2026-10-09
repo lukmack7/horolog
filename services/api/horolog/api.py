@@ -4040,7 +4040,9 @@ async def _execute_assistant_action(
             window_start_min=start_min,
             window_end_min=start_min + minutes,
         )
-        intent = wire.to_domain(ident, origin(), await _preferred_workday(db))
+        intent = wire.to_domain(
+            ident, origin(), await _preferred_workday(db)
+        ).model_copy(update={"original_date": action.date})
         db.add(IntentRow(id=ident, payload=intent.model_dump(mode="json")))
         await db.commit()
         plan = await _replan(db)
@@ -6981,9 +6983,34 @@ async def _render(db: AsyncSession, plan: Plan) -> PlanOut:
             )
         )
     ).scalars().all()
-    historical_intent_ids = {
-        row.intent_id for row in historical_rows if row.intent_id is not None
+    historical_intents = {
+        row.intent_id: (titles[row.intent_id], _daily_date(row.plan_date))
+        for row in historical_rows
+        if row.intent_id is not None and row.intent_id in titles
     }
+    for intent in titles.values():
+        if intent.kind not in (IntentKind.BUFFER, IntentKind.MEETING):
+            continue
+        if intent.period_days is not None or intent.completed_at is not None:
+            continue
+        if not intent.daily_windows:
+            continue
+        if intent.original_date is not None:
+            historical_date = _daily_date(intent.original_date).date()
+        elif intent.earliest_slot is not None:
+            historical_date = from_slot(intent.earliest_slot, base).date()
+        else:
+            continue
+        if historical_date >= base.date():
+            continue
+        if intent.original_date is not None:
+            day = _daily_date(intent.original_date)
+        else:
+            day = from_slot(intent.earliest_slot, base).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+        historical_intents.setdefault(intent.id, (intent, day))
+    historical_intent_ids = set(historical_intents)
     rendered_blocks = [
         block
         for block in rendered_blocks
@@ -6992,13 +7019,9 @@ async def _render(db: AsyncSession, plan: Plan) -> PlanOut:
     rendered_keys = {
         (block.intent_id, block.start, block.end) for block in rendered_blocks
     }
-    for row in historical_rows:
-        intent = titles.get(row.intent_id or "")
-        if intent is None or intent.kind != IntentKind.TASK or intent.period_days is not None:
+    for intent, day in historical_intents.values():
+        if intent.period_days is not None:
             continue
-        if intent.completed_at is not None or not intent.daily_windows:
-            continue
-        day = _daily_date(row.plan_date)
         window = intent.daily_windows[0]
         start = day + timedelta(minutes=window.start_min)
         end = day + timedelta(minutes=window.end_min)
@@ -7019,7 +7042,7 @@ async def _render(db: AsyncSession, plan: Plan) -> PlanOut:
                 end=end,
                 moved_from=None,
                 completed=False,
-                recurring=False,
+                recurring=intent.period_days is not None,
             )
         )
 
