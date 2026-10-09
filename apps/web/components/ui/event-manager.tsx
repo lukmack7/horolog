@@ -17,7 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
-import { ChevronLeft, ChevronRight, Plus, Calendar, Clock, Grid3x3, List, Search, Filter, X, Play, Pause, Square, Check, FastForward, Lightbulb } from "lucide-react"
+import { ChevronLeft, ChevronRight, Plus, Calendar, Clock, Grid3x3, List, Search, Filter, X, Play, Pause, Square } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   DropdownMenu,
@@ -30,14 +30,11 @@ import {
 import { Glyph } from "@/app/components/Glyph"
 import { WorkCategoryMedal } from "@/app/components/WorkCategoryMedal"
 import { FILL, RULE } from "@/app/components/Grid"
-import { IS_ADHD_EXPERIENCE } from "@/app/lib/experience"
 import {
   api,
-  formatDuration,
   WORK_CATEGORIES,
   WORK_CATEGORY_LABEL,
   type IntentKind,
-  type IntentSuggestion,
   type Priority,
   type TimeTrackingEntry,
   type TimeTrackingStats,
