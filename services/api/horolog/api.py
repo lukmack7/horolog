@@ -5334,18 +5334,21 @@ async def complete_intent(
     # removes its demand. This lets the planner keep showing the finished
     # task in its original slot as a completed/struck-through block.
     previous_plan = await load_previous_plan(db)
-    base = origin()
+    # Archive the same effective placement the Planner displays, including
+    # historical daily assignments. The raw solver plan starts at today's
+    # midnight and therefore cannot represent yesterday's unfinished block.
+    visible_plan = await _render(db, previous_plan) if previous_plan is not None else None
     archived_blocks = (
         [
             CompletedBlock(
-                start=from_slot(block.start_slot, base),
-                end=from_slot(block.end_slot, base),
+                start=block.start,
+                end=block.end,
                 completed_at=completed_at,
             )
-            for block in previous_plan.blocks
-            if block.intent_id == intent_id
+            for block in visible_plan.blocks
+            if block.intent_id == intent_id and not block.completed
         ]
-        if previous_plan is not None
+        if visible_plan is not None
         else []
     )
 
